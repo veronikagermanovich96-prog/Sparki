@@ -1,5 +1,5 @@
 import React from 'react';
-import { TouchableOpacity, View } from 'react-native';
+import { View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
 export interface DotData {
@@ -47,7 +47,7 @@ export const IconArray: React.FC<IconArrayProps> = ({
                         strokeWidth = 1;
                     }
 
-                    const circle = (
+                    return (
                         <Circle
                             key={index}
                             cx={cx}
@@ -56,28 +56,9 @@ export const IconArray: React.FC<IconArrayProps> = ({
                             fill={fill}
                             stroke={stroke}
                             strokeWidth={strokeWidth}
+                            onPress={onDotPress ? () => onDotPress(dot, index) : undefined}
                         />
                     );
-
-                    if (onDotPress) {
-                        return (
-                            <TouchableOpacity
-                                key={`touch-${index}`}
-                                onPress={() => onDotPress(dot, index)}
-                                style={{
-                                    position: 'absolute',
-                                    left: cx - r,
-                                    top: cy - r,
-                                    width: dotSize,
-                                    height: dotSize,
-                                }}
-                            >
-                                {circle}
-                            </TouchableOpacity>
-                        );
-                    }
-
-                    return circle;
                 })}
             </Svg>
         </View>

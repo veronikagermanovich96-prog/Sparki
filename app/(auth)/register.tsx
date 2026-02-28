@@ -18,10 +18,32 @@ export default function Register() {
 
         if (error) {
             Alert.alert('Ошибка', error.message);
-        } else {
-            router.replace('/(app)');
+            setLoading(false);
+            return;
         }
+
+        if (data.user) {
+            const { data: household, error: householdError } = await supabase
+                .from('households')
+                .insert({ name: 'Мой бюджет', base_currency: 'EUR' })
+                .select()
+                .single();
+
+            if (householdError) {
+                Alert.alert('Ошибка', householdError.message);
+                setLoading(false);
+                return;
+            }
+
+            await supabase.from('household_members').insert({
+                household_id: household.id,
+                user_id: data.user.id,
+                role: 'owner',
+            });
+        }
+
         setLoading(false);
+        router.replace('/(app)');
     }
 
     return (

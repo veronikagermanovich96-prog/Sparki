@@ -29,14 +29,14 @@ export default function AppLayout() {
                 }}
             />
             <Tabs.Screen
-                name="accounts/index"
+                name="accounts"
                 options={{
                     title: 'Счета',
                     tabBarIcon: ({ color }) => <Wallet color={color} size={24} />,
                 }}
             />
             <Tabs.Screen
-                name="analytics/_layout"
+                name="analytics"
                 options={{
                     title: 'Аналитика',
                     tabBarIcon: ({ color }) => <PieChart color={color} size={24} />,

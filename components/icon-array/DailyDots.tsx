@@ -1,44 +1,74 @@
-import React from 'react';
+import { formatAmount } from '@/constants/currencies';
+import { Transaction } from '@/types';
+import { format, getDaysInMonth, isFuture, isToday, startOfMonth } from 'date-fns';
+import React, { useMemo } from 'react';
 import { Text, View } from 'react-native';
 import { DotData, IconArray } from './IconArray';
 
 interface DailyDotsProps {
     period: 'week' | 'month' | 'quarter' | 'year';
     dailyLimit: number;
-    transactions: any[]; // To be typed
+    transactions: Transaction[];
 }
 
 export const DailyDots: React.FC<DailyDotsProps> = ({ period, dailyLimit, transactions }) => {
-    // Mock data for MVP display
-    const dots: DotData[] = Array.from({ length: 30 }).map((_, i) => {
-        let state: DotData['state'] = 'filled';
-        let color = '#2ECC71';
+    const currentDate = new Date();
+    const daysInMonth = getDaysInMonth(currentDate);
+    const startMonth = startOfMonth(currentDate);
 
-        if (i === 15) {
-            state = 'warning';
-            color = '#F39C12';
-        } else if (i === 18) {
-            state = 'overflow';
-            color = '#E74C3C';
-        } else if (i > 18) {
-            state = 'future';
-            color = '#333333';
+    const expensesByDate = useMemo(() => {
+        const map = new Map<string, number>();
+        for (const t of transactions) {
+            if (t.type === 'expense') {
+                const existing = map.get(t.date) || 0;
+                map.set(t.date, existing + (t.amount_base ?? t.amount));
+            }
         }
+        return map;
+    }, [transactions]);
 
-        if (i === 18) {
-            state = 'today';
-            color = '#555555';
+    const dots: DotData[] = Array.from({ length: daysInMonth }).map((_, i) => {
+        const dateObj = new Date(startMonth);
+        dateObj.setDate(1 + i);
+        const dateStr = format(dateObj, 'yyyy-MM-dd');
+
+        const spent = expensesByDate.get(dateStr) || 0;
+
+        let state: DotData['state'] = 'filled';
+        let color = '#22c55e'; // Green
+
+        if (isFuture(dateObj)) {
+            state = 'future';
+            color = '#374151'; // gray-700
+        } else {
+            if (spent > dailyLimit) {
+                state = 'overflow';
+                color = '#ef4444'; // Red
+            } else if (spent > dailyLimit * 0.8) {
+                state = 'warning';
+                color = '#f97316'; // Orange
+            } else if (spent === 0 && !isToday(dateObj)) {
+                state = 'filled';
+                color = '#1f2937'; // gray-800
+            }
+
+            if (isToday(dateObj) && spent === 0) {
+                state = 'today';
+                color = '#4b5563'; // gray-600
+            }
         }
 
         return { color, state };
     });
 
+    const totalSpent = Array.from(expensesByDate.values()).reduce((a, b) => a + b, 0);
+
     return (
         <View className="items-center">
             <IconArray dots={dots} columns={7} dotSize={16} gap={6} />
             <View className="flex-row justify-between w-full mt-4">
-                <Text className="text-gray-400">Лимит: {dailyLimit}€</Text>
-                <Text className="text-gray-400">Потрачено: 12€</Text>
+                <Text className="text-gray-400">Лимит в день: {formatAmount(dailyLimit, 'EUR')}</Text>
+                <Text className="text-gray-400">Потрачено: {formatAmount(totalSpent, 'EUR')}</Text>
             </View>
         </View>
     );
