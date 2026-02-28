@@ -1,61 +1,122 @@
-import { DailyDots } from '@/components/icon-array/DailyDots';
-import { SavingsDots } from '@/components/icon-array/SavingsDots';
-import { CreditCard, PiggyBank, Plus, Wallet } from 'lucide-react-native';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import {
+    Banknote, Bitcoin, Briefcase, Building2, Car,
+    CircleDollarSign, Coins, CreditCard,
+    Globe, Home, Landmark, PiggyBank, Plus,
+    Smartphone, TrendingUp, Wallet,
+} from 'lucide-react-native';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import { supabase } from '@/lib/supabase';
+import { formatAmount } from '@/constants/currencies';
+import { Account } from '@/types';
+
+const ICON_MAP: Record<string, React.ComponentType<{ color: string; size: number }>> = {
+    CreditCard, Wallet, Building2, Banknote, Coins,
+    PiggyBank, TrendingUp, Landmark, CircleDollarSign,
+    Briefcase, Home, Car, Smartphone, Globe, Bitcoin,
+};
 
 export default function Dashboard() {
+    const [accounts, setAccounts] = useState<Account[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [currency, setCurrency] = useState('EUR');
+
+    useFocusEffect(useCallback(() => {
+        loadData();
+    }, []));
+
+    async function loadData() {
+        setLoading(true);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { setLoading(false); return; }
+
+        const { data: member } = await supabase
+            .from('household_members')
+            .select('household_id, households(base_currency)')
+            .eq('user_id', user.id)
+            .single();
+
+        if (member) {
+            const hh = member.households as unknown as { base_currency: string } | null;
+            if (hh?.base_currency) setCurrency(hh.base_currency);
+
+            const { data } = await supabase
+                .from('accounts')
+                .select('*')
+                .eq('household_id', member.household_id)
+                .eq('is_deleted', false)
+                .order('sort_order', { ascending: true, nullsFirst: true })
+                .order('created_at', { ascending: true });
+
+            setAccounts(data ?? []);
+        }
+        setLoading(false);
+    }
+
+    const activeBalance = accounts
+        .filter(a => !a.exclude_from_dashboard)
+        .reduce((s, a) => s + a.balance, 0);
+
+    const totalBalance = accounts.reduce((s, a) => s + a.balance, 0);
+
     return (
         <View className="flex-1 bg-gray-950 pt-16">
             <ScrollView className="px-6" showsVerticalScrollIndicator={false}>
+
                 {/* Balance Section */}
                 <View className="mt-4 mb-8">
-                    <Text className="text-gray-400 text-lg mb-1">Активный баланс</Text>
-                    <Text className="text-white text-5xl font-bold mb-2">€ 8,450.00</Text>
-                    <Text className="text-gray-500">Всего на счетах: € 12,000</Text>
+                    <Text className="text-gray-400 text-sm mb-1">Активный баланс</Text>
 
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-6 -mx-6 px-6">
-                        <View className="bg-gray-900 border border-gray-800 rounded-2xl p-4 mr-4 w-40">
-                            <CreditCard color="#a855f7" size={24} />
-                            <Text className="text-white font-bold mt-4 mb-1">Основная</Text>
-                            <Text className="text-gray-400">€ 5,200</Text>
-                        </View>
-                        <View className="bg-gray-900 border border-gray-800 rounded-2xl p-4 mr-4 w-40">
-                            <Wallet color="#3b82f6" size={24} />
-                            <Text className="text-white font-bold mt-4 mb-1">Наличные</Text>
-                            <Text className="text-gray-400">€ 350</Text>
-                        </View>
-                        <View className="bg-gray-900 border border-gray-800 rounded-2xl p-4 mr-4 w-40">
-                            <PiggyBank color="#22c55e" size={24} />
-                            <Text className="text-gray-500 font-bold mt-4 mb-1">Заначка (скрыт)</Text>
-                            <Text className="text-gray-600">€ 2,900</Text>
-                        </View>
-                    </ScrollView>
-                </View>
+                    {loading ? (
+                        <ActivityIndicator color="#fff" style={{ alignSelf: 'flex-start', marginVertical: 10 }} />
+                    ) : (
+                        <>
+                            <Text className="text-white text-5xl font-bold mb-1">
+                                {formatAmount(activeBalance, currency)}
+                            </Text>
+                            <Text className="text-gray-500 text-sm">
+                                Всего на счетах: {formatAmount(totalBalance, currency)}
+                            </Text>
+                        </>
+                    )}
 
-                {/* Daily Icon Array */}
-                <View className="bg-gray-900 border border-gray-800 rounded-3xl p-6 mb-8 items-center">
-                    <Text className="text-white font-bold text-xl mb-4 w-full">Расходы месяца</Text>
-                    <DailyDots period="month" dailyLimit={45} transactions={[]} />
-                </View>
+                    {/* Account cards */}
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        className="mt-6 -mx-6 px-6"
+                    >
+                        {accounts.map(account => {
+                            const IC = ICON_MAP[account.icon ?? 'CreditCard'] ?? CreditCard;
+                            const color = account.color ?? '#3b82f6';
+                            return (
+                                <View
+                                    key={account.id}
+                                    className="bg-gray-900 border border-gray-800 rounded-2xl p-4 mr-4 w-40"
+                                >
+                                    <IC color={color} size={24} />
+                                    <Text
+                                        className="text-white font-bold mt-4 mb-1"
+                                        numberOfLines={1}
+                                    >
+                                        {account.name}
+                                    </Text>
+                                    <Text className="text-gray-400">
+                                        {formatAmount(account.balance, account.currency)}
+                                    </Text>
+                                    {account.exclude_from_dashboard && (
+                                        <Text className="text-gray-600 text-xs mt-1">(скрыт)</Text>
+                                    )}
+                                </View>
+                            );
+                        })}
 
-                {/* Savings Goals */}
-                <View className="mb-24">
-                    <View className="flex-row justify-between items-center mb-4">
-                        <Text className="text-white font-bold text-xl">Цели</Text>
-                        <TouchableOpacity>
-                            <Text className="text-blue-500 font-bold">Добавить</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-6 px-6">
-                        <View className="bg-gray-900 border border-gray-800 rounded-3xl p-5 mr-4 w-48">
-                            <Text className="text-white font-bold mb-4">Машина 🚗</Text>
-                            <SavingsDots currentBalance={2400} interestEarned={150} targetAmount={10000} />
-                        </View>
-                        <View className="bg-gray-900 border border-gray-800 rounded-3xl p-5 mr-4 w-48">
-                            <Text className="text-white font-bold mb-4">Отпуск 🌴</Text>
-                            <SavingsDots currentBalance={800} interestEarned={0} targetAmount={3000} />
-                        </View>
+                        {accounts.length === 0 && !loading && (
+                            <View className="bg-gray-900 border border-gray-800 rounded-2xl p-4 mr-4 w-40 justify-center items-center h-28">
+                                <Text className="text-gray-500 text-center text-sm">Нет счетов</Text>
+                            </View>
+                        )}
                     </ScrollView>
                 </View>
             </ScrollView>
