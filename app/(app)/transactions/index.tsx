@@ -1,9 +1,869 @@
-import { Text, View } from 'react-native';
+import {
+    Activity, ArrowLeft, ArrowRightLeft, Award,
+    Banknote, Bike, Bitcoin, BookOpen, Briefcase, Building2, Bus,
+    Camera, Car, Check, ChevronDown, CircleDollarSign, Coffee, Coins, CreditCard, Images,
+    Droplets, Dumbbell, Film, Flag, Flame, Fuel, Gift, Globe, GraduationCap,
+    Heart, Home, Landmark, Laptop, MapPin, Minus, Monitor, Music,
+    Package, PawPrint, Pencil, Pill, Plane, Plus, Receipt, Scissors,
+    Repeat, Search, ShoppingBag, ShoppingCart, Shirt, Sofa, Star,
+    Tag, Train, TrendingDown, TrendingUp, Trophy, Tv, Utensils,
+    SlidersHorizontal, Wallet, Wifi, X, Zap,
+} from 'lucide-react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+    ActivityIndicator, Alert, Modal, ScrollView, SectionList,
+    Text, TextInput, TouchableOpacity, View,
+} from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { endOfDay, format, startOfDay, startOfMonth, startOfWeek, startOfYear, subDays } from 'date-fns';
+import { ru } from 'date-fns/locale';
+import { supabase } from '@/lib/supabase';
+import { formatAmount } from '@/constants/currencies';
+import TransactionForm from '@/components/TransactionForm';
+
+// ─── Icon map ─────────────────────────────────────────────────────────────────
+
+type IconComp = React.ComponentType<{ color: string; size: number }>;
+
+const ICON_MAP: Record<string, IconComp> = {
+    // Food & Drink
+    ShoppingCart, Coffee, Utensils, ShoppingBag,
+    // Transport
+    Car, Bus, Bike, Train, Plane, Fuel, Ship: undefined as any,
+    // Home & Utilities
+    Home, Sofa, Zap, Wifi, Flame, Droplets,
+    // Health & Sport
+    Heart, Dumbbell, Activity, Pill,
+    // Entertainment
+    Film, Music, Tv, Monitor, Trophy, Star,
+    // Shopping & Style
+    Shirt, Tag, Gift, Scissors,
+    // Travel
+    MapPin, Globe,
+    // Education
+    BookOpen, GraduationCap,
+    // Finance
+    CreditCard, Wallet, PiggyBank: undefined as any,
+    Coins, Banknote, Landmark, Bitcoin, CircleDollarSign, TrendingUp, TrendingDown,
+    // Work & Business
+    Briefcase, Building2, Receipt, Package,
+    // Other
+    PawPrint, Award, Flag, ArrowRightLeft,
+};
+
+// Filter out undefined (aliases we'll skip)
+const ICON_KEYS = Object.keys(ICON_MAP).filter(k => !!ICON_MAP[k]);
+
+// Re-export cleaned map
+const CAT_ICONS = ICON_KEYS.reduce<Record<string, IconComp>>((acc, k) => {
+    acc[k] = ICON_MAP[k]!;
+    return acc;
+}, {});
+
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface TxRow {
+    id: string;
+    type: 'income' | 'expense' | 'transfer';
+    amount: number;
+    currency: string;
+    amount_base: number | null;
+    exchange_rate: number | null;
+    date: string;
+    note: string | null;
+    receipt_url: string | null;
+    recurring_id: string | null;
+    account_id: string;
+    account_name: string;
+    account_color: string | null;
+    category_id: string | null;
+    category_name: string;
+    category_icon: string | null;
+    category_color: string | null;
+    expense_type: string | null;
+    tag_id: string | null;
+    tag_name: string | null;
+}
+
+type AccountLight   = { id: string; name: string; color: string | null; currency: string; balance: number };
+type CategoryLight  = { id: string; name: string; icon: string | null; color: string | null; type: 'income' | 'expense'; expense_type: string | null; is_system: boolean };
+type TagLight       = { id: string; name: string };
+
+type FilterType        = 'all' | 'income' | 'expense' | 'transfer';
+type FilterPeriod      = 'today' | 'yesterday' | 'week' | 'month' | 'year' | 'custom';
+type FilterExpenseType = 'all' | 'infrastructure' | 'operational' | 'investment' | 'discretionary';
+function getPeriodRange(p: FilterPeriod, customFrom?: Date | null, customTo?: Date | null): { from: string | null; to: string | null } {
+    const now = new Date();
+    if (p === 'today')     return { from: format(startOfDay(now), 'yyyy-MM-dd'), to: format(endOfDay(now), 'yyyy-MM-dd') };
+    if (p === 'yesterday') { const y = subDays(now, 1); return { from: format(startOfDay(y), 'yyyy-MM-dd'), to: format(endOfDay(y), 'yyyy-MM-dd') }; }
+    if (p === 'week')      return { from: format(startOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd'), to: null };
+    if (p === 'month')     return { from: format(startOfMonth(now), 'yyyy-MM-dd'), to: null };
+    if (p === 'year')      return { from: format(startOfYear(now), 'yyyy-MM-dd'), to: null };
+    if (p === 'custom')    return {
+        from: customFrom ? format(startOfDay(customFrom), 'yyyy-MM-dd') : format(startOfMonth(now), 'yyyy-MM-dd'),
+        to:   customTo   ? format(endOfDay(customTo),   'yyyy-MM-dd') : null,
+    };
+    return { from: null, to: null };
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function TransactionsScreen() {
+    const router = useRouter();
+
+    // ── Data ─────────────────────────────────────────────────────────────────
+    const [txs,        setTxs]        = useState<TxRow[]>([]);
+    const [accounts,   setAccounts]   = useState<AccountLight[]>([]);
+    const [categories, setCategories] = useState<CategoryLight[]>([]);
+    const [householdId,  setHouseholdId]  = useState('');
+    const [userId,       setUserId]       = useState('');
+    const [baseCurrency, setBaseCurrency] = useState('EUR');
+    const [loading,      setLoading]      = useState(true);
+
+    // ── Filters ──────────────────────────────────────────────────────────────
+    const [search,             setSearch]             = useState('');
+    const [searchVisible,      setSearchVisible]      = useState(false);
+    const [filterType,         setFilterType]         = useState<FilterType>('all');
+    const [filterPeriod,       setFilterPeriod]       = useState<FilterPeriod>('month');
+    const [filterAccountId,    setFilterAccountId]    = useState<string | null>(null);
+    const [filterCategoryId,   setFilterCategoryId]   = useState<string | null>(null);
+    const [filterTagId,        setFilterTagId]        = useState<string | null>(null);
+    const [filterSheetTags,    setFilterSheetTags]    = useState<TagLight[]>([]);
+    const [filterExpenseType,  setFilterExpenseType]  = useState<FilterExpenseType>('all');
+    const [filterRecurring,    setFilterRecurring]    = useState<'all' | 'recurring' | 'non_recurring'>('all');
+    const [customFrom,         setCustomFrom]         = useState<Date | null>(null);
+    const [customTo,           setCustomTo]           = useState<Date | null>(null);
+    const [periodSheetVisible, setPeriodSheetVisible] = useState(false);
+    const [activeSheet,        setActiveSheet]        = useState<'account' | 'category' | 'expensetype' | 'recurring' | 'filters' | null>(null);
+    const [showCustomFrom,     setShowCustomFrom]     = useState(false);
+    const [showCustomTo,       setShowCustomTo]       = useState(false);
+
+    // ── Transaction form ──────────────────────────────────────────────────────
+    const [formVisible,    setFormVisible]    = useState(false);
+    const [editingTx,      setEditingTx]      = useState<TxRow | null>(null);
+
+    // ── Load ─────────────────────────────────────────────────────────────────
+
+    useFocusEffect(useCallback(() => { loadData(); }, []));
+
+    useEffect(() => {
+        if (!householdId) return;
+        setLoading(true);
+        fetchTxs(householdId, filterType, filterPeriod, filterAccountId, filterCategoryId, filterExpenseType, customFrom, customTo, filterRecurring, filterTagId)
+            .finally(() => setLoading(false));
+    }, [filterType, filterPeriod, filterAccountId, filterCategoryId, filterExpenseType, customFrom, customTo, filterRecurring, filterTagId]);
+
+    async function loadData() {
+        setLoading(true);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { setLoading(false); return; }
+        setUserId(user.id);
+
+        const { data: member } = await supabase
+            .from('household_members').select('household_id').eq('user_id', user.id).single();
+        if (!member) { setLoading(false); return; }
+
+        const hid = member.household_id;
+
+        const [accsRes, catsRes, houseRes] = await Promise.all([
+            supabase.from('accounts').select('id, name, color, currency, balance')
+                .eq('household_id', hid).eq('is_deleted', false).order('created_at'),
+            supabase.from('categories').select('id, name, icon, color, type, expense_type, is_system')
+                .or(`household_id.eq.${hid},household_id.is.null`).eq('is_hidden', false),
+            supabase.from('households').select('base_currency').eq('id', hid).single(),
+        ]);
+
+        setAccounts(accsRes.data ?? []);
+        setCategories(catsRes.data ?? []);
+        setBaseCurrency(houseRes.data?.base_currency ?? 'EUR');
+
+        await fetchTxs(hid, filterType, filterPeriod, filterAccountId, filterCategoryId, filterExpenseType, customFrom, customTo, filterRecurring);
+        setHouseholdId(hid);
+        setLoading(false);
+    }
+
+    async function fetchTxs(
+        hid: string, type: FilterType, period: FilterPeriod,
+        accId: string | null, catId: string | null,
+        expType: FilterExpenseType = 'all',
+        cFrom: Date | null = null, cTo: Date | null = null,
+        recurFilter: 'all' | 'recurring' | 'non_recurring' = 'all',
+        tagId: string | null = null,
+    ) {
+        const { from, to } = getPeriodRange(period, cFrom, cTo);
+        let q = supabase
+            .from('transactions')
+            .select('id, type, amount, currency, amount_base, exchange_rate, date, note, receipt_url, recurring_id, account_id, category_id, tag_id, category_tags(name), categories(name, icon, color, expense_type), accounts(name, color)')
+            .eq('household_id', hid).eq('is_deleted', false)
+            .order('date', { ascending: false }).order('created_at', { ascending: false }).limit(500);
+
+        if (from)                        q = q.gte('date', from);
+        if (to)                          q = q.lte('date', to);
+        if (type !== 'all')              q = q.eq('type', type);
+        if (accId)                       q = q.eq('account_id', accId);
+        if (catId)                       q = q.eq('category_id', catId);
+        if (expType !== 'all')           q = q.eq('expense_type', expType);
+        if (recurFilter === 'recurring')     q = q.not('recurring_id', 'is', null);
+        if (recurFilter === 'non_recurring') q = q.is('recurring_id', null);
+        if (tagId)                           q = q.eq('tag_id', tagId);
+
+        const { data } = await q;
+        setTxs((data ?? []).map((t: any) => ({
+            id: t.id, type: t.type,
+            amount: t.amount, currency: t.currency,
+            amount_base: t.amount_base, exchange_rate: t.exchange_rate,
+            date: t.date, note: t.note, receipt_url: t.receipt_url, recurring_id: t.recurring_id,
+            account_id: t.account_id, account_name: t.accounts?.name ?? '—', account_color: t.accounts?.color ?? null,
+            category_id: t.category_id,
+            category_name:  t.categories?.name  ?? (t.type === 'transfer' ? 'Перевод' : '—'),
+            category_icon:  t.categories?.icon  ?? null,
+            category_color: t.categories?.color ?? null,
+            expense_type:   t.categories?.expense_type ?? null,
+            tag_id:   t.tag_id ?? null,
+            tag_name: t.category_tags?.name ?? null,
+        })));
+    }
+
+    async function reloadCategories(hid: string) {
+        const { data } = await supabase.from('categories')
+            .select('id, name, icon, color, type, expense_type, is_system')
+            .or(`household_id.eq.${hid},household_id.is.null`).eq('is_hidden', false);
+        setCategories(data ?? []);
+    }
+
+    // ── Transaction form helpers ──────────────────────────────────────────────
+
+    function openForm(tx?: TxRow) {
+        setEditingTx(tx ?? null);
+        setFormVisible(true);
+    }
+
+    async function onFormSaved() {
+        setFormVisible(false);
+        setLoading(true);
+        await fetchTxs(householdId, filterType, filterPeriod, filterAccountId, filterCategoryId, filterExpenseType, customFrom, customTo);
+        setLoading(false);
+    }
+
+    async function loadFilterTags(catId: string) {
+        const { data } = await supabase
+            .from('category_tags')
+            .select('id, name')
+            .eq('category_id', catId)
+            .order('sort_order').order('created_at');
+        setFilterSheetTags(data ?? []);
+    }
+
+    async function deleteTx(id: string) {
+        Alert.alert('Удалить транзакцию?', 'Это действие нельзя отменить.', [
+            { text: 'Отмена', style: 'cancel' },
+            {
+                text: 'Удалить', style: 'destructive',
+                onPress: async () => {
+                    await supabase.from('transactions').update({ is_deleted: true }).eq('id', id);
+                    setTxs(prev => prev.filter(t => t.id !== id));
+                },
+            },
+        ]);
+    }
+
+    // ── Derived ──────────────────────────────────────────────────────────────
+
+    const filtered = useMemo(() => {
+        if (!search.trim()) return txs;
+        const q = search.toLowerCase();
+        return txs.filter(t =>
+            t.category_name.toLowerCase().includes(q) ||
+            (t.note?.toLowerCase().includes(q) ?? false) ||
+            t.account_name.toLowerCase().includes(q),
+        );
+    }, [txs, search]);
+
+    const sections = useMemo(() => {
+        const map = new Map<string, TxRow[]>();
+        for (const t of filtered) { const arr = map.get(t.date) ?? []; arr.push(t); map.set(t.date, arr); }
+        return Array.from(map.entries()).map(([date, data]) => ({ date, data }));
+    }, [filtered]);
+
+    // ── Render helpers ────────────────────────────────────────────────────────
+
+    function renderRightActions(id: string) {
+        return (
+            <TouchableOpacity onPress={() => deleteTx(id)}
+                style={{ backgroundColor: '#ef4444', justifyContent: 'center', alignItems: 'center', width: 88 }}>
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Удалить</Text>
+            </TouchableOpacity>
+        );
+    }
+
+    function renderRow({ item }: { item: TxRow }) {
+        const Ic          = item.category_icon ? CAT_ICONS[item.category_icon] : null;
+        const iconColor   = item.category_color ?? '#6b7280';
+        const amountColor = item.type === 'income' ? '#22c55e' : item.type === 'transfer' ? '#6b7280' : '#ef4444';
+        const prefix      = item.type === 'income' ? '+' : item.type === 'expense' ? '−' : '⇄';
+
+        return (
+            <ReanimatedSwipeable renderRightActions={() => renderRightActions(item.id)}>
+                <TouchableOpacity onPress={() => openForm(item)} activeOpacity={0.8}
+                    style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#030712', borderBottomWidth: 1, borderBottomColor: '#111827' }}>
+                    <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: iconColor + '22', alignItems: 'center', justifyContent: 'center' }}>
+                        {Ic ? <Ic color={iconColor} size={19} /> : <ArrowRightLeft color={iconColor} size={19} />}
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={{ color: '#f9fafb', fontSize: 15, fontWeight: '500' }}>{item.category_name}</Text>
+                            {item.tag_name && (
+                                <View style={{ backgroundColor: '#172554', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 }}>
+                                    <Text style={{ color: '#60a5fa', fontSize: 11 }}>{item.tag_name}</Text>
+                                </View>
+                            )}
+                        </View>
+                        <Text style={{ color: '#6b7280', fontSize: 13, marginTop: 2 }} numberOfLines={1}>
+                            {item.account_name}{item.note ? ` · ${item.note}` : ''}
+                        </Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{ color: amountColor, fontSize: 15, fontWeight: '600' }}>
+                            {prefix}{formatAmount(item.amount, item.currency)}
+                        </Text>
+                        {(item.recurring_id || item.receipt_url) && (
+                            <View style={{ flexDirection: 'row', gap: 4, marginTop: 3 }}>
+                                {item.recurring_id && <Repeat color="#4b5563" size={11} />}
+                                {item.receipt_url  && <Camera color="#4b5563" size={11} />}
+                            </View>
+                        )}
+                    </View>
+                </TouchableOpacity>
+            </ReanimatedSwipeable>
+        );
+    }
+
+    function renderSectionHeader({ section }: { section: { date: string; data: TxRow[] } }) {
+        const label        = format(new Date(section.date + 'T00:00:00'), 'EEEE, d MMMM', { locale: ru });
+        const cur          = baseCurrency;
+        const totalExpense = section.data.filter(t => t.type === 'expense').reduce((s, t) => s + (t.amount_base ?? t.amount), 0);
+        const totalIncome  = section.data.filter(t => t.type === 'income').reduce((s, t) => s + (t.amount_base ?? t.amount), 0);
+        const transfers    = section.data.filter(t => t.type === 'transfer').length;
+        return (
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 7, backgroundColor: '#0a0f1e' }}>
+                <Text style={{ color: '#9ca3af', fontSize: 12, textTransform: 'capitalize', fontWeight: '500' }}>{label}</Text>
+                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                    {filterType === 'transfer'
+                        ? <Text style={{ color: '#6b7280', fontSize: 12 }}>{transfers} перевод{transfers === 1 ? '' : transfers < 5 ? 'а' : 'ов'}</Text>
+                        : <>
+                            {totalExpense > 0 && <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '600' }}>−{formatAmount(totalExpense, cur)}</Text>}
+                            {totalIncome  > 0 && <Text style={{ color: '#22c55e', fontSize: 12, fontWeight: '600' }}>+{formatAmount(totalIncome, cur)}</Text>}
+                          </>
+                    }
+                </View>
+            </View>
+        );
+    }
+
+    const hasExtraFilters = filterCategoryId !== null || filterTagId !== null || filterExpenseType !== 'all' || filterRecurring !== 'all' || filterAccountId !== null;
+
+    const typeFilters: { label: string; value: FilterType }[] = [
+        { label: 'Все', value: 'all' }, { label: 'Расход', value: 'expense' },
+        { label: 'Доход', value: 'income' }, { label: 'Перевод', value: 'transfer' },
+    ];
+    const PERIOD_LABELS: Record<FilterPeriod, string> = {
+        today: 'Сегодня', yesterday: 'Вчера', week: 'Неделя',
+        month: 'Месяц', year: 'Год', custom: 'Произвольный',
+    };
+
+    function periodChipLabel(): string {
+        if (filterPeriod !== 'custom') return PERIOD_LABELS[filterPeriod];
+        if (!customFrom && !customTo) return 'Период';
+        const fmtShort = (d: Date) => format(d, 'd MMM', { locale: ru });
+        if (customFrom && customTo) {
+            if (format(customFrom, 'MM') === format(customTo, 'MM'))
+                return `${format(customFrom, 'd')}–${fmtShort(customTo)}`;
+            return `${fmtShort(customFrom)} – ${fmtShort(customTo)}`;
+        }
+        if (customFrom) return `с ${fmtShort(customFrom)}`;
+        return `по ${fmtShort(customTo!)}`;
+    }
+
+    // ─── Render ───────────────────────────────────────────────────────────────
+
     return (
-        <View className="flex-1 bg-gray-950 items-center justify-center">
-            <Text className="text-white text-xl font-bold">Транзакции</Text>
+        <View style={{ flex: 1, backgroundColor: '#030712' }}>
+
+            {/* Header */}
+            <View style={{ paddingTop: 60, paddingBottom: 12, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ color: '#f9fafb', fontSize: 24, fontWeight: '700' }}>Транзакции</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                    <TouchableOpacity onPress={() => router.push('/recurring/index' as any)} style={{ padding: 4 }}>
+                        <Repeat color="#9ca3af" size={22} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => { setSearchVisible(v => !v); if (searchVisible) setSearch(''); }} style={{ padding: 4 }}>
+                        {searchVisible ? <X color="#9ca3af" size={22} /> : <Search color="#9ca3af" size={22} />}
+                    </TouchableOpacity>
+                </View>
+            </View>
+
+            {/* Search */}
+            {searchVisible && (
+                <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
+                    <TextInput value={search} onChangeText={setSearch} placeholder="Поиск по категории, заметке, счёту…"
+                        placeholderTextColor="#4b5563" autoFocus
+                        style={{ backgroundColor: '#111827', color: '#f9fafb', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15 }}
+                    />
+                </View>
+            )}
+
+            {/* Row 1 — Type filter */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                style={{ flexGrow: 0, paddingBottom: 6 }}
+                contentContainerStyle={{ paddingHorizontal: 12, gap: 6, alignItems: 'center' }}>
+                {typeFilters.map(f => (
+                    <TouchableOpacity key={f.value} onPress={() => setFilterType(f.value)}
+                        style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: filterType === f.value ? '#3b82f6' : '#1f2937' }}>
+                        <Text style={{ color: filterType === f.value ? '#fff' : '#9ca3af', fontSize: 13, fontWeight: '500' }}>{f.label}</Text>
+                    </TouchableOpacity>
+                ))}
+            </ScrollView>
+
+            {/* Row 2 — Фильтры button + sticky PeriodChip */}
+            {(() => {
+                const expLabels: Record<FilterExpenseType, string> = { all: 'Тип расходов', infrastructure: 'Инфраструктурный', operational: 'Операционный', investment: 'Инвестиционный', discretionary: 'Дискреционный' };
+                const recLabels: Record<string, string> = { all: 'Рекуррентность', recurring: 'Рекуррентные', non_recurring: 'Разовые' };
+                const catName = filterCategoryId ? (categories.find(c => c.id === filterCategoryId)?.name ?? null) : null;
+                const tagName = filterTagId ? (filterSheetTags.find(t => t.id === filterTagId)?.name ?? null) : null;
+
+                const badge = (label: string, onClear: () => void) => (
+                    <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 10, paddingRight: 6, paddingVertical: 5, borderRadius: 20, backgroundColor: '#172554', borderWidth: 1.5, borderColor: '#3b82f6' }}>
+                        <Text style={{ color: '#60a5fa', fontSize: 12, fontWeight: '600' }}>{label}</Text>
+                        <TouchableOpacity onPress={onClear} hitSlop={6}>
+                            <X color="#60a5fa" size={12} />
+                        </TouchableOpacity>
+                    </View>
+                );
+
+                return (
+                    <>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', paddingBottom: hasExtraFilters ? 6 : 10 }}>
+                            <View style={{ flex: 1, paddingLeft: 12 }}>
+                                <TouchableOpacity onPress={() => setActiveSheet('filters')}
+                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: hasExtraFilters ? '#3b82f6' : '#374151', backgroundColor: hasExtraFilters ? '#172554' : '#1f2937' }}>
+                                    <SlidersHorizontal size={13} color={hasExtraFilters ? '#60a5fa' : '#9ca3af'} />
+                                    <Text style={{ color: hasExtraFilters ? '#60a5fa' : '#9ca3af', fontSize: 12, fontWeight: hasExtraFilters ? '600' : '400' }}>Фильтры</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <TouchableOpacity onPress={() => setPeriodSheetVisible(true)}
+                                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, marginHorizontal: 8, borderRadius: 20, borderWidth: 1.5, borderColor: '#2563eb', backgroundColor: '#172554' }}>
+                                <Text style={{ color: '#60a5fa', fontSize: 12, fontWeight: '600' }}>{periodChipLabel()}</Text>
+                                <ChevronDown color="#60a5fa" size={11} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {hasExtraFilters && (
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                                style={{ flexGrow: 0, paddingBottom: 10 }}
+                                contentContainerStyle={{ paddingHorizontal: 12, gap: 8, alignItems: 'center' }}>
+                                {filterAccountId && badge(
+                                    accounts.find(a => a.id === filterAccountId)?.name ?? 'Счёт',
+                                    () => setFilterAccountId(null)
+                                )}
+                                {filterCategoryId && badge(
+                                    tagName ? `${catName} · ${tagName}` : catName ?? 'Категория',
+                                    () => { setFilterCategoryId(null); setFilterTagId(null); setFilterSheetTags([]); }
+                                )}
+                                {filterTagId && !filterCategoryId && badge(
+                                    tagName ?? 'Тег',
+                                    () => setFilterTagId(null)
+                                )}
+                                {filterExpenseType !== 'all' && badge(expLabels[filterExpenseType], () => setFilterExpenseType('all'))}
+                                {filterRecurring !== 'all' && badge(recLabels[filterRecurring], () => setFilterRecurring('all'))}
+                            </ScrollView>
+                        )}
+                    </>
+                );
+            })()}
+
+            {/* List */}
+            {loading ? (
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                    <ActivityIndicator color="#3b82f6" size="large" />
+                </View>
+            ) : sections.length === 0 ? (
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <Text style={{ color: '#6b7280', fontSize: 16 }}>
+                        {search.trim() ? 'Не найдено' : hasExtraFilters || filterPeriod !== 'month' ? 'Ничего не найдено' : 'Транзакций нет'}
+                    </Text>
+                    <Text style={{ color: '#4b5563', fontSize: 14 }}>
+                        {search.trim()
+                            ? `По запросу «${search.trim()}»`
+                            : hasExtraFilters || filterPeriod !== 'month'
+                                ? 'Попробуйте изменить фильтры'
+                                : 'Нажмите + чтобы добавить'}
+                    </Text>
+                </View>
+            ) : (
+                <SectionList
+                    sections={sections} keyExtractor={item => item.id}
+                    renderItem={renderRow} renderSectionHeader={renderSectionHeader}
+                    stickySectionHeadersEnabled showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{ paddingBottom: 100 }}
+                />
+            )}
+
+            {/* FAB */}
+            <TouchableOpacity onPress={() => openForm()}
+                style={{ position: 'absolute', bottom: 24, right: 24, backgroundColor: '#2563eb', width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center' }}
+                activeOpacity={0.85}>
+                <Plus color="#fff" size={28} />
+            </TouchableOpacity>
+
+            {/* ════ PeriodSheet ════ */}
+            <Modal visible={periodSheetVisible} transparent animationType="slide" onRequestClose={() => setPeriodSheetVisible(false)}>
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
+                    <TouchableOpacity style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} activeOpacity={1} onPress={() => setPeriodSheetVisible(false)} />
+                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 44 }}>
+                            <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', marginBottom: 16 }}>Период</Text>
+                            {([
+                                { value: 'today'     as const, label: 'Сегодня' },
+                                { value: 'yesterday' as const, label: 'Вчера' },
+                                { value: 'week'      as const, label: 'Неделя' },
+                                { value: 'month'     as const, label: 'Месяц' },
+                                { value: 'year'      as const, label: 'Год' },
+                            ]).map(p => (
+                                <TouchableOpacity key={p.value} onPress={() => { setFilterPeriod(p.value); setCustomFrom(null); setCustomTo(null); setPeriodSheetVisible(false); }}
+                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
+                                    <Text style={{ color: filterPeriod === p.value ? '#60a5fa' : '#e5e7eb', fontSize: 16, fontWeight: filterPeriod === p.value ? '600' : '400' }}>{p.label}</Text>
+                                    {filterPeriod === p.value && <Check color="#3b82f6" size={18} />}
+                                </TouchableOpacity>
+                            ))}
+                            <View style={{ height: 1, backgroundColor: '#374151', marginVertical: 8 }} />
+                            <TouchableOpacity onPress={() => setFilterPeriod('custom')}
+                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14 }}>
+                                <Text style={{ color: filterPeriod === 'custom' ? '#60a5fa' : '#e5e7eb', fontSize: 16, fontWeight: filterPeriod === 'custom' ? '600' : '400' }}>Произвольный период</Text>
+                                {filterPeriod === 'custom' && <Check color="#3b82f6" size={18} />}
+                            </TouchableOpacity>
+                            {filterPeriod === 'custom' && (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                                    <TouchableOpacity onPress={() => setShowCustomFrom(true)}
+                                        style={{ flex: 1, backgroundColor: '#1f2937', borderRadius: 12, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: customFrom ? '#3b82f6' : '#374151' }}>
+                                        <Text style={{ color: customFrom ? '#fff' : '#6b7280', fontSize: 14 }}>
+                                            {customFrom ? format(customFrom, 'd MMM yyyy', { locale: ru }) : 'С даты'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                    <Text style={{ color: '#4b5563' }}>—</Text>
+                                    <TouchableOpacity onPress={() => setShowCustomTo(true)}
+                                        style={{ flex: 1, backgroundColor: '#1f2937', borderRadius: 12, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: customTo ? '#3b82f6' : '#374151' }}>
+                                        <Text style={{ color: customTo ? '#fff' : '#6b7280', fontSize: 14 }}>
+                                            {customTo ? format(customTo, 'd MMM yyyy', { locale: ru }) : 'По дату'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+                            {showCustomFrom && (
+                                <DateTimePicker mode="date" display="inline" themeVariant="dark"
+                                    value={customFrom ?? new Date()}
+                                    onChange={(_, d) => { setShowCustomFrom(false); if (d) { setCustomFrom(d); if (customTo && d > customTo) setCustomTo(null); } }} />
+                            )}
+                            {showCustomTo && (
+                                <DateTimePicker mode="date" display="inline" themeVariant="dark"
+                                    value={customTo ?? customFrom ?? new Date()}
+                                    minimumDate={customFrom ?? undefined}
+                                    onChange={(_, d) => { setShowCustomTo(false); if (d) setCustomTo(d); }} />
+                            )}
+                            {filterPeriod === 'custom' && (customFrom || customTo) && (
+                                <TouchableOpacity onPress={() => setPeriodSheetVisible(false)}
+                                    style={{ backgroundColor: '#2563eb', borderRadius: 16, paddingVertical: 14, alignItems: 'center', marginTop: 8 }}>
+                                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Применить</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    </View>
+            </Modal>
+
+            {/* ════ Dropdown Sheet (account / category / expensetype / recurring) ════ */}
+            <Modal visible={activeSheet !== null} transparent animationType="slide" onRequestClose={() => setActiveSheet(null)}>
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
+                    <TouchableOpacity style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} activeOpacity={1} onPress={() => setActiveSheet(null)} />
+                        <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 44, maxHeight: activeSheet === 'filters' ? '90%' : '75%' }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                                <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>
+                                    {activeSheet === 'filters' ? 'Фильтры' : activeSheet === 'account' ? 'Счёт' : activeSheet === 'category' ? 'Категория' : activeSheet === 'expensetype' ? 'Тип расходов' : 'Рекуррентность'}
+                                </Text>
+                                <TouchableOpacity onPress={() => setActiveSheet(null)} hitSlop={8}><X color="#6b7280" size={20} /></TouchableOpacity>
+                            </View>
+                            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+                                {/* ── Unified Filters ── */}
+                                {activeSheet === 'filters' && (() => {
+                                    const secHeader = (label: string) => (
+                                        <Text style={{ color: '#6b7280', fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 10, marginTop: 20 }}>{label}</Text>
+                                    );
+                                    return (
+                                        <View>
+                                            {/* Счёт */}
+                                            {secHeader('СЧЁТ')}
+                                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
+                                                {[{ id: null as string | null, name: 'Все счета', color: null as string | null }, ...accounts].map(acc => {
+                                                    const active = acc.id === filterAccountId;
+                                                    return (
+                                                        <TouchableOpacity key={acc.id ?? '__all__'} onPress={() => setFilterAccountId(acc.id)}
+                                                            style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: active ? '#3b82f6' : '#374151', backgroundColor: active ? '#172554' : '#1f2937' }}>
+                                                            <Text style={{ color: active ? '#60a5fa' : '#9ca3af', fontSize: 13, fontWeight: active ? '600' : '400' }}>{acc.name}</Text>
+                                                        </TouchableOpacity>
+                                                    );
+                                                })}
+                                            </ScrollView>
+
+                                            {/* Категория */}
+                                            {secHeader('КАТЕГОРИЯ')}
+                                            <View style={{ gap: 2 }}>
+                                                {[{ id: null as string | null, name: 'Все категории', icon: null, color: null, type: 'expense' as const, expense_type: null, is_system: true },
+                                                  ...categories.filter(c => filterType === 'income' ? c.type === 'income' : c.type === 'expense')
+                                                ].map(cat => {
+                                                    const active = cat.id === filterCategoryId;
+                                                    const Ic = cat.icon ? CAT_ICONS[cat.icon] : null;
+                                                    return (
+                                                        <View key={cat.id ?? '__all__'}>
+                                                            <TouchableOpacity onPress={() => {
+                                                                if (cat.id === null) { setFilterCategoryId(null); setFilterTagId(null); setFilterSheetTags([]); }
+                                                                else { setFilterCategoryId(cat.id); setFilterTagId(null); loadFilterTags(cat.id); }
+                                                            }}
+                                                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: active && cat.id !== null ? 0 : 1, borderBottomColor: '#1f2937' }}>
+                                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                                                    {Ic
+                                                                        ? <View style={{ width: 26, height: 26, borderRadius: 8, backgroundColor: (cat.color ?? '#6b7280') + '22', alignItems: 'center', justifyContent: 'center' }}>
+                                                                            <Ic color={cat.color ?? '#6b7280'} size={14} />
+                                                                          </View>
+                                                                        : cat.color ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: cat.color }} /> : null
+                                                                    }
+                                                                    <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: active ? '600' : '400' }}>{cat.name}</Text>
+                                                                </View>
+                                                                {active && <Check color="#3b82f6" size={16} />}
+                                                            </TouchableOpacity>
+                                                            {active && cat.id !== null && filterSheetTags.length > 0 && (
+                                                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
+                                                                    {filterSheetTags.map(tag => {
+                                                                        const tagActive = filterTagId === tag.id;
+                                                                        return (
+                                                                            <TouchableOpacity key={tag.id} onPress={() => setFilterTagId(tagActive ? null : tag.id)}
+                                                                                style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, borderWidth: 1.5, borderColor: tagActive ? '#3b82f6' : '#374151', backgroundColor: tagActive ? '#172554' : '#1f2937' }}>
+                                                                                <Text style={{ color: tagActive ? '#60a5fa' : '#9ca3af', fontSize: 12, fontWeight: tagActive ? '600' : '400' }}>{tag.name}</Text>
+                                                                            </TouchableOpacity>
+                                                                        );
+                                                                    })}
+                                                                </View>
+                                                            )}
+                                                        </View>
+                                                    );
+                                                })}
+                                            </View>
+
+                                            {/* Тип расходов */}
+                                            {secHeader('ТИП РАСХОДОВ')}
+                                            <View style={{ gap: 2 }}>
+                                                {([
+                                                    { value: 'all' as const,            label: 'Все типы' },
+                                                    { value: 'operational' as const,    label: 'Операционные' },
+                                                    { value: 'infrastructure' as const, label: 'Инфраструктурные' },
+                                                    { value: 'investment' as const,     label: 'Инвестиционные' },
+                                                    { value: 'discretionary' as const,  label: 'Дискреционные' },
+                                                ]).map(opt => {
+                                                    const active = filterExpenseType === opt.value;
+                                                    return (
+                                                        <TouchableOpacity key={opt.value} onPress={() => setFilterExpenseType(opt.value)}
+                                                            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
+                                                            <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: active ? '600' : '400' }}>{opt.label}</Text>
+                                                            {active && <Check color="#3b82f6" size={16} />}
+                                                        </TouchableOpacity>
+                                                    );
+                                                })}
+                                            </View>
+
+                                            {/* Рекуррентность */}
+                                            {secHeader('РЕКУРРЕНТНОСТЬ')}
+                                            <View style={{ gap: 2, marginBottom: 24 }}>
+                                                {([
+                                                    { value: 'all' as const,          label: 'Все платежи' },
+                                                    { value: 'recurring' as const,    label: 'Рекуррентные' },
+                                                    { value: 'non_recurring' as const, label: 'Разовые' },
+                                                ]).map(opt => {
+                                                    const active = filterRecurring === opt.value;
+                                                    return (
+                                                        <TouchableOpacity key={opt.value} onPress={() => setFilterRecurring(opt.value)}
+                                                            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
+                                                            <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: active ? '600' : '400' }}>{opt.label}</Text>
+                                                            {active && <Check color="#3b82f6" size={16} />}
+                                                        </TouchableOpacity>
+                                                    );
+                                                })}
+                                            </View>
+
+                                            {/* Buttons */}
+                                            <View style={{ flexDirection: 'row', gap: 12 }}>
+                                                <TouchableOpacity
+                                                    onPress={() => { setFilterAccountId(null); setFilterCategoryId(null); setFilterTagId(null); setFilterSheetTags([]); setFilterExpenseType('all'); setFilterRecurring('all'); setActiveSheet(null); }}
+                                                    style={{ flex: 1, borderRadius: 16, paddingVertical: 13, alignItems: 'center', borderWidth: 1.5, borderColor: '#374151' }}>
+                                                    <Text style={{ color: '#9ca3af', fontWeight: '600', fontSize: 15 }}>Сбросить</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity onPress={() => setActiveSheet(null)}
+                                                    style={{ flex: 2, borderRadius: 16, paddingVertical: 13, alignItems: 'center', backgroundColor: '#2563eb' }}>
+                                                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Применить</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    );
+                                })()}
+
+                                {/* ── Account ── */}
+                                {activeSheet === 'account' && (
+                                    <View style={{ gap: 2 }}>
+                                        {[{ id: null as string | null, name: 'Все счета', color: null as string | null },...accounts].map(acc => {
+                                            const active = acc.id === filterAccountId;
+                                            return (
+                                                <TouchableOpacity key={acc.id ?? '__all__'} onPress={() => { setFilterAccountId(acc.id); setActiveSheet(null); }}
+                                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                                        {acc.color && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: acc.color }} />}
+                                                        <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 16, fontWeight: active ? '600' : '400' }}>{acc.name}</Text>
+                                                    </View>
+                                                    {active && <Check color="#3b82f6" size={18} />}
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </View>
+                                )}
+
+                                {/* ── Category ── */}
+                                {activeSheet === 'category' && (
+                                    <View style={{ gap: 2 }}>
+                                        {[{ id: null as string | null, name: 'Все категории', icon: null, color: null, type: 'expense' as const, expense_type: null, is_system: true },
+                                          ...categories.filter(c => filterType === 'income' ? c.type === 'income' : c.type === 'expense')
+                                        ].map(cat => {
+                                            const active = cat.id === filterCategoryId;
+                                            const Ic = cat.icon ? CAT_ICONS[cat.icon] : null;
+                                            return (
+                                                <View key={cat.id ?? '__all__'}>
+                                                    <TouchableOpacity onPress={() => {
+                                                        if (cat.id === null) {
+                                                            setFilterCategoryId(null);
+                                                            setFilterTagId(null);
+                                                            setFilterSheetTags([]);
+                                                            setActiveSheet(null);
+                                                        } else {
+                                                            setFilterCategoryId(cat.id);
+                                                            setFilterTagId(null);
+                                                            loadFilterTags(cat.id);
+                                                        }
+                                                    }}
+                                                        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: active && filterSheetTags.length > 0 ? 0 : 1, borderBottomColor: '#1f2937' }}>
+                                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                                            {Ic
+                                                                ? <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: (cat.color ?? '#6b7280') + '22', alignItems: 'center', justifyContent: 'center' }}>
+                                                                    <Ic color={cat.color ?? '#6b7280'} size={15} />
+                                                                  </View>
+                                                                : cat.color
+                                                                    ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: cat.color }} />
+                                                                    : null
+                                                            }
+                                                            <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 16, fontWeight: active ? '600' : '400' }}>{cat.name}</Text>
+                                                        </View>
+                                                        {active && <Check color="#3b82f6" size={18} />}
+                                                    </TouchableOpacity>
+
+                                                    {/* Inline tags under the selected category */}
+                                                    {active && cat.id !== null && (
+                                                        <View style={{ paddingHorizontal: 4, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
+                                                            {filterSheetTags.length === 0
+                                                                ? <Text style={{ color: '#4b5563', fontSize: 13 }}>Нет тегов</Text>
+                                                                : <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                                                                    {filterSheetTags.map(tag => {
+                                                                        const tagActive = filterTagId === tag.id;
+                                                                        return (
+                                                                            <TouchableOpacity key={tag.id}
+                                                                                onPress={() => { setFilterTagId(tagActive ? null : tag.id); setActiveSheet(null); }}
+                                                                                style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5, borderColor: tagActive ? '#3b82f6' : '#374151', backgroundColor: tagActive ? '#172554' : '#1f2937' }}>
+                                                                                <Text style={{ color: tagActive ? '#60a5fa' : '#9ca3af', fontSize: 13, fontWeight: tagActive ? '600' : '400' }}>{tag.name}</Text>
+                                                                            </TouchableOpacity>
+                                                                        );
+                                                                    })}
+                                                                  </View>
+                                                            }
+                                                        </View>
+                                                    )}
+                                                </View>
+                                            );
+                                        })}
+                                    </View>
+                                )}
+
+                                {/* ── Expense type ── */}
+                                {activeSheet === 'expensetype' && (
+                                    <View style={{ gap: 2 }}>
+                                        {([
+                                            { value: 'all'            as const, label: 'Все типы',          sub: '' },
+                                            { value: 'operational'    as const, label: 'Операционные',      sub: 'Еда, транспорт, бытовые' },
+                                            { value: 'infrastructure' as const, label: 'Инфраструктурные',  sub: 'Аренда, ЖКХ, подписки' },
+                                            { value: 'investment'     as const, label: 'Инвестиционные',    sub: 'Курсы, здоровье, активы' },
+                                            { value: 'discretionary'  as const, label: 'Дискреционные',     sub: 'Развлечения, подарки' },
+                                        ]).map(opt => {
+                                            const active = filterExpenseType === opt.value;
+                                            return (
+                                                <TouchableOpacity key={opt.value} onPress={() => { setFilterExpenseType(opt.value); setActiveSheet(null); }}
+                                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
+                                                    <View>
+                                                        <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 16, fontWeight: active ? '600' : '400' }}>{opt.label}</Text>
+                                                        {opt.sub ? <Text style={{ color: '#4b5563', fontSize: 12, marginTop: 2 }}>{opt.sub}</Text> : null}
+                                                    </View>
+                                                    {active && <Check color="#3b82f6" size={18} />}
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </View>
+                                )}
+
+                                {/* ── Recurring ── */}
+                                {activeSheet === 'recurring' && (
+                                    <View style={{ gap: 2 }}>
+                                        {([
+                                            { value: 'all'         as const, label: 'Все платежи',       sub: '' },
+                                            { value: 'recurring'   as const, label: 'Рекуррентные',      sub: 'Связаны с регулярным платежом' },
+                                            { value: 'non_recurring' as const, label: 'Разовые',         sub: 'Без привязки к расписанию' },
+                                        ]).map(opt => {
+                                            const active = filterRecurring === opt.value;
+                                            return (
+                                                <TouchableOpacity key={opt.value} onPress={() => { setFilterRecurring(opt.value); setActiveSheet(null); }}
+                                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
+                                                    <View>
+                                                        <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 16, fontWeight: active ? '600' : '400' }}>{opt.label}</Text>
+                                                        {opt.sub ? <Text style={{ color: '#4b5563', fontSize: 12, marginTop: 2 }}>{opt.sub}</Text> : null}
+                                                    </View>
+                                                    {active && <Check color="#3b82f6" size={18} />}
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </View>
+                                )}
+
+                            </ScrollView>
+                        </View>
+                    </View>
+            </Modal>
+
+            <TransactionForm
+                visible={formVisible}
+                onClose={() => setFormVisible(false)}
+                onSaved={onFormSaved}
+                accounts={accounts}
+                categories={categories}
+                householdId={householdId}
+                userId={userId}
+                baseCurrency={baseCurrency}
+                editingTx={editingTx}
+                onCategoriesChanged={(hid) => reloadCategories(hid)}
+            />
+
+
         </View>
     );
 }

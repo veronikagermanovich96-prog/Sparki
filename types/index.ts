@@ -1,4 +1,4 @@
-export type ExpenseType = 'infrastructure' | 'operational' | 'discretionary';
+export type ExpenseType = 'infrastructure' | 'operational' | 'investment' | 'discretionary';
 export type TransactionType = 'income' | 'expense' | 'transfer';
 export type CategoryType = 'income' | 'expense';
 export type Frequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
@@ -20,6 +20,8 @@ export interface Account {
     color: string | null;
     icon: string | null;
     sort_order: number | null;
+    spending_limit: number | null;
+    spending_limit_period: Frequency | null;
     exclude_from_dashboard: boolean;
     is_deleted: boolean;
     deleted_at: string | null;
@@ -81,6 +83,7 @@ export interface Budget {
     id: string;
     household_id: string;
     category_id: string;
+    tag_id: string | null;
     amount: number;
     currency: string;
     period: 'monthly' | 'yearly';

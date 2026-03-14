@@ -1,8 +1,10 @@
+import { CurrencyPicker } from '@/components/ui/CurrencyPicker';
 import { CURRENCY_MAP, formatAmount } from '@/constants/currencies';
 import { supabase } from '@/lib/supabase';
 import { Account, Transaction } from '@/types';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
+import { Frequency } from '@/types';
 import { router, useLocalSearchParams } from 'expo-router';
 import {
     ArrowDownToLine,
@@ -59,6 +61,13 @@ const COLOR_PRESETS = [
     '#a78bfa', '#6b7280',
 ];
 
+const PERIOD_PICKER_LABELS: Record<Frequency, string> = {
+    daily: 'День',
+    weekly: 'Неделя',
+    monthly: 'Месяц',
+    yearly: 'Год',
+};
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type TxWithCategory = Transaction & {
@@ -82,6 +91,9 @@ export default function AccountDetailScreen() {
     const [editIcon, setEditIcon] = useState('CreditCard');
     const [editColor, setEditColor] = useState('#3b82f6');
     const [editExclude, setEditExclude] = useState(false);
+    const [editLimit, setEditLimit] = useState('');
+    const [editLimitPeriod, setEditLimitPeriod] = useState<Frequency>('monthly');
+    const [editCurrency, setEditCurrency] = useState('EUR');
     const [editSaving, setEditSaving] = useState(false);
 
     // Transfer-on-delete sheet
@@ -117,6 +129,7 @@ export default function AccountDetailScreen() {
             setEditName(acc.name);
             setEditIcon(acc.icon ?? 'CreditCard');
             setEditColor(acc.color ?? '#3b82f6');
+            setEditCurrency(acc.currency);
             setEditExclude(acc.exclude_from_dashboard);
         }
         setLoading(false);
@@ -149,7 +162,10 @@ export default function AccountDetailScreen() {
         setEditName(account.name);
         setEditIcon(account.icon ?? 'CreditCard');
         setEditColor(account.color ?? '#3b82f6');
+        setEditCurrency(account.currency);
         setEditExclude(account.exclude_from_dashboard);
+        setEditLimit(account.spending_limit != null ? String(account.spending_limit) : '');
+        setEditLimitPeriod(account.spending_limit_period ?? 'monthly');
         setShowEditSheet(true);
     }
 
@@ -163,7 +179,10 @@ export default function AccountDetailScreen() {
                 name: editName.trim(),
                 icon: editIcon,
                 color: editColor,
+                currency: editCurrency,
                 exclude_from_dashboard: editExclude,
+                spending_limit: editLimit ? parseFloat(editLimit) : null,
+                spending_limit_period: editLimit ? editLimitPeriod : null,
                 updated_at: new Date().toISOString(),
             })
             .eq('id', account.id)
@@ -480,6 +499,9 @@ export default function AccountDetailScreen() {
                                 ))}
                             </View>
 
+                            <Label>Валюта</Label>
+                            <CurrencyPicker value={editCurrency} onSelect={setEditCurrency} />
+
                             <View style={{
                                 flexDirection: 'row', alignItems: 'center',
                                 backgroundColor: '#1f2937', borderRadius: 14,
@@ -496,6 +518,41 @@ export default function AccountDetailScreen() {
                                     thumbColor="#fff"
                                 />
                             </View>
+
+                            <Label>Лимит расходов ({editCurrency})</Label>
+                            <TextInput
+                                style={inputStyle}
+                                placeholder="0 — без лимита"
+                                placeholderTextColor="#4b5563"
+                                value={editLimit}
+                                onChangeText={t => setEditLimit(t.replace(/[^0-9.]/g, ''))}
+                                keyboardType="decimal-pad"
+                            />
+                            {!!editLimit && parseFloat(editLimit) > 0 && (
+                                <>
+                                    <Label>Период лимита</Label>
+                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+                                        {(['daily', 'weekly', 'monthly', 'yearly'] as Frequency[]).map(f => (
+                                            <TouchableOpacity
+                                                key={f}
+                                                onPress={() => setEditLimitPeriod(f)}
+                                                style={{
+                                                    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10,
+                                                    backgroundColor: editLimitPeriod === f ? '#2563eb' : '#1f2937',
+                                                    borderWidth: 1, borderColor: editLimitPeriod === f ? '#3b82f6' : '#374151',
+                                                }}
+                                            >
+                                                <Text style={{ color: editLimitPeriod === f ? '#fff' : '#9ca3af', fontSize: 13 }}>
+                                                    {PERIOD_PICKER_LABELS[f]}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </>
+                            )}
+                            <Text style={{ color: '#4b5563', fontSize: 12, marginTop: -12, marginBottom: 20, marginLeft: 4 }}>
+                                Прогресс-бар появится на карточке счёта
+                            </Text>
 
                             <PrimaryButton
                                 label={editSaving ? 'Сохранение…' : 'Сохранить'}

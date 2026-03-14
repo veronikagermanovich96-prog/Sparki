@@ -1,7 +1,8 @@
 import { CurrencyPicker } from '@/components/ui/CurrencyPicker';
 import { CURRENCY_MAP, formatAmount } from '@/constants/currencies';
+import { format, startOfMonth, startOfWeek, startOfYear, startOfDay } from 'date-fns';
 import { supabase } from '@/lib/supabase';
-import { Account } from '@/types';
+import { Account, Frequency } from '@/types';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import {
     ArrowDownToLine,
@@ -61,6 +62,30 @@ const COLOR_PRESETS = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+const PERIOD_LABELS: Record<Frequency, string> = {
+    daily: 'Дневной лимит',
+    weekly: 'Недельный лимит',
+    monthly: 'Месячный лимит',
+    yearly: 'Годовой лимит',
+};
+
+const PERIOD_PICKER_LABELS: Record<Frequency, string> = {
+    daily: 'День',
+    weekly: 'Неделя',
+    monthly: 'Месяц',
+    yearly: 'Год',
+};
+
+function getSpendingPeriodStart(period: Frequency): string {
+    const now = new Date();
+    switch (period) {
+        case 'daily': return format(startOfDay(now), 'yyyy-MM-dd');
+        case 'weekly': return format(startOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+        case 'monthly': return format(startOfMonth(now), 'yyyy-MM-dd');
+        case 'yearly': return format(startOfYear(now), 'yyyy-MM-dd');
+    }
+}
+
 async function fetchExchangeRate(from: string, to: string): Promise<number> {
     if (from === to) return 1;
     try {
@@ -76,6 +101,7 @@ async function fetchExchangeRate(from: string, to: string): Promise<number> {
 
 interface AccountCardProps {
     account: Account;
+    spending: number;
     onPress: () => void;
     onAddFunds: () => void;
     onTransfer: () => void;
@@ -83,7 +109,7 @@ interface AccountCardProps {
     isActive: boolean;
 }
 
-function AccountCard({ account, onPress, onAddFunds, onTransfer, onDrag, isActive }: AccountCardProps) {
+function AccountCard({ account, spending, onPress, onAddFunds, onTransfer, onDrag, isActive }: AccountCardProps) {
     const IconComp = ICON_MAP[account.icon ?? 'CreditCard'] ?? CreditCard;
     const color = account.color ?? '#3b82f6';
 
@@ -153,6 +179,26 @@ function AccountCard({ account, onPress, onAddFunds, onTransfer, onDrag, isActiv
                     <Text style={{ color: '#3b82f6', fontSize: 13, fontWeight: '600' }}>Перевод</Text>
                 </GHTouch>
             </View>
+
+            {/* Spending limit progress bar */}
+            {account.spending_limit != null && account.spending_limit > 0 && (() => {
+                const pct = Math.min(1, spending / account.spending_limit!);
+                const barColor = pct < 0.7 ? '#22c55e' : pct < 0.9 ? '#f97316' : '#ef4444';
+                const periodLabel = PERIOD_LABELS[account.spending_limit_period ?? 'monthly'];
+                return (
+                    <View style={{ paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#1f2937' }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                            <Text style={{ color: '#9ca3af', fontSize: 12 }}>{periodLabel}</Text>
+                            <Text style={{ color: pct >= 0.9 ? '#ef4444' : '#9ca3af', fontSize: 12, fontWeight: '500' }}>
+                                {formatAmount(spending, account.currency)} / {formatAmount(account.spending_limit!, account.currency)}
+                            </Text>
+                        </View>
+                        <View style={{ height: 4, backgroundColor: '#1f2937', borderRadius: 2 }}>
+                            <View style={{ width: `${pct * 100}%` as any, height: 4, backgroundColor: barColor, borderRadius: 2 }} />
+                        </View>
+                    </View>
+                );
+            })()}
         </View>
     );
 }
@@ -164,6 +210,9 @@ export default function AccountsScreen() {
     const [loading, setLoading] = useState(true);
     const [householdId, setHouseholdId] = useState<string | null>(null);
 
+    // Monthly spending per account
+    const [accountSpending, setAccountSpending] = useState<Record<string, number>>({});
+
     // Add modal
     const [showAddModal, setShowAddModal] = useState(false);
     const [addName, setAddName] = useState('');
@@ -172,6 +221,8 @@ export default function AccountsScreen() {
     const [addIcon, setAddIcon] = useState('CreditCard');
     const [addColor, setAddColor] = useState('#3b82f6');
     const [addExclude, setAddExclude] = useState(false);
+    const [addLimit, setAddLimit] = useState('');
+    const [addLimitPeriod, setAddLimitPeriod] = useState<Frequency>('monthly');
     const [addSaving, setAddSaving] = useState(false);
 
     // Add Funds modal
@@ -195,7 +246,10 @@ export default function AccountsScreen() {
 
     // Refresh list when returning from detail screen
     useFocusEffect(useCallback(() => {
-        if (householdId) fetchAccounts(householdId);
+        if (householdId) {
+            fetchAccounts(householdId);
+            fetchSpending(householdId);
+        }
     }, [householdId]));
 
     async function loadData() {
@@ -210,12 +264,13 @@ export default function AccountsScreen() {
 
         if (member) {
             setHouseholdId(member.household_id);
-            await fetchAccounts(member.household_id);
+            const accs = await fetchAccounts(member.household_id);
+            await fetchSpending(member.household_id, accs);
         }
         setLoading(false);
     }
 
-    async function fetchAccounts(hid: string) {
+    async function fetchAccounts(hid: string): Promise<Account[]> {
         // Try sort_order first; fall back to created_at if column doesn't exist
         const { data, error } = await supabase
             .from('accounts')
@@ -233,9 +288,45 @@ export default function AccountsScreen() {
                 .eq('is_deleted', false)
                 .order('created_at', { ascending: true });
             setAccounts(fallback ?? []);
+            return fallback ?? [];
         } else {
             setAccounts(data ?? []);
+            return data ?? [];
         }
+    }
+
+    async function fetchSpending(hid: string, accs?: Account[]) {
+        const list = accs ?? accounts;
+        // Determine the earliest period start across all accounts
+        const periods = new Set<Frequency>();
+        for (const a of list) {
+            if (a.spending_limit && a.spending_limit > 0) {
+                periods.add(a.spending_limit_period ?? 'monthly');
+            }
+        }
+        // Use the earliest possible start date to fetch all needed transactions in one query
+        const starts = Array.from(periods).map(p => getSpendingPeriodStart(p));
+        const earliest = starts.length > 0 ? starts.sort()[0] : format(startOfMonth(new Date()), 'yyyy-MM-dd');
+
+        const { data } = await supabase
+            .from('transactions')
+            .select('account_id, amount, date')
+            .eq('household_id', hid)
+            .eq('type', 'expense')
+            .eq('is_deleted', false)
+            .gte('date', earliest);
+
+        // Sum per account, only counting transactions within each account's period
+        const map: Record<string, number> = {};
+        for (const t of data ?? []) {
+            const acc = list.find(a => a.id === t.account_id);
+            const period = acc?.spending_limit_period ?? 'monthly';
+            const periodStart = getSpendingPeriodStart(period);
+            if (t.date >= periodStart) {
+                map[t.account_id] = (map[t.account_id] ?? 0) + t.amount;
+            }
+        }
+        setAccountSpending(map);
     }
 
     // ─── Drag & drop reorder ─────────────────────────────────────────────────
@@ -255,6 +346,7 @@ export default function AccountsScreen() {
     function openAdd() {
         setAddName(''); setAddCurrency('EUR'); setAddBalance('0');
         setAddIcon('CreditCard'); setAddColor('#3b82f6'); setAddExclude(false);
+        setAddLimit(''); setAddLimitPeriod('monthly');
         setShowAddModal(true);
     }
 
@@ -270,6 +362,8 @@ export default function AccountsScreen() {
             icon: addIcon,
             color: addColor,
             exclude_from_dashboard: addExclude,
+            spending_limit: addLimit ? parseFloat(addLimit) : null,
+            spending_limit_period: addLimit ? addLimitPeriod : null,
             sort_order: accounts.length,
         });
 
@@ -432,6 +526,7 @@ export default function AccountsScreen() {
                         <ScaleDecorator>
                             <AccountCard
                                 account={item}
+                                spending={accountSpending[item.id] ?? 0}
                                 onPress={() => router.push(`/accounts/${item.id}`)}
                                 onAddFunds={() => openAddFunds(item)}
                                 onTransfer={() => openTransfer(item)}
@@ -511,13 +606,48 @@ export default function AccountsScreen() {
                                 ))}
                             </View>
 
-                            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#1f2937', borderRadius: 14, padding: 16, marginBottom: 24 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#1f2937', borderRadius: 14, padding: 16, marginBottom: 20 }}>
                                 <View style={{ flex: 1, marginRight: 12 }}>
                                     <Text style={{ color: '#fff', fontSize: 15 }}>Скрыть из активного баланса</Text>
                                     <Text style={{ color: '#6b7280', fontSize: 12, marginTop: 2 }}>Счёт виден, но не учитывается в лимитах</Text>
                                 </View>
                                 <Switch value={addExclude} onValueChange={setAddExclude} trackColor={{ false: '#374151', true: '#2563eb' }} thumbColor="#fff" />
                             </View>
+
+                            <Label>Лимит расходов ({addCurrency})</Label>
+                            <TextInput
+                                style={inputStyle}
+                                placeholder="0 — без лимита"
+                                placeholderTextColor="#4b5563"
+                                value={addLimit}
+                                onChangeText={t => setAddLimit(t.replace(/[^0-9.]/g, ''))}
+                                keyboardType="decimal-pad"
+                            />
+                            {!!addLimit && parseFloat(addLimit) > 0 && (
+                                <>
+                                    <Label>Период лимита</Label>
+                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+                                        {(['daily', 'weekly', 'monthly', 'yearly'] as Frequency[]).map(f => (
+                                            <TouchableOpacity
+                                                key={f}
+                                                onPress={() => setAddLimitPeriod(f)}
+                                                style={{
+                                                    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10,
+                                                    backgroundColor: addLimitPeriod === f ? '#2563eb' : '#1f2937',
+                                                    borderWidth: 1, borderColor: addLimitPeriod === f ? '#3b82f6' : '#374151',
+                                                }}
+                                            >
+                                                <Text style={{ color: addLimitPeriod === f ? '#fff' : '#9ca3af', fontSize: 13 }}>
+                                                    {PERIOD_PICKER_LABELS[f]}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </>
+                            )}
+                            <Text style={{ color: '#4b5563', fontSize: 12, marginTop: -12, marginBottom: 20, marginLeft: 4 }}>
+                                Прогресс-бар появится на карточке счёта
+                            </Text>
 
                             <PrimaryButton label={addSaving ? 'Сохранение…' : 'Создать счёт'} onPress={saveAdd} disabled={addSaving || !addName.trim()} />
                         </ScrollView>

@@ -29,7 +29,7 @@ export const IconArray: React.FC<IconArrayProps> = ({
 
     return (
         <View style={{ width, height }}>
-            <Svg width={width} height={height}>
+            <Svg width={width} height={height} pointerEvents={onDotPress ? 'auto' : 'none'}>
                 {dots.map((dot, index) => {
                     const row = Math.floor(index / columns);
                     const col = index % columns;
