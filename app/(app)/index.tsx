@@ -8,9 +8,10 @@ import {
 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    ActivityIndicator, Alert, Modal, ScrollView, Switch,
+    ActivityIndicator, Alert, ScrollView, Switch,
     Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
+import { BaseBottomSheet } from '@/components/ui/BaseBottomSheet';
 import { router, useFocusEffect } from 'expo-router';
 import {
     addDays, addWeeks, differenceInMonths, format, getDaysInMonth,
@@ -155,6 +156,7 @@ export default function Dashboard() {
     const [goalDate,        setGoalDate]        = useState('');
     const [goalColor,       setGoalColor]       = useState('#22c55e');
     const [goalAccId,       setGoalAccId]       = useState('');
+    const [goalInitialDeposit, setGoalInitialDeposit] = useState('');
     const [savingGoal,      setSavingGoal]      = useState(false);
     // Goal action sheet
     const [goalSheet,       setGoalSheet]       = useState<GoalItem | null>(null);
@@ -162,10 +164,12 @@ export default function Dashboard() {
     const [depositGoal,     setDepositGoal]     = useState<GoalItem | null>(null);
     const [depositAmount,   setDepositAmount]   = useState('');
     const [depositNote,     setDepositNote]     = useState('');
+    const [depositAccId,    setDepositAccId]    = useState('');
     const [depositing,      setDepositing]      = useState(false);
     const [withdrawGoal,    setWithdrawGoal]    = useState<GoalItem | null>(null);
     const [withdrawAmount,  setWithdrawAmount]  = useState('');
     const [withdrawNote,    setWithdrawNote]    = useState('');
+    const [withdrawAccId,   setWithdrawAccId]   = useState('');
     const [withdrawing,     setWithdrawing]     = useState(false);
 
     // ── Analytics period ────────────────────────────────────────────────────
@@ -214,7 +218,7 @@ export default function Dashboard() {
                 .or(`household_id.eq.${member.household_id},is_system.eq.true`)
                 .eq('is_hidden', false).order('name'),
             supabase.from('savings_goals')
-                .select('id, name, icon, color, target_amount, currency, target_date, account_id, accounts(balance)')
+                .select('id, name, icon, color, target_amount, current_amount, currency, target_date, account_id')
                 .eq('household_id', member.household_id).eq('is_active', true).eq('is_archived', false),
         ]);
         setAccounts(accData ?? []);
@@ -225,7 +229,7 @@ export default function Dashboard() {
             icon:       g.icon ?? '🎯',
             color:      g.color ?? '#22c55e',
             target:     g.target_amount,
-            saved:      (g.accounts as any)?.balance ?? 0,
+            saved:      g.current_amount ?? 0,
             currency:   g.currency,
             targetDate: g.target_date ?? null,
             accountId:  g.account_id,
@@ -369,10 +373,11 @@ export default function Dashboard() {
             setGoalDate(goal.targetDate ?? '');
             setGoalColor(goal.color);
             setGoalAccId(goal.accountId);
+            setGoalInitialDeposit('');
         } else {
             setEditingGoal(null);
             setGoalName(''); setGoalIcon('🎯'); setGoalTarget(''); setGoalDate('');
-            setGoalColor('#22c55e'); setGoalAccId('');
+            setGoalColor('#22c55e'); setGoalAccId(''); setGoalInitialDeposit('');
         }
         setGoalFormVisible(true);
     }
@@ -400,7 +405,11 @@ export default function Dashboard() {
         const acc = accounts.find(a => a.id === goalAccId);
         let error: any;
         if (editingGoal) {
-            ({ error } = await supabase.from('savings_goals').update({
+            const topUpAmt = goalInitialDeposit.trim()
+                ? parseFloat(goalInitialDeposit.replace(',', '.'))
+                : 0;
+
+            const updatePayload: any = {
                 account_id:    goalAccId,
                 name:          goalName.trim(),
                 icon:          goalIcon,
@@ -408,26 +417,76 @@ export default function Dashboard() {
                 target_amount: target,
                 currency:      acc?.currency ?? currency,
                 target_date:   targetDate,
-            }).eq('id', editingGoal.id));
+            };
+
+            // If top-up amount provided, add to current_amount
+            if (topUpAmt > 0) {
+                updatePayload.current_amount = (editingGoal.saved ?? 0) + topUpAmt;
+            }
+
+            ({ error } = await supabase.from('savings_goals').update(updatePayload).eq('id', editingGoal.id));
+
+            // Deduct from account and create transaction
+            if (!error && topUpAmt > 0 && acc) {
+                await supabase.from('accounts').update({ balance: acc.balance - topUpAmt }).eq('id', goalAccId);
+                const uid = (await supabase.auth.getUser()).data.user?.id;
+                if (uid) {
+                    await supabase.from('transactions').insert({
+                        household_id: householdId,
+                        account_id: goalAccId,
+                        type: 'transfer',
+                        amount: topUpAmt,
+                        currency: acc.currency ?? currency,
+                        date: new Date().toISOString().slice(0, 10),
+                        description: `Пополнение → ${goalName.trim()}`,
+                        created_by: uid,
+                    });
+                }
+            }
         } else {
-            ({ error } = await supabase.from('savings_goals').insert({
+            const initialAmt = goalInitialDeposit.trim()
+                ? parseFloat(goalInitialDeposit.replace(',', '.'))
+                : 0;
+
+            const { data: goalData, error: insertErr } = await supabase.from('savings_goals').insert({
                 household_id:  householdId,
                 account_id:    goalAccId,
                 name:          goalName.trim(),
                 icon:          goalIcon,
                 color:         goalColor,
                 target_amount: target,
+                current_amount: initialAmt > 0 ? initialAmt : 0,
                 currency:      acc?.currency ?? currency,
                 target_date:   targetDate,
                 is_active:     true,
                 is_archived:   false,
                 compounding:   'monthly',
-            }));
+            }).select().single();
+            error = insertErr;
+
+            // Handle initial deposit transfer
+            if (!error && initialAmt > 0 && goalData && acc) {
+                await supabase.from('accounts').update({ balance: acc.balance - initialAmt }).eq('id', goalAccId);
+                const uid = (await supabase.auth.getUser()).data.user?.id;
+                if (uid) {
+                    await supabase.from('transactions').insert({
+                        household_id: householdId,
+                        account_id: goalAccId,
+                        type: 'transfer',
+                        amount: initialAmt,
+                        currency: acc.currency ?? currency,
+                        date: new Date().toISOString().slice(0, 10),
+                        description: `Начальный взнос → ${goalName.trim()}`,
+                        created_by: uid,
+                    });
+                }
+            }
         }
         setSavingGoal(false);
         if (error) { Alert.alert('Ошибка', error.message); return; }
         setGoalFormVisible(false);
         setEditingGoal(null);
+        setGoalInitialDeposit('');
         loadData();
     }
 
@@ -443,28 +502,35 @@ export default function Dashboard() {
     }
 
     async function handleDeposit() {
-        if (!depositGoal || !depositAmount) return;
+        if (!depositGoal || !depositAmount || !depositAccId) return;
         const amount = parseFloat(depositAmount);
         if (isNaN(amount) || amount <= 0) return;
+        const srcAcc = accounts.find(a => a.id === depositAccId);
+        if (!srcAcc) return;
+        if (srcAcc.balance < amount) { Alert.alert('Ошибка', 'Недостаточно средств на счёте'); return; }
         setDepositing(true);
         const { data: { user } } = await supabase.auth.getUser();
-        const acc = accounts.find(a => a.id === depositGoal.accountId);
         const { error } = await supabase.from('transactions').insert({
             household_id: householdId,
-            account_id:   depositGoal.accountId,
+            account_id:   depositAccId,
             user_id:      user?.id,
-            type:         'income',
+            type:         'transfer',
             amount,
             currency:     depositGoal.currency,
             amount_base:  amount,
-            note:         depositNote.trim() || `Взнос: ${depositGoal.name}`,
+            note:         depositNote.trim() || `Взнос в цель «${depositGoal.name}»`,
             date:         new Date().toISOString().split('T')[0],
         });
         if (error) { Alert.alert('Ошибка', error.message); setDepositing(false); return; }
+        // Update goal's current_amount
+        await supabase.from('savings_goals').update({
+            current_amount: (depositGoal.saved ?? 0) + amount,
+        }).eq('id', depositGoal.id);
+        // Debit source account
         await supabase.from('accounts').update({
-            balance:    (acc?.balance ?? 0) + amount,
+            balance:    srcAcc.balance - amount,
             updated_at: new Date().toISOString(),
-        }).eq('id', depositGoal.accountId);
+        }).eq('id', depositAccId);
         setDepositing(false);
         setDepositGoal(null);
         setDepositAmount('');
@@ -473,33 +539,43 @@ export default function Dashboard() {
     }
 
     async function handleWithdraw() {
-        if (!withdrawGoal || !withdrawAmount) return;
+        if (!withdrawGoal || !withdrawAmount || !withdrawAccId) return;
         const amount = parseFloat(withdrawAmount);
         if (isNaN(amount) || amount <= 0) return;
         if (amount > withdrawGoal.saved) { Alert.alert('Ошибка', 'Сумма превышает накопленное'); return; }
         setWithdrawing(true);
         const { data: { user } } = await supabase.auth.getUser();
-        const acc = accounts.find(a => a.id === withdrawGoal.accountId);
-        const { error } = await supabase.from('transactions').insert({
+        const targetAcc = accounts.find(a => a.id === withdrawAccId);
+
+        // Decrease goal's current_amount
+        const newSaved = withdrawGoal.saved - amount;
+        await supabase.from('savings_goals').update({ current_amount: newSaved }).eq('id', withdrawGoal.id);
+
+        // Increase target account balance
+        if (targetAcc) {
+            await supabase.from('accounts').update({
+                balance: targetAcc.balance + amount,
+                updated_at: new Date().toISOString(),
+            }).eq('id', withdrawAccId);
+        }
+
+        // Create transfer transaction
+        await supabase.from('transactions').insert({
             household_id: householdId,
-            account_id:   withdrawGoal.accountId,
-            user_id:      user?.id,
-            type:         'expense',
+            account_id:   withdrawAccId,
+            created_by:   user?.id,
+            type:         'transfer',
             amount,
             currency:     withdrawGoal.currency,
-            amount_base:  amount,
-            note:         withdrawNote.trim() || `Вывод: ${withdrawGoal.name}`,
+            description:  withdrawNote.trim() || `Перевод с цели «${withdrawGoal.name}»`,
             date:         new Date().toISOString().split('T')[0],
         });
-        if (error) { Alert.alert('Ошибка', error.message); setWithdrawing(false); return; }
-        await supabase.from('accounts').update({
-            balance:    (acc?.balance ?? 0) - amount,
-            updated_at: new Date().toISOString(),
-        }).eq('id', withdrawGoal.accountId);
+
         setWithdrawing(false);
         setWithdrawGoal(null);
         setWithdrawAmount('');
         setWithdrawNote('');
+        setWithdrawAccId('');
         loadData();
     }
 
@@ -834,34 +910,30 @@ export default function Dashboard() {
             {/* ════════════════════════════════════════════════════════════════
                 MODAL 1 — Account action sheet (tap on card)
             ════════════════════════════════════════════════════════════════ */}
-            <Modal visible={!!actionAccount && !txFormVisible} transparent animationType="slide" onRequestClose={() => setActionAccount(null)}>
-                <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }} activeOpacity={1} onPress={() => setActionAccount(null)}>
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 }}>
-                        {/* Header */}
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 24 }}>
-                            {(() => { const IC = ICON_MAP[actionAccount?.icon ?? 'CreditCard'] ?? CreditCard; return <IC color={actionAccount?.color ?? '#3b82f6'} size={22} />; })()}
-                            <Text style={{ color: '#fff', fontSize: 17, fontWeight: 'bold', marginLeft: 10, flex: 1 }} numberOfLines={1}>{actionAccount?.name}</Text>
-                            <Text style={{ color: '#9ca3af', fontSize: 14 }}>{hidden ? '••••' : formatAmount(actionAccount?.balance ?? 0, actionAccount?.currency ?? currency)}</Text>
-                        </View>
+            <BaseBottomSheet visible={!!actionAccount && !txFormVisible} onClose={() => setActionAccount(null)} scrollable={false}>
+                {/* Header */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 24 }}>
+                    {(() => { const IC = ICON_MAP[actionAccount?.icon ?? 'CreditCard'] ?? CreditCard; return <IC color={actionAccount?.color ?? '#3b82f6'} size={22} />; })()}
+                    <Text style={{ color: '#fff', fontSize: 17, fontWeight: 'bold', marginLeft: 10, flex: 1 }} numberOfLines={1}>{actionAccount?.name}</Text>
+                    <Text style={{ color: '#9ca3af', fontSize: 14 }}>{hidden ? '••••' : formatAmount(actionAccount?.balance ?? 0, actionAccount?.currency ?? currency)}</Text>
+                </View>
 
-                        {/* 4 action buttons */}
-                        <View style={{ flexDirection: 'row', gap: 12 }}>
-                            {[
-                                { label: 'Доход',   icon: <TrendingUp color="#fff" size={22} />,    bg: '#16a34a', action: () => openTxForm('income') },
-                                { label: 'Расход',  icon: <TrendingDown color="#fff" size={22} />,  bg: '#dc2626', action: () => openTxForm('expense') },
-                                { label: 'Перевод', icon: <ArrowRightLeft color="#fff" size={22} />, bg: '#2563eb', action: () => openTxForm('transfer') },
-                                { label: 'История', icon: <Clock color="#fff" size={22} />,          bg: '#374151', action: () => openHistory(actionAccount!) },
-                            ].map(btn => (
-                                <TouchableOpacity key={btn.label} onPress={btn.action} activeOpacity={0.8}
-                                    style={{ flex: 1, backgroundColor: btn.bg, borderRadius: 14, paddingVertical: 14, alignItems: 'center', gap: 6 }}>
-                                    {btn.icon}
-                                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>{btn.label}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </View>
-                </TouchableOpacity>
-            </Modal>
+                {/* 4 action buttons */}
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                    {[
+                        { label: 'Доход',   icon: <TrendingUp color="#fff" size={22} />,    bg: '#16a34a', action: () => openTxForm('income') },
+                        { label: 'Расход',  icon: <TrendingDown color="#fff" size={22} />,  bg: '#dc2626', action: () => openTxForm('expense') },
+                        { label: 'Перевод', icon: <ArrowRightLeft color="#fff" size={22} />, bg: '#2563eb', action: () => openTxForm('transfer') },
+                        { label: 'История', icon: <Clock color="#fff" size={22} />,          bg: '#374151', action: () => openHistory(actionAccount!) },
+                    ].map(btn => (
+                        <TouchableOpacity key={btn.label} onPress={btn.action} activeOpacity={0.8}
+                            style={{ flex: 1, backgroundColor: btn.bg, borderRadius: 14, paddingVertical: 14, alignItems: 'center', gap: 6 }}>
+                            {btn.icon}
+                            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>{btn.label}</Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            </BaseBottomSheet>
 
             {/* ════════════════════════════════════════════════════════════════
                 Unified Transaction Form (income / expense / transfer)
@@ -888,70 +960,61 @@ export default function Dashboard() {
             {/* ════════════════════════════════════════════════════════════════
                 MODAL 4 — Transaction history
             ════════════════════════════════════════════════════════════════ */}
-            <Modal visible={!!historyAccount} transparent animationType="slide" onRequestClose={() => setHistoryAccount(null)}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 40, maxHeight: '88%' }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                            <View>
-                                <Text style={{ color: '#9ca3af', fontSize: 12 }}>История</Text>
-                                <Text style={{ color: '#fff', fontSize: 17, fontWeight: 'bold' }}>{historyAccount?.name}</Text>
-                            </View>
-                            <TouchableOpacity onPress={() => setHistoryAccount(null)} hitSlop={8}><X color="#6b7280" size={22} /></TouchableOpacity>
-                        </View>
-
-                        {loadingHistory ? (
-                            <ActivityIndicator color="#fff" style={{ marginVertical: 40 }} />
-                        ) : historyTx.length === 0 ? (
-                            <Text style={{ color: '#4b5563', textAlign: 'center', marginVertical: 40, fontSize: 15 }}>Транзакций нет</Text>
-                        ) : (
-                            <ScrollView showsVerticalScrollIndicator={false}>
-                                {historyTx.map((tx, idx) => {
-                                    const isIncome   = tx.type === 'income';
-                                    const isTransfer = tx.type === 'transfer';
-                                    const amtColor   = isIncome ? '#22c55e' : isTransfer ? '#60a5fa' : '#f87171';
-                                    const amtPrefix  = isIncome ? '+' : isTransfer ? '↔' : '−';
-                                    const catName    = tx.categories?.name ?? (isIncome ? 'Доход' : isTransfer ? 'Перевод' : 'Расход');
-
-                                    return (
-                                        <View key={tx.id}
-                                            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: idx < historyTx.length - 1 ? 1 : 0, borderBottomColor: '#1f2937' }}>
-                                            {/* Category dot */}
-                                            <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: '#1f2937', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                                                {isIncome
-                                                    ? <TrendingUp color="#22c55e" size={18} />
-                                                    : isTransfer
-                                                        ? <ArrowRightLeft color="#60a5fa" size={18} />
-                                                        : <Minus color="#f87171" size={18} />}
-                                            </View>
-                                            {/* Info */}
-                                            <View style={{ flex: 1 }}>
-                                                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '500' }} numberOfLines={1}>{catName}</Text>
-                                                {tx.note ? <Text style={{ color: '#6b7280', fontSize: 12, marginTop: 1 }} numberOfLines={1}>{tx.note}</Text> : null}
-                                            </View>
-                                            {/* Amount + date */}
-                                            <View style={{ alignItems: 'flex-end' }}>
-                                                <Text style={{ color: amtColor, fontSize: 14, fontWeight: '600' }}>
-                                                    {amtPrefix}{formatAmount(tx.amount, tx.currency)}
-                                                </Text>
-                                                <Text style={{ color: '#4b5563', fontSize: 11, marginTop: 2 }}>
-                                                    {format(new Date(tx.date), 'd MMM')}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                    );
-                                })}
-                            </ScrollView>
-                        )}
+            <BaseBottomSheet visible={!!historyAccount} onClose={() => setHistoryAccount(null)} maxHeight="88%">
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                    <View>
+                        <Text style={{ color: '#9ca3af', fontSize: 12 }}>История</Text>
+                        <Text style={{ color: '#fff', fontSize: 17, fontWeight: 'bold' }}>{historyAccount?.name}</Text>
                     </View>
+                    <TouchableOpacity onPress={() => setHistoryAccount(null)} hitSlop={8}><X color="#6b7280" size={22} /></TouchableOpacity>
                 </View>
-            </Modal>
+
+                {loadingHistory ? (
+                    <ActivityIndicator color="#fff" style={{ marginVertical: 40 }} />
+                ) : historyTx.length === 0 ? (
+                    <Text style={{ color: '#4b5563', textAlign: 'center', marginVertical: 40, fontSize: 15 }}>Транзакций нет</Text>
+                ) : (
+                    <>
+                        {historyTx.map((tx, idx) => {
+                            const isIncome   = tx.type === 'income';
+                            const isTransfer = tx.type === 'transfer';
+                            const amtColor   = isIncome ? '#22c55e' : isTransfer ? '#60a5fa' : '#f87171';
+                            const amtPrefix  = isIncome ? '+' : isTransfer ? '↔' : '−';
+                            const catName    = tx.categories?.name ?? (isIncome ? 'Доход' : isTransfer ? 'Перевод' : 'Расход');
+
+                            return (
+                                <View key={tx.id}
+                                    style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: idx < historyTx.length - 1 ? 1 : 0, borderBottomColor: '#1f2937' }}>
+                                    <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: '#1f2937', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                        {isIncome
+                                            ? <TrendingUp color="#22c55e" size={18} />
+                                            : isTransfer
+                                                ? <ArrowRightLeft color="#60a5fa" size={18} />
+                                                : <Minus color="#f87171" size={18} />}
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={{ color: '#fff', fontSize: 14, fontWeight: '500' }} numberOfLines={1}>{catName}</Text>
+                                        {tx.note ? <Text style={{ color: '#6b7280', fontSize: 12, marginTop: 1 }} numberOfLines={1}>{tx.note}</Text> : null}
+                                    </View>
+                                    <View style={{ alignItems: 'flex-end' }}>
+                                        <Text style={{ color: amtColor, fontSize: 14, fontWeight: '600' }}>
+                                            {amtPrefix}{formatAmount(tx.amount, tx.currency)}
+                                        </Text>
+                                        <Text style={{ color: '#4b5563', fontSize: 11, marginTop: 2 }}>
+                                            {format(new Date(tx.date), 'd MMM')}
+                                        </Text>
+                                    </View>
+                                </View>
+                            );
+                        })}
+                    </>
+                )}
+            </BaseBottomSheet>
 
             {/* ════════════════════════════════════════════════════════════════
                 MODAL 5 — Edit / Delete (long press)
             ════════════════════════════════════════════════════════════════ */}
-            <Modal visible={!!menuAccount} transparent animationType="fade" onRequestClose={() => setMenuAccount(null)}>
-                <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }} activeOpacity={1} onPress={() => setMenuAccount(null)}>
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 }}>
+            <BaseBottomSheet visible={!!menuAccount} onClose={() => setMenuAccount(null)} animationType="fade" scrollable={false}>
                         <Text style={{ color: '#fff', fontSize: 17, fontWeight: 'bold', marginBottom: 20 }} numberOfLines={1}>{menuAccount?.name}</Text>
                         <TouchableOpacity onPress={() => menuAccount && openEdit(menuAccount)}
                             style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
@@ -963,21 +1026,16 @@ export default function Dashboard() {
                             <Trash2 color="#ef4444" size={20} />
                             <Text style={{ color: '#f87171', fontSize: 16, marginLeft: 16 }}>Удалить счёт</Text>
                         </TouchableOpacity>
-                    </View>
-                </TouchableOpacity>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ════════════════════════════════════════════════════════════════
                 MODAL 6 — Add / Edit account form
             ════════════════════════════════════════════════════════════════ */}
-            <Modal visible={formVisible} transparent animationType="slide" onRequestClose={() => setFormVisible(false)}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 40, maxHeight: '90%' }}>
+            <BaseBottomSheet visible={formVisible} onClose={() => setFormVisible(false)} maxHeight="90%">
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
                             <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>{editingId ? 'Редактировать счёт' : 'Новый счёт'}</Text>
                             <TouchableOpacity onPress={() => setFormVisible(false)} hitSlop={8}><X color="#6b7280" size={22} /></TouchableOpacity>
                         </View>
-                        <ScrollView showsVerticalScrollIndicator={false}>
                             <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 6 }}>Название</Text>
                             <TextInput value={formName} onChangeText={setFormName} placeholder="Например, Основной" placeholderTextColor="#4b5563"
                                 style={{ backgroundColor: '#1f2937', color: '#fff', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 16, fontSize: 15 }} />
@@ -1025,17 +1083,12 @@ export default function Dashboard() {
                                 style={{ paddingVertical: 16, borderRadius: 20, backgroundColor: saving || !formName.trim() ? '#374151' : '#2563eb', alignItems: 'center' }}>
                                 {saving ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>{editingId ? 'Сохранить' : 'Создать счёт'}</Text>}
                             </TouchableOpacity>
-                        </ScrollView>
-                    </View>
-                </View>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ════════════════════════════════════════════════════════════════
                 MODAL 7 — Goal action sheet (tap on card)
             ════════════════════════════════════════════════════════════════ */}
-            <Modal visible={!!goalSheet && !goalFormVisible && !depositGoal && !withdrawGoal} transparent animationType="slide" onRequestClose={() => setGoalSheet(null)}>
-                <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }} activeOpacity={1} onPress={() => setGoalSheet(null)}>
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 }}>
+            <BaseBottomSheet visible={!!goalSheet && !goalFormVisible && !depositGoal && !withdrawGoal} onClose={() => setGoalSheet(null)} scrollable={false}>
                         {/* Header */}
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
                             <Text style={{ fontSize: 28, marginRight: 12 }}>{goalSheet?.icon}</Text>
@@ -1058,8 +1111,8 @@ export default function Dashboard() {
                         {/* Actions */}
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
                             {[
-                                { label: 'Пополнить', emoji: '💰', color: '#22c55e', bg: '#14532d', action: () => { const g = goalSheet!; setGoalSheet(null); setDepositGoal(g); setDepositAmount(''); setDepositNote(''); } },
-                                { label: 'Вывести',   emoji: '💸', color: '#f59e0b', bg: '#1f2937', action: () => { const g = goalSheet!; setGoalSheet(null); setWithdrawGoal(g); setWithdrawAmount(''); setWithdrawNote(''); } },
+                                { label: 'Пополнить', emoji: '💰', color: '#22c55e', bg: '#14532d', action: () => { const g = goalSheet!; setGoalSheet(null); setDepositGoal(g); setDepositAmount(''); setDepositNote(''); setDepositAccId(accounts.length > 0 ? accounts[0].id : ''); } },
+                                { label: 'Перевести', emoji: '💸', color: '#f59e0b', bg: '#1f2937', action: () => { const g = goalSheet!; setGoalSheet(null); setWithdrawGoal(g); setWithdrawAmount(''); setWithdrawNote(''); setWithdrawAccId(g.accountId || accounts[0]?.id || ''); } },
                                 { label: 'Изменить',  emoji: '✏️',  color: '#9ca3af', bg: '#1f2937', action: () => { const g = goalSheet!; setGoalSheet(null); openGoalForm(g); } },
                                 { label: 'Удалить',   emoji: '🗑️',  color: '#ef4444', bg: '#1f2937', action: () => goalSheet && confirmDeleteGoal(goalSheet) },
                             ].map(btn => (
@@ -1070,59 +1123,57 @@ export default function Dashboard() {
                                 </TouchableOpacity>
                             ))}
                         </View>
-                    </View>
-                </TouchableOpacity>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ════════════════════════════════════════════════════════════════
                 MODAL 8 — New / Edit savings goal
             ════════════════════════════════════════════════════════════════ */}
-            <Modal visible={goalFormVisible} transparent animationType="slide" onRequestClose={() => setGoalFormVisible(false)}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 40, maxHeight: '90%' }}>
+            <BaseBottomSheet visible={goalFormVisible} onClose={() => setGoalFormVisible(false)} maxHeight="90%">
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
                             <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>{editingGoal ? 'Редактировать цель' : 'Новая цель'}</Text>
                             <TouchableOpacity onPress={() => setGoalFormVisible(false)} hitSlop={8}><X color="#6b7280" size={22} /></TouchableOpacity>
                         </View>
-                        <ScrollView showsVerticalScrollIndicator={false}>
+                            {/* 1. Название */}
                             <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 6 }}>Название цели</Text>
                             <TextInput value={goalName} onChangeText={setGoalName}
                                 placeholder="Например, Отпуск на море" placeholderTextColor="#4b5563"
                                 style={{ backgroundColor: '#1f2937', color: '#fff', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 16, fontSize: 15 }} />
 
-                            <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8 }}>Эмодзи</Text>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-                                {['🎯','✈️','🏠','🚗','💻','📱','🎓','💍','🏝️','🛍️','🎮','🏋️','🌍','🐶','💰'].map(e => (
-                                    <TouchableOpacity key={e} onPress={() => setGoalIcon(e)}
-                                        style={{ width: 44, height: 44, borderRadius: 12, marginRight: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: goalIcon === e ? '#2563eb' : '#1f2937', borderWidth: goalIcon === e ? 0 : 1, borderColor: '#374151' }}>
-                                        <Text style={{ fontSize: 22 }}>{e}</Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </ScrollView>
+                            {/* 2. Эмодзи + Цвет в одну строку */}
+                            <View style={{ flexDirection: 'row', gap: 16, marginBottom: 16 }}>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8 }}>Эмодзи</Text>
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                        {['🎯','✈️','🏠','🚗','💻','📱','🎓','💍','🏝️','🛍️','🎮','🏋️','🌍','🐶','💰'].map(e => (
+                                            <TouchableOpacity key={e} onPress={() => setGoalIcon(e)}
+                                                style={{ width: 40, height: 40, borderRadius: 12, marginRight: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: goalIcon === e ? '#2563eb' : '#1f2937', borderWidth: goalIcon === e ? 0 : 1, borderColor: '#374151' }}>
+                                                <Text style={{ fontSize: 20 }}>{e}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                </View>
+                                <View>
+                                    <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8 }}>Цвет</Text>
+                                    <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', maxWidth: 120 }}>
+                                        {COLORS.map(c => (
+                                            <TouchableOpacity key={c} onPress={() => setGoalColor(c)}
+                                                style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: c, alignItems: 'center', justifyContent: 'center', borderWidth: goalColor === c ? 3 : 0, borderColor: '#fff' }}>
+                                                {goalColor === c && <Check color="#fff" size={12} />}
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+                            </View>
 
+                            {/* 3. Целевая сумма */}
                             <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 6 }}>Целевая сумма</Text>
                             <TextInput value={goalTarget} onChangeText={setGoalTarget}
                                 keyboardType="numeric" placeholder="0.00" placeholderTextColor="#4b5563"
                                 style={{ backgroundColor: '#1f2937', color: '#fff', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, marginBottom: 16, fontSize: 22, fontWeight: 'bold' }} />
 
-                            <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 6 }}>Дата достижения (необязательно)</Text>
-                            <TextInput value={goalDate} onChangeText={v => setGoalDate(formatDateInput(v))}
-                                keyboardType="numeric" placeholder="ГГГГ-ММ-ДД" placeholderTextColor="#4b5563"
-                                maxLength={10}
-                                style={{ backgroundColor: '#1f2937', color: '#fff', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 16, fontSize: 15, letterSpacing: 1 }} />
-
-                            <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 10 }}>Цвет</Text>
-                            <View style={{ flexDirection: 'row', marginBottom: 16 }}>
-                                {COLORS.map(c => (
-                                    <TouchableOpacity key={c} onPress={() => setGoalColor(c)}
-                                        style={{ width: 32, height: 32, borderRadius: 16, marginRight: 10, backgroundColor: c, alignItems: 'center', justifyContent: 'center' }}>
-                                        {goalColor === c && <Check color="#fff" size={16} />}
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-
-                            <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 10 }}>Счёт накопления</Text>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 24 }}>
+                            {/* 4. Списывать со счёта */}
+                            <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 10 }}>Списывать со счёта</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
                                 {accounts.map(acc => (
                                     <TouchableOpacity key={acc.id} onPress={() => setGoalAccId(acc.id)}
                                         style={{ paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, marginRight: 8, borderWidth: 1.5, borderColor: goalAccId === acc.id ? '#2563eb' : '#374151', backgroundColor: goalAccId === acc.id ? '#172554' : '#1f2937' }}>
@@ -1132,21 +1183,40 @@ export default function Dashboard() {
                                 ))}
                             </ScrollView>
 
+                            {/* 5. Начальный взнос (создание) / Внести сумму (редактирование) */}
+                            {!editingGoal ? (
+                                <>
+                                    <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 6 }}>Начальный взнос <Text style={{ color: '#4b5563' }}>(необязательно)</Text></Text>
+                                    <TextInput value={goalInitialDeposit} onChangeText={v => setGoalInitialDeposit(v.replace(/[^0-9.,]/g, ''))}
+                                        keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#4b5563"
+                                        style={{ backgroundColor: '#1f2937', color: '#fff', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 16, fontSize: 15 }} />
+                                </>
+                            ) : (
+                                <>
+                                    <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 6 }}>Внести сумму <Text style={{ color: '#4b5563' }}>(необязательно)</Text></Text>
+                                    <TextInput value={goalInitialDeposit} onChangeText={v => setGoalInitialDeposit(v.replace(/[^0-9.,]/g, ''))}
+                                        keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#4b5563"
+                                        style={{ backgroundColor: '#1f2937', color: '#fff', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 16, fontSize: 15 }} />
+                                </>
+                            )}
+
+                            {/* 6. Дата достижения */}
+                            <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 6 }}>Дата достижения <Text style={{ color: '#4b5563' }}>(необязательно)</Text></Text>
+                            <TextInput value={goalDate} onChangeText={v => setGoalDate(formatDateInput(v))}
+                                keyboardType="numeric" placeholder="ГГГГ-ММ-ДД" placeholderTextColor="#4b5563"
+                                maxLength={10}
+                                style={{ backgroundColor: '#1f2937', color: '#fff', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 24, fontSize: 15, letterSpacing: 1 }} />
+
                             <TouchableOpacity onPress={saveGoal} disabled={savingGoal || !goalName.trim() || !goalTarget || !goalAccId}
                                 style={{ paddingVertical: 16, borderRadius: 20, alignItems: 'center', backgroundColor: savingGoal || !goalName.trim() || !goalTarget || !goalAccId ? '#374151' : '#22c55e' }}>
                                 {savingGoal ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>{editingGoal ? 'Сохранить' : 'Создать цель'}</Text>}
                             </TouchableOpacity>
-                        </ScrollView>
-                    </View>
-                </View>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ════════════════════════════════════════════════════════════════
                 MODAL 8 — Deposit to savings goal
             ════════════════════════════════════════════════════════════════ */}
-            <Modal visible={!!depositGoal} transparent animationType="slide" onRequestClose={() => setDepositGoal(null)}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 40 }}>
+            <BaseBottomSheet visible={!!depositGoal} onClose={() => setDepositGoal(null)} scrollable={false}>
                         {/* Header */}
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -1171,15 +1241,33 @@ export default function Dashboard() {
                             </View>
                         )}
 
+                        {/* Source account */}
+                        <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8 }}>Списать со счёта</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                            {accounts.map(a => {
+                                const Ic = ICON_MAP[a.icon ?? ''] ?? Wallet;
+                                const sel = depositAccId === a.id;
+                                return (
+                                    <TouchableOpacity key={a.id} onPress={() => setDepositAccId(a.id)}
+                                        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, marginRight: 8, backgroundColor: sel ? 'rgba(124,111,255,0.15)' : '#1f2937', borderWidth: sel ? 1 : 0, borderColor: '#7C6FFF' }}>
+                                        <Ic color={a.color ?? '#888'} size={18} />
+                                        <View>
+                                            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>{a.name}</Text>
+                                            <Text style={{ color: '#9ca3af', fontSize: 11 }}>{formatAmount(a.balance, a.currency)}</Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </ScrollView>
+
                         {/* Amount */}
                         <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8 }}>Сумма ({depositGoal?.currency})</Text>
                         <TextInput
                             value={depositAmount}
-                            onChangeText={setDepositAmount}
+                            onChangeText={v => setDepositAmount(v.replace(/[^0-9.,]/g, ''))}
                             keyboardType="decimal-pad"
                             placeholder="0"
                             placeholderTextColor="#4b5563"
-                            autoFocus
                             style={{ backgroundColor: '#1f2937', color: '#fff', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 18, marginBottom: 16, fontSize: 28, fontWeight: '700', textAlign: 'center' }}
                         />
 
@@ -1196,8 +1284,8 @@ export default function Dashboard() {
                         {/* Save */}
                         <TouchableOpacity
                             onPress={handleDeposit}
-                            disabled={depositing || !depositAmount || parseFloat(depositAmount) <= 0}
-                            style={{ paddingVertical: 16, borderRadius: 16, alignItems: 'center', backgroundColor: depositing || !depositAmount || parseFloat(depositAmount) <= 0 ? '#374151' : '#16a34a' }}
+                            disabled={depositing || !depositAmount || parseFloat(depositAmount) <= 0 || !depositAccId}
+                            style={{ paddingVertical: 16, borderRadius: 16, alignItems: 'center', backgroundColor: depositing || !depositAmount || parseFloat(depositAmount) <= 0 || !depositAccId ? '#374151' : '#16a34a' }}
                         >
                             {depositing
                                 ? <ActivityIndicator color="#fff" />
@@ -1206,22 +1294,18 @@ export default function Dashboard() {
                                   </Text>
                             }
                         </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ════════════════════════════════════════════════════════════════
-                MODAL 9 — Withdraw from savings goal
+                MODAL 9 — Transfer from savings goal
             ════════════════════════════════════════════════════════════════ */}
-            <Modal visible={!!withdrawGoal} transparent animationType="slide" onRequestClose={() => setWithdrawGoal(null)}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 40 }}>
+            <BaseBottomSheet visible={!!withdrawGoal} onClose={() => setWithdrawGoal(null)} scrollable={false}>
                         {/* Header */}
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                                 <Text style={{ fontSize: 24 }}>{withdrawGoal?.icon}</Text>
                                 <View>
-                                    <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>Вывести деньги</Text>
+                                    <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>Перевести деньги</Text>
                                     <Text style={{ color: '#6b7280', fontSize: 13 }}>{withdrawGoal?.name}</Text>
                                 </View>
                             </View>
@@ -1244,13 +1328,25 @@ export default function Dashboard() {
                         <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8 }}>Сумма ({withdrawGoal?.currency})</Text>
                         <TextInput
                             value={withdrawAmount}
-                            onChangeText={setWithdrawAmount}
+                            onChangeText={v => setWithdrawAmount(v.replace(/[^0-9.,]/g, ''))}
                             keyboardType="decimal-pad"
                             placeholder="0"
                             placeholderTextColor="#4b5563"
                             autoFocus
                             style={{ backgroundColor: '#1f2937', color: '#fff', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 18, marginBottom: 16, fontSize: 28, fontWeight: '700', textAlign: 'center' }}
                         />
+
+                        {/* Target account */}
+                        <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 10 }}>На счёт</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                            {accounts.map(acc => (
+                                <TouchableOpacity key={acc.id} onPress={() => setWithdrawAccId(acc.id)}
+                                    style={{ paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, marginRight: 8, borderWidth: 1.5, borderColor: withdrawAccId === acc.id ? '#d97706' : '#374151', backgroundColor: withdrawAccId === acc.id ? '#422006' : '#1f2937' }}>
+                                    <Text style={{ color: withdrawAccId === acc.id ? '#fff' : '#9ca3af', fontSize: 13 }} numberOfLines={1}>{acc.name}</Text>
+                                    <Text style={{ color: '#6b7280', fontSize: 11, marginTop: 2 }}>{formatAmount(acc.balance, acc.currency)}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
 
                         {/* Note */}
                         <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8 }}>Заметка (необязательно)</Text>
@@ -1265,26 +1361,22 @@ export default function Dashboard() {
                         {/* Confirm */}
                         <TouchableOpacity
                             onPress={handleWithdraw}
-                            disabled={withdrawing || !withdrawAmount || parseFloat(withdrawAmount) <= 0}
-                            style={{ paddingVertical: 16, borderRadius: 16, alignItems: 'center', backgroundColor: withdrawing || !withdrawAmount || parseFloat(withdrawAmount) <= 0 ? '#374151' : '#d97706' }}
+                            disabled={withdrawing || !withdrawAmount || parseFloat(withdrawAmount) <= 0 || !withdrawAccId}
+                            style={{ paddingVertical: 16, borderRadius: 16, alignItems: 'center', backgroundColor: withdrawing || !withdrawAmount || parseFloat(withdrawAmount) <= 0 || !withdrawAccId ? '#374151' : '#d97706' }}
                         >
                             {withdrawing
                                 ? <ActivityIndicator color="#fff" />
                                 : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>
-                                    Вывести{withdrawAmount && parseFloat(withdrawAmount) > 0 ? ` ${formatAmount(parseFloat(withdrawAmount), withdrawGoal?.currency ?? 'EUR')}` : ''}
+                                    Перевести{withdrawAmount && parseFloat(withdrawAmount) > 0 ? ` ${formatAmount(parseFloat(withdrawAmount), withdrawGoal?.currency ?? 'EUR')}` : ''}
                                   </Text>
                             }
                         </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ════════════════════════════════════════════════════════════════
                 FAB MODAL — Новая операция
             ════════════════════════════════════════════════════════════════ */}
-            <Modal visible={fabOpen} transparent animationType="slide" onRequestClose={() => setFabOpen(false)}>
-                <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }} activeOpacity={1} onPress={() => setFabOpen(false)}>
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 44 }}>
+            <BaseBottomSheet visible={fabOpen} onClose={() => setFabOpen(false)} scrollable={false}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                             <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Новая операция</Text>
                             <TouchableOpacity onPress={() => setFabOpen(false)} hitSlop={12}><X color="#6b7280" size={22} /></TouchableOpacity>
@@ -1304,9 +1396,7 @@ export default function Dashboard() {
                                 </TouchableOpacity>
                             ))}
                         </View>
-                    </View>
-                </TouchableOpacity>
-            </Modal>
+            </BaseBottomSheet>
 
         </View>
     );

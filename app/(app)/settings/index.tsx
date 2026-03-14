@@ -10,9 +10,10 @@ import { exportTransactions, pickCSVFile, autoDetectMapping, validateRows, impor
 import { useCallback, useEffect, useState } from 'react';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {
-    ActivityIndicator, Alert, Modal, ScrollView, Switch,
+    ActivityIndicator, Alert, ScrollView, Switch,
     Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
+import { BaseBottomSheet } from '@/components/ui/BaseBottomSheet';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { CURRENCIES } from '@/constants/currencies';
@@ -833,10 +834,7 @@ export default function SettingsScreen() {
             </ScrollView>
 
             {/* ════ Modal: Edit Name ════ */}
-            <Modal visible={editNameVisible} transparent animationType="slide" onRequestClose={() => setEditNameVisible(false)}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                    <TouchableOpacity style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} activeOpacity={1} onPress={() => setEditNameVisible(false)} />
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 44 }}>
+            <BaseBottomSheet visible={editNameVisible} onClose={() => setEditNameVisible(false)} scrollable={false}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                             <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>Имя профиля</Text>
                             <TouchableOpacity onPress={() => setEditNameVisible(false)} hitSlop={8}><X color="#6b7280" size={20} /></TouchableOpacity>
@@ -850,15 +848,10 @@ export default function SettingsScreen() {
                             style={{ backgroundColor: '#2563eb', borderRadius: 16, paddingVertical: 14, alignItems: 'center' }}>
                             {savingName ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Сохранить</Text>}
                         </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ════ Modal: Change Password ════ */}
-            <Modal visible={pwVisible} transparent animationType="slide" onRequestClose={closePwModal}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                    <TouchableOpacity style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} activeOpacity={1} onPress={closePwModal} />
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 44 }}>
+            <BaseBottomSheet visible={pwVisible} onClose={closePwModal} scrollable={false}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                             <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>
                                 {pwStep === 1 ? 'Введите текущий пароль' : 'Новый пароль'}
@@ -923,20 +916,15 @@ export default function SettingsScreen() {
                                 </TouchableOpacity>
                             </>
                         )}
-                    </View>
-                </View>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ════ Modal: Base Currency ════ */}
-            <Modal visible={currencyVisible} transparent animationType="slide" onRequestClose={() => setCurrencyVisible(false)}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                    <TouchableOpacity style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} activeOpacity={1} onPress={() => setCurrencyVisible(false)} />
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 20, paddingBottom: 44, maxHeight: '80%' }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 12 }}>
+            <BaseBottomSheet visible={currencyVisible} onClose={() => setCurrencyVisible(false)} maxHeight="80%">
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                             <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>Базовая валюта</Text>
                             <TouchableOpacity onPress={() => setCurrencyVisible(false)} hitSlop={8}><X color="#6b7280" size={20} /></TouchableOpacity>
                         </View>
-                        <View style={{ backgroundColor: '#1f2937', borderRadius: 12, marginHorizontal: 24, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                        <View style={{ backgroundColor: '#1f2937', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                             <TextInput
                                 value={currencySearch} onChangeText={setCurrencySearch}
                                 placeholder="Поиск…" placeholderTextColor="#4b5563"
@@ -947,12 +935,11 @@ export default function SettingsScreen() {
                             )}
                         </View>
                         {savingCurrency && <ActivityIndicator color="#3b82f6" style={{ marginBottom: 12 }} />}
-                        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                             {filteredCurrencies.map(c => {
                                 const active = c.code === baseCurrency;
                                 return (
                                     <TouchableOpacity key={c.code} onPress={() => confirmCurrency(c.code)}
-                                        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
+                                        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                                             <Text style={{ fontSize: 22 }}>{c.flag}</Text>
                                             <View>
@@ -964,17 +951,11 @@ export default function SettingsScreen() {
                                     </TouchableOpacity>
                                 );
                             })}
-                        </ScrollView>
-                    </View>
-                </View>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ════ Modal: Categories ════ */}
-            <Modal visible={catsVisible} transparent animationType="slide" onRequestClose={() => setCatsVisible(false)}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                    <TouchableOpacity style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} activeOpacity={1} onPress={() => setCatsVisible(false)} />
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 20, paddingBottom: 44, maxHeight: '90%' }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 16 }}>
+            <BaseBottomSheet visible={catsVisible} onClose={() => setCatsVisible(false)} maxHeight="90%">
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                             <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>Категории</Text>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
                                 <TouchableOpacity onPress={openCreateCat} hitSlop={8}>
@@ -985,7 +966,7 @@ export default function SettingsScreen() {
                         </View>
 
                         {/* Tab */}
-                        <View style={{ flexDirection: 'row', marginHorizontal: 24, backgroundColor: '#1f2937', borderRadius: 12, padding: 3, marginBottom: 16 }}>
+                        <View style={{ flexDirection: 'row', backgroundColor: '#1f2937', borderRadius: 12, padding: 3, marginBottom: 16 }}>
                             {(['expense', 'income'] as const).map(tab => (
                                 <TouchableOpacity key={tab} onPress={() => setCatsTab(tab)}
                                     style={{ flex: 1, paddingVertical: 8, borderRadius: 10, alignItems: 'center', backgroundColor: catsTab === tab ? '#374151' : 'transparent' }}>
@@ -996,9 +977,8 @@ export default function SettingsScreen() {
                             ))}
                         </View>
 
-                        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                             {categories.filter(c => c.type === catsTab).map(cat => (
-                                <View key={cat.id} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
+                                <View key={cat.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
                                     <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: cat.color ?? '#6b7280', marginRight: 12 }} />
                                     <Text style={{ flex: 1, color: cat.is_hidden ? '#4b5563' : '#e5e7eb', fontSize: 15 }}>{cat.name}</Text>
                                     <TouchableOpacity onPress={() => openEditCat(cat)} hitSlop={8} style={{ marginRight: 12 }}>
@@ -1011,16 +991,10 @@ export default function SettingsScreen() {
                                     </TouchableOpacity>
                                 </View>
                             ))}
-                        </ScrollView>
-                    </View>
-                </View>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ════ Modal: Edit Category ════ */}
-            <Modal visible={editCat !== null} transparent animationType="slide" onRequestClose={() => { setEditCat(null); setCatsVisible(true); }}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                    <TouchableOpacity style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} activeOpacity={1} onPress={() => { setEditCat(null); setCatsVisible(true); }} />
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 44 }}>
+            <BaseBottomSheet visible={editCat !== null} onClose={() => { setEditCat(null); setCatsVisible(true); }} scrollable={false}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                             <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>Редактировать категорию</Text>
                             <TouchableOpacity onPress={() => { setEditCat(null); setCatsVisible(true); }} hitSlop={8}><X color="#6b7280" size={20} /></TouchableOpacity>
@@ -1067,15 +1041,10 @@ export default function SettingsScreen() {
                             <Trash2 color="#ef4444" size={16} />
                             <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '500' }}>Удалить категорию</Text>
                         </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ════ Modal: Create Category ════ */}
-            <Modal visible={creatingCat} transparent animationType="slide" onRequestClose={() => { setCreatingCat(false); setCatsVisible(true); }}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                    <TouchableOpacity style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} activeOpacity={1} onPress={() => { setCreatingCat(false); setCatsVisible(true); }} />
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 44 }}>
+            <BaseBottomSheet visible={creatingCat} onClose={() => { setCreatingCat(false); setCatsVisible(true); }} scrollable={false}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                             <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>Новая категория</Text>
                             <TouchableOpacity onPress={() => { setCreatingCat(false); setCatsVisible(true); }} hitSlop={8}><X color="#6b7280" size={20} /></TouchableOpacity>
@@ -1116,15 +1085,10 @@ export default function SettingsScreen() {
                             style={{ backgroundColor: editCatName.trim() ? '#2563eb' : '#1e3a5f', borderRadius: 16, paddingVertical: 14, alignItems: 'center' }}>
                             {savingCat ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Создать</Text>}
                         </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ════ Modal: Category Limits ════ */}
-            <Modal visible={budgetsVisible} transparent animationType="slide" onRequestClose={() => setBudgetsVisible(false)}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                    <TouchableOpacity style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} activeOpacity={1} onPress={() => setBudgetsVisible(false)} />
-                    <View style={{ flex: 1, backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 20, paddingBottom: 44, maxHeight: '90%' }}>
+            <BaseBottomSheet visible={budgetsVisible} onClose={() => setBudgetsVisible(false)} maxHeight="90%" scrollable={false} style={{ paddingHorizontal: 0 }}>
 
                         {/* Header */}
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 12 }}>
@@ -1437,21 +1401,15 @@ export default function SettingsScreen() {
                                     : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Сохранить</Text>}
                             </TouchableOpacity>
                         </View>
-                    </View>
-                </View>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ════ Modal: Hidden Accounts ════ */}
-            <Modal visible={hiddenVisible} transparent animationType="slide" onRequestClose={() => setHiddenVisible(false)}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                    <TouchableOpacity style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} activeOpacity={1} onPress={() => setHiddenVisible(false)} />
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 20, paddingBottom: 44, maxHeight: '75%' }}>
+            <BaseBottomSheet visible={hiddenVisible} onClose={() => setHiddenVisible(false)} maxHeight="75%" style={{ paddingHorizontal: 0 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 8 }}>
                             <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>Скрытые счета</Text>
                             <TouchableOpacity onPress={() => setHiddenVisible(false)} hitSlop={8}><X color="#6b7280" size={20} /></TouchableOpacity>
                         </View>
                         <Text style={{ color: '#6b7280', fontSize: 13, paddingHorizontal: 24, marginBottom: 16 }}>Скрытые счета не отображаются на главном экране</Text>
-                        <ScrollView showsVerticalScrollIndicator={false}>
                             {accounts.length === 0 && (
                                 <Text style={{ color: '#4b5563', fontSize: 15, textAlign: 'center', marginTop: 20 }}>Нет счетов</Text>
                             )}
@@ -1467,16 +1425,10 @@ export default function SettingsScreen() {
                                     </TouchableOpacity>
                                 </View>
                             ))}
-                        </ScrollView>
-                    </View>
-                </View>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ════ Modal: Import / Export ════ */}
-            <Modal visible={ioVisible} transparent animationType="slide" onRequestClose={() => { setIoVisible(false); resetImport(); }}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                    <TouchableOpacity style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} activeOpacity={1} onPress={() => { setIoVisible(false); resetImport(); }} />
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 20, paddingBottom: 44, maxHeight: '92%' }}>
+            <BaseBottomSheet visible={ioVisible} onClose={() => { setIoVisible(false); resetImport(); }} maxHeight="92%" scrollable={false} style={{ paddingHorizontal: 0 }}>
 
                         {/* Header */}
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 16 }}>
@@ -1694,21 +1646,14 @@ export default function SettingsScreen() {
                             )}
 
                         </ScrollView>
-                    </View>
-                </View>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ════ Modal: Notification Settings ════ */}
-            <Modal visible={notifVisible} transparent animationType="slide" onRequestClose={() => { setNotifVisible(false); setNotifSection(null); }}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                    <TouchableOpacity style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} activeOpacity={1} onPress={() => { setNotifVisible(false); setNotifSection(null); }} />
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 20, paddingBottom: 44, maxHeight: '92%' }}>
+            <BaseBottomSheet visible={notifVisible} onClose={() => { setNotifVisible(false); setNotifSection(null); }} maxHeight="92%" style={{ paddingHorizontal: 0 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 4 }}>
                             <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>Уведомления</Text>
                             <TouchableOpacity onPress={() => { setNotifVisible(false); setNotifSection(null); }} hitSlop={8}><X color="#6b7280" size={20} /></TouchableOpacity>
                         </View>
-
-                        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 8 }}>
 
                             {/* ── 1. Низкий баланс ── */}
                             <TouchableOpacity onPress={() => setNotifSection(notifSection === 'lowBalance' ? null : 'lowBalance')}
@@ -1858,10 +1803,7 @@ export default function SettingsScreen() {
                                 </View>
                             )}
 
-                        </ScrollView>
-                    </View>
-                </View>
-            </Modal>
+            </BaseBottomSheet>
 
         </View>
     );

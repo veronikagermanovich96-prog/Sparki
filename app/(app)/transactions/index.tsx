@@ -11,9 +11,10 @@ import {
 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    ActivityIndicator, Alert, Modal, ScrollView, SectionList,
+    ActivityIndicator, Alert, ScrollView, SectionList,
     Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
+import { BaseBottomSheet } from '@/components/ui/BaseBottomSheet';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -519,10 +520,7 @@ export default function TransactionsScreen() {
             </TouchableOpacity>
 
             {/* ════ PeriodSheet ════ */}
-            <Modal visible={periodSheetVisible} transparent animationType="slide" onRequestClose={() => setPeriodSheetVisible(false)}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                    <TouchableOpacity style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} activeOpacity={1} onPress={() => setPeriodSheetVisible(false)} />
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 44 }}>
+            <BaseBottomSheet visible={periodSheetVisible} onClose={() => setPeriodSheetVisible(false)} scrollable={false}>
                             <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', marginBottom: 16 }}>Период</Text>
                             {([
                                 { value: 'today'     as const, label: 'Сегодня' },
@@ -577,22 +575,16 @@ export default function TransactionsScreen() {
                                     <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Применить</Text>
                                 </TouchableOpacity>
                             )}
-                        </View>
-                    </View>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ════ Dropdown Sheet (account / category / expensetype / recurring) ════ */}
-            <Modal visible={activeSheet !== null} transparent animationType="slide" onRequestClose={() => setActiveSheet(null)}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                    <TouchableOpacity style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} activeOpacity={1} onPress={() => setActiveSheet(null)} />
-                        <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 44, maxHeight: activeSheet === 'filters' ? '90%' : '75%' }}>
+            <BaseBottomSheet visible={activeSheet !== null} onClose={() => setActiveSheet(null)} maxHeight={activeSheet === 'filters' ? '90%' : '75%'}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                                 <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>
                                     {activeSheet === 'filters' ? 'Фильтры' : activeSheet === 'account' ? 'Счёт' : activeSheet === 'category' ? 'Категория' : activeSheet === 'expensetype' ? 'Тип расходов' : 'Рекуррентность'}
                                 </Text>
                                 <TouchableOpacity onPress={() => setActiveSheet(null)} hitSlop={8}><X color="#6b7280" size={20} /></TouchableOpacity>
                             </View>
-                            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
                                 {/* ── Unified Filters ── */}
                                 {activeSheet === 'filters' && (() => {
@@ -845,10 +837,7 @@ export default function TransactionsScreen() {
                                     </View>
                                 )}
 
-                            </ScrollView>
-                        </View>
-                    </View>
-            </Modal>
+            </BaseBottomSheet>
 
             <TransactionForm
                 visible={formVisible}

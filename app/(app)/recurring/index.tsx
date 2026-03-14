@@ -7,10 +7,10 @@ import {
 } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import {
-    ActivityIndicator, Alert, KeyboardAvoidingView, Modal,
-    Platform, Pressable, ScrollView, Switch, Text,
+    ActivityIndicator, Alert, ScrollView, Switch, Text,
     TextInput, TouchableOpacity, View,
 } from 'react-native';
+import { BaseBottomSheet } from '@/components/ui/BaseBottomSheet';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { useFocusEffect } from 'expo-router';
 import {
@@ -524,19 +524,13 @@ export default function RecurringScreen() {
             </TouchableOpacity>
 
             {/* ══════════════ Add / Edit Modal ══════════════ */}
-            <Modal visible={showForm} transparent animationType="slide" onRequestClose={() => setShowForm(false)}>
-                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-                    <Pressable style={{ flex: 1 }} onPress={() => setShowForm(false)} />
-
-                    <View style={sheetStyle}>
+            <BaseBottomSheet visible={showForm} onClose={() => setShowForm(false)} maxHeight="92%">
                         <View style={{ width: 40, height: 4, backgroundColor: '#374151', borderRadius: 2, alignSelf: 'center', marginBottom: 20 }} />
 
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
                             <Text style={titleStyle}>{editing ? 'Редактировать' : 'Новый платёж'}</Text>
                             <TouchableOpacity onPress={() => setShowForm(false)}><X color="#6b7280" size={22} /></TouchableOpacity>
                         </View>
-
-                        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
                             {/* Name */}
                             <FieldLabel>Название</FieldLabel>
@@ -718,10 +712,7 @@ export default function RecurringScreen() {
                                     {saving ? 'Сохранение…' : editing ? 'Сохранить' : 'Создать'}
                                 </Text>
                             </TouchableOpacity>
-                        </ScrollView>
-                    </View>
-                </KeyboardAvoidingView>
-            </Modal>
+            </BaseBottomSheet>
         </View>
     );
 }
@@ -733,16 +724,6 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-
-const sheetStyle = {
-    backgroundColor: '#111827',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 40,
-    maxHeight: '92%' as const,
-} as const;
 
 const titleStyle = {
     color: '#fff',

@@ -17,6 +17,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { BaseBottomSheet } from '@/components/ui/BaseBottomSheet';
 import {
     Activity, ArrowRightLeft, Award,
     Banknote, Bike, Bitcoin, BookOpen, Briefcase, Building2, Bus,
@@ -28,11 +29,11 @@ import {
     Tag, Train, TrendingDown, TrendingUp, Trophy, Tv, Utensils,
     Wallet, Wifi, Zap,
 } from 'lucide-react-native';
-import { Circle, G, Rect, Svg, Text as SvgText } from 'react-native-svg';
+import { Circle, G, Line as SvgLine, Path, Rect, Svg, Text as SvgText } from 'react-native-svg';
 import { useFocusEffect, useRouter } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { supabase } from '@/lib/supabase';
-import { formatAmount, CURRENCIES } from '@/constants/currencies';
+import { formatAmount, getCurrencySymbol, CURRENCIES } from '@/constants/currencies';
 import { Account } from '@/types';
 import {
     addDays,
@@ -109,20 +110,29 @@ interface OverviewData {
     chart: BarPoint[];
     categories: CategoryItem[];
 }
+interface RecurringDetail { name: string; amount: number; }
 interface ForecastChartPoint {
     label: string;
-    subLabel?: string;
-    amount: number;
-    recurring: number;
+    monthLabel?: string;
+    /** Everyday expenses (fact line) — only for past days */
+    factAmount: number;
+    /** Avg daily spend (forecast line) — only for future days */
+    forecastAmount: number;
+    /** Base + recurring + credit payments (red dots) */
+    paymentAmount: number;
+    paymentDetails: RecurringDetail[];
     isFact: boolean;
+    date: string; // yyyy-MM-dd
 }
 interface RecurringItem { name: string; amount: number; }
 interface ForecastData {
     factSpend: number;
+    projectedDaily: number;       // projected daily spending (excl. base/recurring)
     projectedTotal: number;
     recurringTotal: number;
     daysLeft: number;
     daysPassed: number;
+    insufficientData: boolean;    // true if < 7 days of data
     periodStart: Date;
     periodEnd: Date;
     budgets: BudgetItem[];
@@ -416,88 +426,143 @@ function BarChart({ data, currency }: { data: BarPoint[]; currency: string }) {
     );
 }
 
-// ─── ForecastBarChart ─────────────────────────────────────────────────────────
+// ─── ForecastLineChart ────────────────────────────────────────────────────────
 
-function ForecastBarChart({ data, currency: cur }: { data: ForecastChartPoint[]; currency: string }) {
+function ForecastLineChart({ data, selectedIndex, onSelect, currency: cur }: { data: ForecastChartPoint[]; selectedIndex: number | null; onSelect: (i: number | null) => void; currency: string }) {
     const { width } = Dimensions.get('window');
+    const yAxisW = 40;
     const W = width - 52;
-    const tipH = 36;
+    const chartW = W - yAxisW;
     const chartH = 120;
-    const hasSubLabels = data.some(p => p.subLabel);
-    const labelH = hasSubLabels ? 28 : 20;
-    const H = tipH + chartH + labelH;
-    const maxVal = Math.max(...data.map(p => p.amount), 1);
+    const labelH = 20;
+    const hasMonthLabels = data.some(p => p.monthLabel);
+    const H = chartH + labelH + (hasMonthLabels ? 12 : 0);
 
-    const [selected, setSelected] = useState<number | null>(null);
+    // Y-axis: collect all non-zero values across all 3 datasets
+    const allValues = data.flatMap(p => [p.factAmount, p.forecastAmount, p.paymentAmount]).filter(v => v > 0);
+    const maxVal = allValues.length > 0 ? Math.max(...allValues) : 100;
+    const yMax = Math.ceil(maxVal * 1.15 / 100) * 100 || 100;
+    const yStep = Math.ceil(yMax / 4 / 50) * 50 || 50;
+    const niceMax = Math.ceil(yMax / yStep) * yStep;
+    const ySteps: number[] = [];
+    for (let v = 0; v <= niceMax; v += yStep) ySteps.push(v);
+    const sym = getCurrencySymbol(cur);
 
-    // For month view (many days), show every ~4th label
+    const stepX = data.length > 1 ? chartW / (data.length - 1) : chartW / 2;
+    const getX = (i: number) => yAxisW + (data.length > 1 ? i * stepX : chartW / 2);
+    const getY = (val: number) => chartH - (Math.min(val, niceMax) / niceMax) * chartH;
+
+    // Dataset 1: FACT line (past days, everyday expenses)
+    const factPts = data.map((p, i) => p.isFact && p.factAmount > 0 ? { x: getX(i), y: getY(p.factAmount), i } : null).filter(Boolean) as { x: number; y: number; i: number }[];
+    // Dataset 2: FORECAST line (future days, avgDaily)
+    const fcPts = data.map((p, i) => !p.isFact ? { x: getX(i), y: getY(p.forecastAmount), i } : null).filter(Boolean) as { x: number; y: number; i: number }[];
+    // Dataset 3: RED DOTS (days with payments — no connecting line)
+    const payPts = data.map((p, i) => p.paymentAmount > 0 ? { x: getX(i), y: getY(p.paymentAmount), i } : null).filter(Boolean) as { x: number; y: number; i: number }[];
+
+    const buildPath = (pts: { x: number; y: number }[]) => {
+        if (pts.length === 0) return '';
+        return pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+    };
+
+    const factPath = buildPath(factPts);
+    const fcPath = buildPath(fcPts);
     const showEveryN = data.length > 15 ? Math.ceil(data.length / 8) : 1;
-    const gap = 2;
-    const barW = Math.max(2, (W - gap * data.length) / data.length);
+    const showDots = data.length <= 90;
 
     return (
         <Svg width={W} height={H}>
-            {data.map((p, i) => {
-                const x = i * (barW + gap);
-                const h = Math.max(1, (p.amount / maxVal) * chartH);
-                const barY = tipH + chartH - h;
-                const isSelected = selected === i;
-                const rx = barW > 4 ? 2 : 1;
-
+            {/* Y-axis grid + labels */}
+            {ySteps.map(v => {
+                const gy = getY(v);
                 return (
-                    <G key={i}>
-                        {/* Touch target */}
-                        <Rect x={x} y={tipH} width={barW} height={chartH + labelH}
-                            fill="transparent" onPress={() => setSelected(isSelected ? null : i)} />
-                        {/* Bar — fact: solid fill, forecast: transparent + dashed border */}
-                        {p.isFact ? (
-                            <Rect x={x} y={barY} width={barW} height={h}
-                                fill="#7C6FFF" rx={rx}
-                                opacity={selected !== null && !isSelected ? 0.3 : 1}
-                            />
-                        ) : (
-                            <Rect x={x} y={barY} width={barW} height={h}
-                                fill="rgba(124,111,255,0.15)"
-                                stroke="rgba(124,111,255,0.5)"
-                                strokeWidth={1.5}
-                                strokeDasharray="4 3"
-                                rx={rx}
-                                opacity={selected !== null && !isSelected ? 0.3 : 1}
-                            />
-                        )}
-                        {/* X label */}
-                        {(i % showEveryN === 0 || i === data.length - 1) && (
-                            <>
-                                <SvgText x={x + barW / 2} y={tipH + chartH + 12} textAnchor="middle" fontSize={8} fill="rgba(255,255,255,0.3)">
-                                    {p.label}
-                                </SvgText>
-                                {p.subLabel && (
-                                    <SvgText x={x + barW / 2} y={tipH + chartH + 22} textAnchor="middle" fontSize={7} fill="rgba(255,255,255,0.2)">
-                                        {p.subLabel}
-                                    </SvgText>
-                                )}
-                            </>
-                        )}
-                        {/* Tooltip */}
-                        {isSelected && (() => {
-                            const txt = `${p.isFact ? 'Факт' : 'Прогноз'}: ${formatAmount(p.amount, cur)}`;
-                            const tw = Math.min(txt.length * 5.5 + 16, W - 8);
-                            let tx = x + barW / 2 - tw / 2;
-                            if (tx < 0) tx = 0;
-                            if (tx + tw > W) tx = W - tw;
-                            return (
-                                <G>
-                                    <Rect x={tx} y={0} width={tw} height={tipH - 4} rx={6} fill="#1e293b" />
-                                    <SvgText x={tx + tw / 2} y={tipH / 2 + 1} textAnchor="middle"
-                                        fontSize={9} fontWeight="600" fill={p.isFact ? '#7C6FFF' : '#FFB84F'}>
-                                        {txt}
-                                    </SvgText>
-                                </G>
-                            );
-                        })()}
+                    <G key={`y${v}`}>
+                        <SvgLine x1={yAxisW} y1={gy} x2={W} y2={gy} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
+                        <SvgText x={yAxisW - 4} y={gy + 3} textAnchor="end" fontSize={7} fill="rgba(255,255,255,0.25)">
+                            {sym}{v >= 1000 ? `${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}k` : String(v)}
+                        </SvgText>
                     </G>
                 );
             })}
+
+            {/* Lines */}
+            {factPath ? <Path d={factPath} fill="none" stroke="#7C6FFF" strokeWidth={2} /> : null}
+            {fcPath ? <Path d={fcPath} fill="none" stroke="rgba(124,111,255,0.5)" strokeWidth={2} strokeDasharray="6 4" /> : null}
+
+            {/* Fact dots (blue) */}
+            {showDots && factPts.map(p => {
+                const isSel = selectedIndex === p.i;
+                return (
+                    <Circle key={`f${p.i}`} cx={p.x} cy={p.y} r={isSel ? 6 : 2.5} fill="#7C6FFF"
+                        stroke={isSel ? '#fff' : 'none'} strokeWidth={isSel ? 2 : 0}
+                        opacity={selectedIndex !== null && !isSel ? 0.3 : 1} />
+                );
+            })}
+
+            {/* Forecast dots (light purple) */}
+            {showDots && fcPts.map(p => {
+                const isSel = selectedIndex === p.i;
+                return (
+                    <Circle key={`c${p.i}`} cx={p.x} cy={p.y} r={isSel ? 6 : 2.5} fill="rgba(124,111,255,0.5)"
+                        stroke={isSel ? '#fff' : 'none'} strokeWidth={isSel ? 2 : 0}
+                        opacity={selectedIndex !== null && !isSel ? 0.3 : 1} />
+                );
+            })}
+
+            {/* Payment dots (red, always visible, no line) */}
+            {payPts.map(p => {
+                const isSel = selectedIndex === p.i;
+                return (
+                    <Circle key={`r${p.i}`} cx={p.x} cy={p.y} r={isSel ? 7 : 4} fill="#E24B4A"
+                        stroke={isSel ? '#fff' : 'none'} strokeWidth={isSel ? 2 : 0}
+                        opacity={selectedIndex !== null && !isSel ? 0.4 : 1} />
+                );
+            })}
+
+            {/* Selected dot fallback for 90+ days */}
+            {!showDots && selectedIndex !== null && (() => {
+                const p = data[selectedIndex];
+                const cx = getX(selectedIndex);
+                // Show the most relevant dot
+                if (p.paymentAmount > 0) return <Circle cx={cx} cy={getY(p.paymentAmount)} r={7} fill="#E24B4A" stroke="#fff" strokeWidth={2} />;
+                if (p.isFact && p.factAmount > 0) return <Circle cx={cx} cy={getY(p.factAmount)} r={6} fill="#7C6FFF" stroke="#fff" strokeWidth={2} />;
+                if (!p.isFact) return <Circle cx={cx} cy={getY(p.forecastAmount)} r={6} fill="rgba(124,111,255,0.5)" stroke="#fff" strokeWidth={2} />;
+                return null;
+            })()}
+
+            {/* Touch targets */}
+            {data.map((_p, i) => {
+                const x = getX(i);
+                return (
+                    <Rect key={`t${i}`} x={x - stepX / 2} y={0} width={stepX} height={chartH + labelH}
+                        fill="transparent" onPress={() => onSelect(selectedIndex === i ? null : i)} />
+                );
+            })}
+
+            {/* X labels */}
+            {hasMonthLabels ? (
+                data.map((p, i) => {
+                    if (!p.monthLabel) return null;
+                    return (
+                        <G key={`ml${i}`}>
+                            <SvgLine x1={getX(i)} y1={chartH} x2={getX(i)} y2={chartH + 4} stroke="rgba(255,255,255,0.15)" strokeWidth={1} />
+                            <SvgText x={getX(i)} y={chartH + 14} textAnchor="middle" fontSize={8}
+                                fill={selectedIndex === i ? '#fff' : 'rgba(255,255,255,0.35)'} fontWeight="500">
+                                {p.monthLabel}
+                            </SvgText>
+                        </G>
+                    );
+                })
+            ) : (
+                data.map((p, i) => {
+                    if (i % showEveryN !== 0 && i !== data.length - 1) return null;
+                    return (
+                        <SvgText key={`l${i}`} x={getX(i)} y={chartH + 12} textAnchor="middle" fontSize={8}
+                            fill={selectedIndex === i ? '#fff' : 'rgba(255,255,255,0.3)'} fontWeight={selectedIndex === i ? '700' : '400'}>
+                            {p.label}
+                        </SvgText>
+                    );
+                })
+            )}
         </Svg>
     );
 }
@@ -873,6 +938,15 @@ export default function AnalyticsScreen() {
     const [forecastData, setForecastData] = useState<ForecastData | null>(null);
     const [goalsState, setGoalsState] = useState<GoalItem[]>([]);
 
+    // ── Day detail inline section ──────────────────────────────────────────
+    type DayDetailTx = { name: string; icon: string; color: string; amount: number; isScheduled?: boolean };
+    const [chartSelectedIdx, setChartSelectedIdx] = useState<number | null>(null);
+    const [dayDetailDate, setDayDetailDate] = useState('');
+    const [dayDetailIsFact, setDayDetailIsFact] = useState(true);
+    const [dayDetailItems, setDayDetailItems] = useState<DayDetailTx[]>([]);
+    const [dayDetailTotal, setDayDetailTotal] = useState(0);
+    const [dayDetailLoading, setDayDetailLoading] = useState(false);
+
     // ── Extra categories ─────────────────────────────────────────────────────
     type CatWithTags = { id: string; name: string; icon: string; color: string; tags: { id: string; name: string }[] };
     type DraftEntry = { active: boolean; amount: string };
@@ -926,6 +1000,7 @@ export default function AnalyticsScreen() {
     const [currencySearch, setCurrencySearch] = useState('');
     const [goalAccountId, setGoalAccountId] = useState('');
     const [goalColor, setGoalColor] = useState('#7C6FFF');
+    const [goalInitialDeposit, setGoalInitialDeposit] = useState('');
     const [savingGoal, setSavingGoal] = useState(false);
     const [editingGoal, setEditingGoal] = useState<GoalItem | null>(null);
 
@@ -942,6 +1017,11 @@ export default function AnalyticsScreen() {
     const [savingGoalTopUp, setSavingGoalTopUp] = useState(false);
     const [archivingGoal, setArchivingGoal] = useState(false);
     const [showArchiveGoal, setShowArchiveGoal] = useState(false);
+    const [showDeleteGoal, setShowDeleteGoal] = useState(false);
+    const [deleteTransferMode, setDeleteTransferMode] = useState<'account' | 'goal' | 'none'>('account');
+    const [deleteTransferAccountId, setDeleteTransferAccountId] = useState('');
+    const [deleteTransferGoalId, setDeleteTransferGoalId] = useState('');
+    const [deletingGoal, setDeletingGoal] = useState(false);
 
     // ── AI Recommendation ────────────────────────────────────────────────────
     const [recommendation, setRecommendation] = useState('');
@@ -1141,10 +1221,10 @@ export default function AnalyticsScreen() {
     function getForecastRange(fp: ForecastPeriod, cFrom: Date, cTo: Date): { start: Date; end: Date } {
         const today = startOfDay(new Date());
         switch (fp) {
-            case 'month':   return { start: today, end: endOfMonth(today) };
-            case 'quarter': return { start: today, end: endOfDay(addMonths(today, 3)) };
-            case 'half':    return { start: today, end: endOfDay(addMonths(today, 6)) };
-            case 'year':    return { start: today, end: endOfDay(addMonths(today, 12)) };
+            case 'month':   return { start: startOfMonth(today), end: endOfMonth(today) };
+            case 'quarter': return { start: startOfMonth(today), end: endOfDay(addMonths(today, 3)) };
+            case 'half':    return { start: startOfMonth(today), end: endOfDay(addMonths(today, 6)) };
+            case 'year':    return { start: startOfMonth(today), end: endOfDay(addMonths(today, 12)) };
             case 'custom':  return { start: startOfDay(cFrom), end: endOfDay(cTo) };
         }
     }
@@ -1166,6 +1246,74 @@ export default function AnalyticsScreen() {
         return count;
     }
 
+    // ── Day detail handler (inline section) ────────────────────────────────
+    async function handleChartSelect(idx: number | null) {
+        if (idx === null || idx === chartSelectedIdx) {
+            setChartSelectedIdx(null);
+            setDayDetailItems([]);
+            setDayDetailTotal(0);
+            return;
+        }
+        if (!householdId || !forecastData) return;
+        const point = forecastData.chart[idx];
+        if (!point) return;
+
+        setChartSelectedIdx(idx);
+        setDayDetailDate(point.date);
+        setDayDetailIsFact(point.isFact);
+        setDayDetailLoading(true);
+        setDayDetailItems([]);
+        setDayDetailTotal(0);
+
+        if (point.isFact) {
+            // Show ALL transactions for this day (including base)
+            const { data: txns } = await supabase
+                .from('transactions')
+                .select('amount, amount_base, category:categories(name, icon, color)')
+                .eq('household_id', householdId)
+                .eq('type', 'expense')
+                .eq('is_deleted', false)
+                .eq('date', point.date);
+
+            type TxWithCat = { amount: number; amount_base: number | null; category: { name: string; icon: string | null; color: string | null } | null };
+            const rows = (txns ?? []) as unknown as TxWithCat[];
+            const getAmt = (t: { amount: number; amount_base: number | null }) => t.amount_base ?? t.amount;
+
+            const grouped: Record<string, { name: string; icon: string; color: string; total: number }> = {};
+            rows.forEach(t => {
+                const catName = t.category?.name ?? 'Без категории';
+                if (!grouped[catName]) {
+                    grouped[catName] = { name: catName, icon: t.category?.icon ?? '📦', color: t.category?.color ?? '#888', total: 0 };
+                }
+                grouped[catName].total += getAmt(t);
+            });
+
+            const items: DayDetailTx[] = Object.values(grouped)
+                .sort((a, b) => b.total - a.total)
+                .map(g => ({ name: g.name, icon: g.icon, color: g.color, amount: g.total }));
+
+            setDayDetailItems(items);
+            setDayDetailTotal(items.reduce((s, it) => s + it.amount, 0));
+        } else {
+            // Forecast day: avgDaily + scheduled payments
+            const avgDaily = forecastData.insufficientData ? 0 : forecastData.projectedDaily / Math.max(forecastData.daysLeft, 1);
+            const items: DayDetailTx[] = [];
+
+            if (avgDaily > 0) {
+                items.push({ name: 'Среднедневные расходы', icon: '~', color: '#888', amount: avgDaily });
+            }
+
+            point.paymentDetails.forEach(rd => {
+                items.push({ name: rd.name, icon: '📅', color: '#E24B4A', amount: rd.amount, isScheduled: true });
+            });
+
+            setDayDetailItems(items);
+            setDayDetailTotal(items.reduce((s, it) => s + it.amount, 0));
+        }
+
+        setDayDetailLoading(false);
+    }
+
     // ── Forecast ────────────────────────────────────────────────────────────
     async function fetchForecast(hid: string) {
         setLoadingForecast(true);
@@ -1173,11 +1321,11 @@ export default function AnalyticsScreen() {
         const today = startOfDay(now);
         const { start: periodStart, end: periodEnd } = getForecastRange(forecastPeriod, customFrom, customTo);
 
-        // 1) Avg daily spend from last 30 days
+        // 1) Avg daily spend from last 30 days (with category info for filtering)
         const d30ago = subDays(today, 30);
-        const [{ data: last30Txns }, { data: periodTxns }, { data: recurRaw }, { data: budgetsRaw }] = await Promise.all([
+        const [{ data: last30Txns }, { data: periodTxns }, { data: recurRaw }, { data: budgetsRaw }, { data: catsRaw }] = await Promise.all([
             supabase.from('transactions')
-                .select('amount, amount_base')
+                .select('amount, amount_base, category_id')
                 .eq('household_id', hid).eq('type', 'expense').eq('is_deleted', false)
                 .gte('date', format(d30ago, 'yyyy-MM-dd'))
                 .lte('date', format(today, 'yyyy-MM-dd')),
@@ -1195,15 +1343,35 @@ export default function AnalyticsScreen() {
             supabase.from('budgets')
                 .select('category_id, amount, category:categories(name, icon, color)')
                 .eq('household_id', hid).eq('period', 'monthly'),
+            // 5) Categories (for expense_type filtering)
+            supabase.from('categories')
+                .select('id, expense_type')
+                .or(`household_id.eq.${hid},is_system.eq.true`),
         ]);
 
         const getAmt = (t: { amount: number; amount_base: number | null }) => t.amount_base ?? t.amount;
         type TxRow = { amount: number; amount_base: number | null; date: string; category_id: string | null };
         const allRows = (periodTxns ?? []) as unknown as TxRow[];
 
-        // Avg daily from last 30 days
-        const last30Total = (last30Txns ?? []).reduce((s, t) => s + getAmt(t as any), 0);
-        const avgDaily = last30Total / 30;
+        // Build set of "infrastructure" category IDs to exclude from daily avg
+        const baseCatIds = new Set<string>();
+        (catsRaw ?? []).forEach((c: any) => {
+            if (c.expense_type === 'infrastructure') baseCatIds.add(c.id as string);
+        });
+
+        // Avg daily from last 30 days — EXCLUDE infrastructure categories
+        type Last30Row = { amount: number; amount_base: number | null; category_id: string | null };
+        const last30Rows = (last30Txns ?? []) as unknown as Last30Row[];
+        const filteredLast30 = last30Rows.filter(t =>
+            !(t.category_id && baseCatIds.has(t.category_id))
+        );
+        const last30Total = filteredLast30.reduce((s, t) => s + getAmt(t), 0);
+
+        // Check if we have enough data (>= 7 days)
+        const daysPassed = Math.max(0, differenceInDays(today, periodStart));
+        const daysOfData = Math.min(30, daysPassed || 1);
+        const insufficientData = daysOfData < 7;
+        const avgDaily = insufficientData ? 0 : last30Total / 30;
 
         // Fact spend (only past part of period)
         const factSpend = allRows
@@ -1220,7 +1388,7 @@ export default function AnalyticsScreen() {
         // Days left (future part)
         const daysLeft = Math.max(0, differenceInDays(periodEnd, today));
 
-        // Projected spend for future part
+        // Projected spend for future part (0 if insufficient data)
         const projectedSpend = avgDaily * daysLeft;
 
         // Recurring payments
@@ -1234,81 +1402,78 @@ export default function AnalyticsScreen() {
             return sum + total;
         }, 0);
 
-        const daysPassed = Math.max(0, differenceInDays(today, periodStart));
-
         const projectedTotal = factSpend + projectedSpend + recurringTotal;
 
-        // ── Chart buckets ────────────────────────────────────────────────
-        const useMonthBuckets = forecastPeriod !== 'month';
-        const chartBuckets: { label: string; subLabel?: string; start: Date; end: Date }[] = [];
+        // ── Chart buckets — always daily granularity ─────────────────────
+        // Split transactions: everyday vs base/infrastructure
+        const everydayRows = allRows.filter(t =>
+            !(t.category_id && baseCatIds.has(t.category_id))
+        );
+        const baseRows = allRows.filter(t =>
+            t.category_id && baseCatIds.has(t.category_id)
+        );
 
-        if (useMonthBuckets) {
-            // One bucket per month; first bucket starts at periodStart, not month start
-            let isFirst = true;
-            let cursor = startOfMonth(periodStart);
-            while (cursor <= periodEnd) {
-                const bucketStart = isFirst ? periodStart : cursor;
-                const mEnd = endOfMonth(cursor);
-                const bucketEnd = mEnd > periodEnd ? periodEnd : mEnd;
-                const raw = format(cursor, 'LLL', { locale: ru });
-                const label = raw.charAt(0).toUpperCase() + raw.slice(1);
-                chartBuckets.push({ label, start: bucketStart, end: bucketEnd });
-                cursor = startOfMonth(addMonths(cursor, 1));
-                isFirst = false;
+        const chartStart = forecastPeriod === 'month' ? startOfMonth(today) : periodStart;
+        const chartEnd = forecastPeriod === 'month' ? endOfMonth(today) : periodEnd;
+        const totalDays = differenceInDays(chartEnd, chartStart) + 1;
+        const isMultiMonth = forecastPeriod !== 'month';
+
+        const chartBuckets: { label: string; monthLabel?: string; start: Date; end: Date }[] = [];
+        for (let d = 0; d < totalDays; d++) {
+            const day = addDays(chartStart, d);
+            const dayNum = day.getDate();
+            let monthLabel: string | undefined;
+            if (isMultiMonth && dayNum === 1) {
+                const raw = format(day, 'LLL', { locale: ru });
+                monthLabel = raw.charAt(0).toUpperCase() + raw.slice(1);
             }
-            // Compute subLabels for first/last partial months
-            if (chartBuckets.length > 0) {
-                const first = chartBuckets[0];
-                const firstDay = first.start.getDate();
-                if (firstDay > 1) {
-                    first.subLabel = `с ${firstDay}`;
-                }
-                const last = chartBuckets[chartBuckets.length - 1];
-                const lastFullEnd = endOfMonth(last.start);
-                const actualDays = differenceInDays(last.end, last.start) + 1;
-                const fullDays = differenceInDays(lastFullEnd, startOfMonth(last.start)) + 1;
-                if (actualDays < fullDays) {
-                    last.subLabel = `${actualDays} дн`;
-                }
-            }
-        } else {
-            // Days of current month — show ~8 ticks
-            const ms = startOfMonth(today);
-            const me = endOfMonth(today);
-            const dim = differenceInDays(me, ms) + 1;
-            for (let d = 0; d < dim; d++) {
-                const day = addDays(ms, d);
-                chartBuckets.push({ label: String(d + 1), start: startOfDay(day), end: endOfDay(day) });
-            }
+            chartBuckets.push({ label: String(dayNum), monthLabel, start: startOfDay(day), end: endOfDay(day) });
         }
 
         const chart: ForecastChartPoint[] = chartBuckets.map(b => {
-            // For day buckets: fact if day <= today; for month buckets: fact if bucket already started
-            const isFact = useMonthBuckets
-                ? b.start.getTime() <= today.getTime()
-                : b.end.getTime() <= today.getTime();
+            const isFact = b.end.getTime() <= today.getTime();
+            const dateStr = format(b.start, 'yyyy-MM-dd');
 
-            // Fact amount from transactions
-            let amount = 0;
-            allRows.forEach(t => {
-                const d = new Date(t.date);
-                if (d >= b.start && d <= b.end) amount += getAmt(t);
-            });
-
-            // For future buckets: use avgDaily projection
-            if (!isFact) {
-                const futureDays = differenceInDays(b.end, b.start > today ? b.start : today) + 1;
-                amount = avgDaily * Math.max(0, futureDays);
+            // FACT LINE: everyday expenses only (past days)
+            let factAmount = 0;
+            if (isFact) {
+                everydayRows.forEach(t => {
+                    if (t.date === dateStr) factAmount += getAmt(t);
+                });
             }
 
-            // Recurring in this bucket
-            let recurring = 0;
-            recRows.forEach(r => {
-                const occ = countOccurrences(r.next_date, r.frequency as Frequency, r.end_date, b.start, b.end);
-                recurring += occ * getAmt(r);
-            });
+            // FORECAST LINE: flat avgDaily (future days only)
+            const forecastAmount = isFact ? 0 : avgDaily;
 
-            return { label: b.label, subLabel: b.subLabel, amount, recurring, isFact };
+            // RED DOTS: base txns + recurring payments
+            let paymentAmount = 0;
+            const paymentDetails: RecurringDetail[] = [];
+
+            if (isFact) {
+                // Past: base category transactions that were paid
+                let baseTotal = 0;
+                baseRows.forEach(t => {
+                    if (t.date === dateStr) baseTotal += getAmt(t);
+                });
+                if (baseTotal > 0) {
+                    paymentDetails.push({ name: 'Базовые расходы', amount: baseTotal });
+                    paymentAmount += baseTotal;
+                }
+                // Past: confirmed recurring (their txn already in baseRows or everydayRows)
+                // — already counted above via base transactions
+            } else {
+                // Future: upcoming recurring payments for this day
+                recRows.forEach(r => {
+                    const occ = countOccurrences(r.next_date, r.frequency as Frequency, r.end_date, b.start, b.end);
+                    if (occ > 0) {
+                        const amt = occ * getAmt(r);
+                        paymentAmount += amt;
+                        paymentDetails.push({ name: r.name, amount: amt });
+                    }
+                });
+            }
+
+            return { label: b.label, monthLabel: b.monthLabel, factAmount, forecastAmount, paymentAmount, paymentDetails, isFact, date: dateStr };
         });
 
         // Chart subtitle
@@ -1327,7 +1492,8 @@ export default function AnalyticsScreen() {
             spent: catSpend[b.category_id] ?? 0,
         }));
 
-        setForecastData({ factSpend, projectedTotal, recurringTotal, daysLeft, daysPassed, periodStart, periodEnd, budgets, chart, chartSubtitle, upcomingRecurring });
+        setForecastData({ factSpend, projectedDaily: projectedSpend, projectedTotal, recurringTotal, daysLeft, daysPassed, insufficientData, periodStart, periodEnd, budgets, chart, chartSubtitle, upcomingRecurring });
+        setChartSelectedIdx(null);
         setLoadingForecast(false);
 
         // Also fetch extras for this period
@@ -2284,7 +2450,7 @@ export default function AnalyticsScreen() {
                 icon: (g.icon as string | null) ?? '🎯',
                 color: (g.color as string | null) ?? '#7C6FFF',
                 target: g.target_amount as number,
-                saved: acc?.balance ?? 0,
+                saved: (g.current_amount as number) ?? 0,
                 currency: (g.currency as string) || (acc?.currency ?? 'EUR'),
                 targetDate: g.target_date as string | null,
                 accountId: g.account_id as string,
@@ -2386,6 +2552,7 @@ export default function AnalyticsScreen() {
         setShowCurrencyDropdown(false);
         setCurrencySearch('');
         setGoalColor('#7C6FFF');
+        setGoalInitialDeposit('');
         setGoalAccountId(accounts[0]?.id ?? '');
         setShowAddGoal(true);
     }
@@ -2396,26 +2563,54 @@ export default function AnalyticsScreen() {
         const targetAmt = parseFloat(goalTarget.replace(',', '.'));
         if (isNaN(targetAmt) || targetAmt <= 0) return;
 
+        const initialAmt = goalInitialDeposit.trim()
+            ? parseFloat(goalInitialDeposit.replace(',', '.'))
+            : 0;
+
         const targetDate = goalDateObj
             ? format(goalDateObj, 'yyyy-MM-dd')
             : null;
 
         setSavingGoal(true);
-        const { error } = await supabase.from('savings_goals').insert({
+        const { data: goalData, error } = await supabase.from('savings_goals').insert({
             household_id: householdId,
             account_id:   goalAccountId,
             name:         goalName.trim(),
             icon:         goalIcon,
             color:        goalColor,
             target_amount: targetAmt,
+            current_amount: initialAmt > 0 ? initialAmt : 0,
             currency:     goalCurrency,
             target_date:  targetDate,
             compounding:  'monthly',
             is_active:    true,
             is_archived:  false,
-        });
+        }).select().single();
+        if (error) { setSavingGoal(false); console.error('createGoal error:', error.message); return; }
+
+        // If initial deposit > 0, deduct from the linked account and create a transfer transaction
+        if (initialAmt > 0 && goalData) {
+            const srcAcc = accounts.find(a => a.id === goalAccountId);
+            if (srcAcc) {
+                await supabase.from('accounts').update({ balance: srcAcc.balance - initialAmt }).eq('id', goalAccountId);
+                setAccounts(prev => prev.map(a => a.id === goalAccountId ? { ...a, balance: a.balance - initialAmt } : a));
+                const uid = (await supabase.auth.getUser()).data.user?.id;
+                if (uid) {
+                    await supabase.from('transactions').insert({
+                        household_id: householdId,
+                        account_id:   goalAccountId,
+                        type:         'transfer',
+                        amount:       initialAmt,
+                        currency:     goalCurrency,
+                        date:         format(new Date(), 'yyyy-MM-dd'),
+                        description:  `Начальный взнос → ${goalName.trim()}`,
+                        created_by:   uid,
+                    });
+                }
+            }
+        }
+
         setSavingGoal(false);
-        if (error) { console.error('createGoal error:', error.message); return; }
         closeGoalModal();
         fetchSavings(householdId);
     }
@@ -2460,6 +2655,7 @@ export default function AnalyticsScreen() {
         setGoalIcon('🎯');
         setGoalColor('#7C6FFF');
         setGoalTarget('');
+        setGoalInitialDeposit('');
         setGoalCurrency('EUR');
         setGoalDateObj(null);
         setGoalAccountId('');
@@ -2485,6 +2681,7 @@ export default function AnalyticsScreen() {
         setSelectedGoal(null);
         setShowGoalTopUp(false);
         setShowArchiveGoal(false);
+        setShowDeleteGoal(false);
     }
 
     const goalCalc = (() => {
@@ -2513,6 +2710,67 @@ export default function AnalyticsScreen() {
             .eq('id', selectedGoal.id);
         setArchivingGoal(false);
         setShowArchiveGoal(false);
+        closeGoalDetail();
+        if (householdId) fetchSavings(householdId);
+    }
+
+    function openDeleteGoal() {
+        if (!selectedGoal) return;
+        setDeleteTransferMode('account');
+        setDeleteTransferAccountId(selectedGoal.accountId || accounts[0]?.id || '');
+        const otherGoals = goalsState.filter(g => g.id !== selectedGoal.id);
+        setDeleteTransferGoalId(otherGoals[0]?.id || '');
+        setShowDeleteGoal(true);
+    }
+
+    async function confirmDeleteGoal() {
+        if (!selectedGoal || !householdId) return;
+        setDeletingGoal(true);
+
+        const savedAmt = selectedGoal.saved || 0;
+        const uid = (await supabase.auth.getUser()).data.user?.id;
+
+        try {
+            if (savedAmt > 0 && deleteTransferMode === 'account' && deleteTransferAccountId) {
+                // Transfer funds back to account
+                const targetAcc = accounts.find(a => a.id === deleteTransferAccountId);
+                if (targetAcc) {
+                    await supabase.from('accounts').update({ balance: targetAcc.balance + savedAmt }).eq('id', deleteTransferAccountId);
+                    setAccounts(prev => prev.map(a => a.id === deleteTransferAccountId ? { ...a, balance: a.balance + savedAmt } : a));
+                    if (uid) {
+                        await supabase.from('transactions').insert({
+                            household_id: householdId,
+                            account_id: deleteTransferAccountId,
+                            type: 'transfer',
+                            amount: savedAmt,
+                            currency: selectedGoal.currency,
+                            date: format(new Date(), 'yyyy-MM-dd'),
+                            description: `Возврат с цели «${selectedGoal.name}»`,
+                            created_by: uid,
+                        });
+                    }
+                }
+            } else if (savedAmt > 0 && deleteTransferMode === 'goal' && deleteTransferGoalId) {
+                // Transfer funds to another goal
+                const targetGoal = goalsState.find(g => g.id === deleteTransferGoalId);
+                if (targetGoal) {
+                    const newSaved = targetGoal.saved + savedAmt;
+                    await supabase.from('savings_goals').update({ current_amount: newSaved }).eq('id', deleteTransferGoalId);
+                }
+            }
+            // mode === 'none': just delete, no transfer
+
+            // Soft delete the goal
+            await supabase.from('savings_goals')
+                .update({ is_archived: true, is_active: false })
+                .eq('id', selectedGoal.id);
+
+        } catch (e) {
+            console.error('deleteGoal error:', e);
+        }
+
+        setDeletingGoal(false);
+        setShowDeleteGoal(false);
         closeGoalDetail();
         if (householdId) fetchSavings(householdId);
     }
@@ -2859,14 +3117,60 @@ export default function AnalyticsScreen() {
 
                             {loadingForecast ? <Spinner /> : !forecastData ? null : (
                                 <>
-                                    {/* Forecast summary */}
+                                    {/* Forecast summary — two parts */}
                                     <Card>
                                         <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                                             {FORECAST_TITLES[forecastPeriod]}
                                         </Text>
-                                        <Text style={{ fontSize: 28, fontWeight: '800', color: '#FFB84F', marginBottom: 16 }}>
-                                            {formatAmount(forecastData.projectedTotal, currency)}
-                                        </Text>
+
+                                        {forecastData.insufficientData && (
+                                            <View style={{ backgroundColor: 'rgba(255,184,79,0.1)', borderRadius: 10, padding: 10, marginBottom: 12 }}>
+                                                <Text style={{ fontSize: 12, color: '#FFB84F' }}>
+                                                    Недостаточно данных · только запланированные платежи
+                                                </Text>
+                                            </View>
+                                        )}
+
+                                        {/* PART 1 — Projected daily spending */}
+                                        {!forecastData.insufficientData && (
+                                            <View style={{ marginBottom: 12 }}>
+                                                <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginBottom: 4, textTransform: 'uppercase' }}>
+                                                    Прогноз расходов ({forecastData.daysLeft} дн.)
+                                                </Text>
+                                                <Text style={{ fontSize: 24, fontWeight: '800', color: '#FFB84F' }}>
+                                                    {formatAmount(forecastData.projectedDaily, currency)}
+                                                </Text>
+                                            </View>
+                                        )}
+
+                                        {/* PART 2 — Upcoming scheduled payments */}
+                                        {forecastData.upcomingRecurring.length > 0 && (
+                                            <View style={{ marginBottom: 12 }}>
+                                                <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginBottom: 8, textTransform: 'uppercase' }}>
+                                                    Запланированные платежи
+                                                </Text>
+                                                {forecastData.upcomingRecurring.map((r, i) => (
+                                                    <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: i < forecastData.upcomingRecurring.length - 1 ? 1 : 0, borderBottomColor: 'rgba(255,255,255,0.06)' }}>
+                                                        <Text style={{ fontSize: 14, color: '#fff' }}>{r.name}</Text>
+                                                        <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>
+                                                            {formatAmount(r.amount, currency)}
+                                                        </Text>
+                                                    </View>
+                                                ))}
+                                            </View>
+                                        )}
+
+                                        {/* Total separator */}
+                                        <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginBottom: 12 }} />
+
+                                        {/* TOTAL */}
+                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                                            <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>Итого</Text>
+                                            <Text style={{ fontSize: 22, fontWeight: '800', color: '#FFB84F' }}>
+                                                {formatAmount(forecastData.projectedDaily + forecastData.recurringTotal, currency)}
+                                            </Text>
+                                        </View>
+
                                         <View style={{ flexDirection: 'row', gap: 10 }}>
                                             <View style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: 10 }}>
                                                 <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', marginBottom: 4, textTransform: 'uppercase' }}>Осталось</Text>
@@ -2884,17 +3188,67 @@ export default function AnalyticsScreen() {
                                         <Card>
                                             <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 4 }}>Факт vs Прогноз</Text>
                                             <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 14 }}>{forecastData.chartSubtitle}</Text>
-                                            <ForecastBarChart data={forecastData.chart} currency={currency} />
+                                            <ForecastLineChart data={forecastData.chart} selectedIndex={chartSelectedIdx} onSelect={handleChartSelect} currency={currency} />
                                             <View style={{ flexDirection: 'row', gap: 14, marginTop: 8 }}>
                                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                                    <View style={{ width: 12, height: 8, borderRadius: 2, backgroundColor: '#7C6FFF' }} />
+                                                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#7C6FFF' }} />
                                                     <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Факт</Text>
                                                 </View>
                                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                                    <View style={{ width: 12, height: 8, borderRadius: 2, backgroundColor: 'rgba(124,111,255,0.15)', borderWidth: 1, borderColor: 'rgba(124,111,255,0.5)', borderStyle: 'dashed' }} />
+                                                    <View style={{ width: 16, height: 0, borderTopWidth: 2, borderColor: 'rgba(124,111,255,0.5)', borderStyle: 'dashed' }} />
                                                     <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Прогноз</Text>
                                                 </View>
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#E24B4A' }} />
+                                                    <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Платёж</Text>
+                                                </View>
                                             </View>
+
+                                            {/* Inline day detail */}
+                                            {chartSelectedIdx !== null && (
+                                                <View style={{ marginTop: 14 }}>
+                                                    {/* Date header with lines */}
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                                                        <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.1)' }} />
+                                                        <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
+                                                            {dayDetailDate ? format(new Date(dayDetailDate), 'd MMMM yyyy', { locale: ru }) : ''}
+                                                            {!dayDetailIsFact ? ' · прогноз' : ''}
+                                                        </Text>
+                                                        <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.1)' }} />
+                                                    </View>
+
+                                                    {dayDetailLoading ? (
+                                                        <ActivityIndicator color="#7C6FFF" style={{ marginVertical: 12 }} />
+                                                    ) : dayDetailItems.length === 0 ? (
+                                                        <Text style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginVertical: 8, fontSize: 12 }}>Нет данных</Text>
+                                                    ) : (
+                                                        <>
+                                                            {dayDetailItems.map((item, idx) => (
+                                                                <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: idx < dayDetailItems.length - 1 ? 1 : 0, borderBottomColor: 'rgba(255,255,255,0.06)' }}>
+                                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                                                                        {item.icon.length <= 2 ? (
+                                                                            <Text style={{ fontSize: 16 }}>{item.icon}</Text>
+                                                                        ) : (
+                                                                            <CategoryIcon iconName={item.icon} color={item.color} size={16} />
+                                                                        )}
+                                                                        <Text style={{ fontSize: 12, color: item.isScheduled && dayDetailIsFact ? '#E24B4A' : '#fff', flex: 1 }} numberOfLines={1}>
+                                                                            {item.name}{item.isScheduled ? (dayDetailIsFact ? ' · не оплачен' : ' (запланирован)') : ''}
+                                                                        </Text>
+                                                                    </View>
+                                                                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#FF6B6B' }}>−{formatAmount(item.amount, currency)}</Text>
+                                                                </View>
+                                                            ))}
+
+                                                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)' }}>
+                                                                <Text style={{ fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
+                                                                    {dayDetailIsFact ? 'Итого за день:' : 'Прогноз на день:'}
+                                                                </Text>
+                                                                <Text style={{ fontSize: 13, fontWeight: '700', color: '#FF6B6B' }}>−{formatAmount(dayDetailTotal, currency)}</Text>
+                                                            </View>
+                                                        </>
+                                                    )}
+                                                </View>
+                                            )}
                                         </Card>
                                     )}
 
@@ -3448,11 +3802,7 @@ export default function AnalyticsScreen() {
             </ScrollView>
 
             {/* ══ LOAN DETAIL BOTTOM SHEET ═══════════════════════════════════ */}
-            <Modal visible={!!selectedLoan} animationType="slide" transparent onRequestClose={() => setSelectedLoan(null)}>
-                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-                    <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setSelectedLoan(null)} />
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, maxHeight: '85%' }}>
-                        <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginBottom: 16 }} />
+            <BaseBottomSheet visible={!!selectedLoan} onClose={() => setSelectedLoan(null)} maxHeight="85%">
                         {selectedLoan && (() => {
                             const loan = selectedLoan;
                             const remaining = loan.totalAmount - loan.paidAmount;
@@ -3573,16 +3923,10 @@ export default function AnalyticsScreen() {
                                 </ScrollView>
                             );
                         })()}
-                    </View>
-                </KeyboardAvoidingView>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ══ ADD/EDIT LOAN MODAL ═══════════════════════════════════════ */}
-            <Modal visible={showAddLoan} animationType="slide" transparent onRequestClose={closeLoanModal}>
-                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-                    <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={closeLoanModal} />
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, maxHeight: '92%' }}>
-                        <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginBottom: 16 }} />
+            <BaseBottomSheet visible={showAddLoan} onClose={closeLoanModal} maxHeight="92%">
 
                         {/* Header */}
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 }}>
@@ -3973,17 +4317,10 @@ export default function AnalyticsScreen() {
                                 />
                             </View>
                         </Modal>
-                    </View>
-                </KeyboardAvoidingView>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ══ ADD GOAL MODAL ════════════════════════════════════════════ */}
-            <Modal visible={showAddGoal} animationType="slide" transparent onRequestClose={closeGoalModal}>
-                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-                    <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={closeGoalModal} />
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, maxHeight: '92%' }}>
-                        {/* Handle */}
-                        <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginBottom: 16 }} />
+            <BaseBottomSheet visible={showAddGoal} onClose={closeGoalModal} maxHeight="92%">
 
                         {/* Header with preview */}
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 }}>
@@ -4007,7 +4344,17 @@ export default function AnalyticsScreen() {
 
                         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
-                            {/* ── Иконка + цвет в одной строке ── */}
+                            {/* ── 1. Название ── */}
+                            <Text style={labelStyle}>Название цели</Text>
+                            <TextInput
+                                value={goalName}
+                                onChangeText={setGoalName}
+                                placeholder="Например, Отпуск в Испании"
+                                placeholderTextColor="rgba(255,255,255,0.2)"
+                                style={inputStyle}
+                            />
+
+                            {/* ── 2. Иконка + Цвет в одну строку ── */}
                             <View style={{ flexDirection: 'row', gap: 16, marginBottom: 20 }}>
                                 <View style={{ flex: 1 }}>
                                     <Text style={labelStyle}>Иконка</Text>
@@ -4026,36 +4373,26 @@ export default function AnalyticsScreen() {
                                         </View>
                                     </ScrollView>
                                 </View>
+                                <View>
+                                    <Text style={labelStyle}>Цвет</Text>
+                                    <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', maxWidth: 140 }}>
+                                        {['#7C6FFF','#4FFFB0','#FFB84F','#FF6B6B','#4FC3FF','#F472B6','#34D399','#FB923C'].map(c => (
+                                            <TouchableOpacity key={c} onPress={() => setGoalColor(c)} style={{
+                                                width: 28, height: 28, borderRadius: 14,
+                                                backgroundColor: c,
+                                                borderWidth: goalColor === c ? 3 : 1.5,
+                                                borderColor: goalColor === c ? '#fff' : 'transparent',
+                                                alignItems: 'center', justifyContent: 'center',
+                                            }}>
+                                                {goalColor === c && <Text style={{ fontSize: 12 }}>✓</Text>}
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
                             </View>
 
-                            {/* ── Цвет ── */}
-                            <Text style={labelStyle}>Цвет</Text>
-                            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                                {['#7C6FFF','#4FFFB0','#FFB84F','#FF6B6B','#4FC3FF','#F472B6','#34D399','#FB923C'].map(c => (
-                                    <TouchableOpacity key={c} onPress={() => setGoalColor(c)} style={{
-                                        width: 32, height: 32, borderRadius: 16,
-                                        backgroundColor: c,
-                                        borderWidth: goalColor === c ? 3 : 1.5,
-                                        borderColor: goalColor === c ? '#fff' : 'transparent',
-                                        alignItems: 'center', justifyContent: 'center',
-                                    }}>
-                                        {goalColor === c && <Text style={{ fontSize: 14 }}>✓</Text>}
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-
-                            {/* ── Название ── */}
-                            <Text style={labelStyle}>Название цели</Text>
-                            <TextInput
-                                value={goalName}
-                                onChangeText={setGoalName}
-                                placeholder="Например, Отпуск в Испании"
-                                placeholderTextColor="rgba(255,255,255,0.2)"
-                                style={inputStyle}
-                            />
-
-                            {/* ── Сумма + валюта ── */}
-                            <Text style={labelStyle}>Сумма цели</Text>
+                            {/* ── 3. Сумма + валюта ── */}
+                            <Text style={labelStyle}>Целевая сумма</Text>
                             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
                                 <TextInput
                                     value={goalTarget}
@@ -4147,71 +4484,8 @@ export default function AnalyticsScreen() {
                                 </View>
                             </Modal>
 
-                            {/* ── Дата цели ── */}
-                            <Text style={labelStyle}>Дата цели <Text style={{ textTransform: 'none', fontWeight: '400', color: 'rgba(255,255,255,0.25)' }}>(необязательно)</Text></Text>
-                            <TouchableOpacity
-                                onPress={() => setShowGoalDatePicker(true)}
-                                style={{
-                                    borderRadius: 14,
-                                    backgroundColor: 'rgba(255,255,255,0.06)',
-                                    borderWidth: 1.5,
-                                    borderColor: goalDateObj ? 'rgba(124,111,255,0.4)' : 'transparent',
-                                    marginBottom: 16,
-                                    overflow: 'hidden',
-                                }}
-                            >
-                                {goalDateObj ? (
-                                    <View style={{ flexDirection: 'row', alignItems: 'stretch' }}>
-                                        {/* Day block */}
-                                        <View style={{ backgroundColor: 'rgba(124,111,255,0.15)', paddingHorizontal: 16, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', minWidth: 62 }}>
-                                            <Text style={{ color: '#a78bfa', fontSize: 26, fontWeight: '700', lineHeight: 30 }}>
-                                                {format(goalDateObj, 'd')}
-                                            </Text>
-                                        </View>
-                                        {/* Month + Year */}
-                                        <View style={{ flex: 1, paddingHorizontal: 14, paddingVertical: 12, justifyContent: 'center' }}>
-                                            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', textTransform: 'capitalize' }}>
-                                                {format(goalDateObj, 'LLLL', { locale: ru })}
-                                            </Text>
-                                            <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '600', marginTop: 2 }}>
-                                                {format(goalDateObj, 'yyyy')} г.
-                                            </Text>
-                                        </View>
-                                        {/* Clear button */}
-                                        <TouchableOpacity
-                                            onPress={() => setGoalDateObj(null)}
-                                            style={{ paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' }}
-                                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                        >
-                                            <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 18 }}>✕</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                ) : (
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10 }}>
-                                        <Text style={{ fontSize: 20 }}>📅</Text>
-                                        <Text style={{ color: 'rgba(255,255,255,0.25)', fontSize: 15 }}>Нажмите чтобы выбрать</Text>
-                                    </View>
-                                )}
-                            </TouchableOpacity>
-                            {showGoalDatePicker && (
-                                <View style={{ borderRadius: 14, overflow: 'hidden', marginBottom: 12, backgroundColor: '#1c2438' }}>
-                                    <DateTimePicker
-                                        mode="date"
-                                        display="inline"
-                                        value={goalDateObj ?? new Date()}
-                                        minimumDate={new Date()}
-                                        onChange={(_, date) => {
-                                            if (date) setGoalDateObj(date);
-                                            if (Platform.OS === 'android') setShowGoalDatePicker(false);
-                                        }}
-                                        accentColor="#7C6FFF"
-                                        themeVariant="dark"
-                                    />
-                                </View>
-                            )}
-
-                            {/* ── Счёт накоплений ── */}
-                            <Text style={labelStyle}>Счёт накоплений</Text>
+                            {/* ── 4. Списывать со счёта ── */}
+                            <Text style={labelStyle}>Списывать со счёта</Text>
                             {accounts.length === 0 ? (
                                 <View style={{ backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: 14, marginBottom: 16 }}>
                                     <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Нет счетов. Создайте счёт в разделе «Счета».</Text>
@@ -4254,6 +4528,81 @@ export default function AnalyticsScreen() {
                                 </View>
                             )}
 
+                            {/* ── 5. Начальный взнос (только при создании) ── */}
+                            {!editingGoal && (
+                                <>
+                                    <Text style={labelStyle}>Начальный взнос <Text style={{ textTransform: 'none', fontWeight: '400', color: 'rgba(255,255,255,0.25)' }}>(необязательно)</Text></Text>
+                                    <TextInput
+                                        value={goalInitialDeposit}
+                                        onChangeText={v => setGoalInitialDeposit(v.replace(/[^0-9.,]/g, ''))}
+                                        placeholder="0.00"
+                                        placeholderTextColor="rgba(255,255,255,0.2)"
+                                        keyboardType="decimal-pad"
+                                        style={inputStyle}
+                                    />
+                                </>
+                            )}
+
+                            {/* ── 6. Дата достижения ── */}
+                            <Text style={labelStyle}>Дата достижения <Text style={{ textTransform: 'none', fontWeight: '400', color: 'rgba(255,255,255,0.25)' }}>(необязательно)</Text></Text>
+                            <TouchableOpacity
+                                onPress={() => setShowGoalDatePicker(true)}
+                                style={{
+                                    borderRadius: 14,
+                                    backgroundColor: 'rgba(255,255,255,0.06)',
+                                    borderWidth: 1.5,
+                                    borderColor: goalDateObj ? 'rgba(124,111,255,0.4)' : 'transparent',
+                                    marginBottom: 16,
+                                    overflow: 'hidden',
+                                }}
+                            >
+                                {goalDateObj ? (
+                                    <View style={{ flexDirection: 'row', alignItems: 'stretch' }}>
+                                        <View style={{ backgroundColor: 'rgba(124,111,255,0.15)', paddingHorizontal: 16, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', minWidth: 62 }}>
+                                            <Text style={{ color: '#a78bfa', fontSize: 26, fontWeight: '700', lineHeight: 30 }}>
+                                                {format(goalDateObj, 'd')}
+                                            </Text>
+                                        </View>
+                                        <View style={{ flex: 1, paddingHorizontal: 14, paddingVertical: 12, justifyContent: 'center' }}>
+                                            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', textTransform: 'capitalize' }}>
+                                                {format(goalDateObj, 'LLLL', { locale: ru })}
+                                            </Text>
+                                            <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '600', marginTop: 2 }}>
+                                                {format(goalDateObj, 'yyyy')} г.
+                                            </Text>
+                                        </View>
+                                        <TouchableOpacity
+                                            onPress={() => setGoalDateObj(null)}
+                                            style={{ paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' }}
+                                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                        >
+                                            <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 18 }}>✕</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                ) : (
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10 }}>
+                                        <Text style={{ fontSize: 20 }}>📅</Text>
+                                        <Text style={{ color: 'rgba(255,255,255,0.25)', fontSize: 15 }}>Нажмите чтобы выбрать</Text>
+                                    </View>
+                                )}
+                            </TouchableOpacity>
+                            {showGoalDatePicker && (
+                                <View style={{ borderRadius: 14, overflow: 'hidden', marginBottom: 12, backgroundColor: '#1c2438' }}>
+                                    <DateTimePicker
+                                        mode="date"
+                                        display="inline"
+                                        value={goalDateObj ?? new Date()}
+                                        minimumDate={new Date()}
+                                        onChange={(_, date) => {
+                                            if (date) setGoalDateObj(date);
+                                            if (Platform.OS === 'android') setShowGoalDatePicker(false);
+                                        }}
+                                        accentColor="#7C6FFF"
+                                        themeVariant="dark"
+                                    />
+                                </View>
+                            )}
+
                             {/* ── Кнопки ── */}
                             <View style={{ flexDirection: 'row', gap: 12 }}>
                                 <TouchableOpacity onPress={closeGoalModal} style={{
@@ -4279,16 +4628,10 @@ export default function AnalyticsScreen() {
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
-                    </View>
-                </KeyboardAvoidingView>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ══ GOAL DETAIL BOTTOM SHEET ═════════════════════════════════ */}
-            <Modal visible={!!selectedGoal} animationType="slide" transparent onRequestClose={closeGoalDetail}>
-                <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' }} activeOpacity={1} onPress={closeGoalDetail} />
-                <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, maxHeight: '92%' }}>
-                    <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginBottom: 16 }} />
-
+            <BaseBottomSheet visible={!!selectedGoal} onClose={closeGoalDetail} maxHeight="92%">
                     {selectedGoal && (() => {
                         const g = selectedGoal;
                         const ratio = g.target > 0 ? Math.min(g.saved / g.target, 1) : 0;
@@ -4479,37 +4822,130 @@ export default function AnalyticsScreen() {
                                     </View>
                                 )}
 
-                                {/* Finish goal */}
-                                {!showArchiveGoal ? (
-                                    <TouchableOpacity onPress={() => setShowArchiveGoal(true)} style={{
+                                {/* Delete goal */}
+                                {!showDeleteGoal ? (
+                                    <TouchableOpacity onPress={openDeleteGoal} style={{
                                         paddingVertical: 14, borderRadius: 14, alignItems: 'center',
                                         backgroundColor: 'rgba(239,68,68,0.07)',
                                         borderWidth: 1, borderColor: 'rgba(239,68,68,0.18)',
                                     }}>
-                                        <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '600' }}>Завершить цель</Text>
+                                        <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '600' }}>Удалить цель</Text>
                                     </TouchableOpacity>
                                 ) : (
                                     <View style={{ backgroundColor: 'rgba(239,68,68,0.05)', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(239,68,68,0.15)' }}>
-                                        <Text style={{ fontSize: 15, fontWeight: '700', color: '#fff', textAlign: 'center', marginBottom: 6 }}>
-                                            Завершить цель «{g.name}»?
+                                        <Text style={{ fontSize: 15, fontWeight: '700', color: '#fff', textAlign: 'center', marginBottom: 4 }}>
+                                            Удалить цель «{g.name}»?
                                         </Text>
-                                        <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginBottom: 14 }}>
-                                            Накопленные средства останутся на счету.
-                                        </Text>
+                                        {g.saved > 0 && (
+                                            <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginBottom: 12 }}>
+                                                На счету цели: {formatAmount(g.saved, g.currency)}
+                                            </Text>
+                                        )}
+
+                                        {g.saved > 0 && (
+                                            <>
+                                                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', fontWeight: '600', marginBottom: 10 }}>
+                                                    Куда перевести средства?
+                                                </Text>
+
+                                                {/* Option: to account */}
+                                                <TouchableOpacity onPress={() => setDeleteTransferMode('account')} style={{
+                                                    flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 12,
+                                                    borderRadius: 12, marginBottom: 6,
+                                                    backgroundColor: deleteTransferMode === 'account' ? 'rgba(124,111,255,0.12)' : 'rgba(255,255,255,0.04)',
+                                                    borderWidth: 1.5,
+                                                    borderColor: deleteTransferMode === 'account' ? '#7C6FFF' : 'transparent',
+                                                }}>
+                                                    <View style={{ width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: deleteTransferMode === 'account' ? '#7C6FFF' : 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
+                                                        {deleteTransferMode === 'account' && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#7C6FFF' }} />}
+                                                    </View>
+                                                    <Text style={{ color: '#fff', fontSize: 14, flex: 1 }}>На счёт</Text>
+                                                </TouchableOpacity>
+                                                {deleteTransferMode === 'account' && (
+                                                    <View style={{ marginLeft: 28, marginBottom: 8, gap: 4 }}>
+                                                        {accounts.map(acc => (
+                                                            <TouchableOpacity key={acc.id} onPress={() => setDeleteTransferAccountId(acc.id)} style={{
+                                                                flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, paddingHorizontal: 10,
+                                                                borderRadius: 10,
+                                                                backgroundColor: deleteTransferAccountId === acc.id ? 'rgba(124,111,255,0.1)' : 'transparent',
+                                                            }}>
+                                                                <Text style={{ fontSize: 16 }}>{acc.icon ?? '🏦'}</Text>
+                                                                <Text style={{ color: deleteTransferAccountId === acc.id ? '#a78bfa' : 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: deleteTransferAccountId === acc.id ? '600' : '400' }}>
+                                                                    {acc.name}
+                                                                </Text>
+                                                                {deleteTransferAccountId === acc.id && <Text style={{ color: '#7C6FFF', fontSize: 12, marginLeft: 'auto' }}>✓</Text>}
+                                                            </TouchableOpacity>
+                                                        ))}
+                                                    </View>
+                                                )}
+
+                                                {/* Option: to another goal */}
+                                                {goalsState.filter(og => og.id !== g.id).length > 0 && (
+                                                    <>
+                                                        <TouchableOpacity onPress={() => setDeleteTransferMode('goal')} style={{
+                                                            flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 12,
+                                                            borderRadius: 12, marginBottom: 6,
+                                                            backgroundColor: deleteTransferMode === 'goal' ? 'rgba(124,111,255,0.12)' : 'rgba(255,255,255,0.04)',
+                                                            borderWidth: 1.5,
+                                                            borderColor: deleteTransferMode === 'goal' ? '#7C6FFF' : 'transparent',
+                                                        }}>
+                                                            <View style={{ width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: deleteTransferMode === 'goal' ? '#7C6FFF' : 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
+                                                                {deleteTransferMode === 'goal' && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#7C6FFF' }} />}
+                                                            </View>
+                                                            <Text style={{ color: '#fff', fontSize: 14, flex: 1 }}>На другую цель</Text>
+                                                        </TouchableOpacity>
+                                                        {deleteTransferMode === 'goal' && (
+                                                            <View style={{ marginLeft: 28, marginBottom: 8, gap: 4 }}>
+                                                                {goalsState.filter(og => og.id !== g.id).map(og => (
+                                                                    <TouchableOpacity key={og.id} onPress={() => setDeleteTransferGoalId(og.id)} style={{
+                                                                        flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, paddingHorizontal: 10,
+                                                                        borderRadius: 10,
+                                                                        backgroundColor: deleteTransferGoalId === og.id ? 'rgba(124,111,255,0.1)' : 'transparent',
+                                                                    }}>
+                                                                        <Text style={{ fontSize: 16 }}>{og.icon}</Text>
+                                                                        <Text style={{ color: deleteTransferGoalId === og.id ? '#a78bfa' : 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: deleteTransferGoalId === og.id ? '600' : '400' }}>
+                                                                            {og.name}
+                                                                        </Text>
+                                                                        {deleteTransferGoalId === og.id && <Text style={{ color: '#7C6FFF', fontSize: 12, marginLeft: 'auto' }}>✓</Text>}
+                                                                    </TouchableOpacity>
+                                                                ))}
+                                                            </View>
+                                                        )}
+                                                    </>
+                                                )}
+
+                                                {/* Option: don't transfer */}
+                                                <TouchableOpacity onPress={() => setDeleteTransferMode('none')} style={{
+                                                    flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 12,
+                                                    borderRadius: 12, marginBottom: 14,
+                                                    backgroundColor: deleteTransferMode === 'none' ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.04)',
+                                                    borderWidth: 1.5,
+                                                    borderColor: deleteTransferMode === 'none' ? '#ef4444' : 'transparent',
+                                                }}>
+                                                    <View style={{ width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: deleteTransferMode === 'none' ? '#ef4444' : 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
+                                                        {deleteTransferMode === 'none' && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#ef4444' }} />}
+                                                    </View>
+                                                    <Text style={{ color: deleteTransferMode === 'none' ? '#ef4444' : 'rgba(255,255,255,0.5)', fontSize: 14, flex: 1 }}>Не переводить (просто удалить)</Text>
+                                                </TouchableOpacity>
+                                            </>
+                                        )}
+
                                         <View style={{ flexDirection: 'row', gap: 10 }}>
-                                            <TouchableOpacity onPress={() => setShowArchiveGoal(false)} style={{
+                                            <TouchableOpacity onPress={() => setShowDeleteGoal(false)} style={{
                                                 flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center',
                                                 backgroundColor: 'rgba(255,255,255,0.06)',
                                             }}>
                                                 <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, fontWeight: '600' }}>Отмена</Text>
                                             </TouchableOpacity>
-                                            <TouchableOpacity onPress={confirmArchiveGoal} disabled={archivingGoal} style={{
+                                            <TouchableOpacity onPress={confirmDeleteGoal} disabled={deletingGoal} style={{
                                                 flex: 2, paddingVertical: 12, borderRadius: 12, alignItems: 'center',
-                                                backgroundColor: '#ef4444', opacity: archivingGoal ? 0.5 : 1,
+                                                backgroundColor: '#ef4444', opacity: deletingGoal ? 0.5 : 1,
                                             }}>
-                                                {archivingGoal
+                                                {deletingGoal
                                                     ? <ActivityIndicator color="#fff" />
-                                                    : <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>Завершить</Text>
+                                                    : <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>
+                                                        {g.saved > 0 && deleteTransferMode !== 'none' ? 'Удалить и перевести' : 'Удалить'}
+                                                    </Text>
                                                 }
                                             </TouchableOpacity>
                                         </View>
@@ -4520,15 +4956,10 @@ export default function AnalyticsScreen() {
                             </ScrollView>
                         );
                     })()}
-                </View>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ══ ADD/EDIT DEPOSIT MODAL ═══════════════════════════════════ */}
-            <Modal visible={showAddDeposit} animationType="slide" transparent onRequestClose={closeDepositModal}>
-                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-                    <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={closeDepositModal} />
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, maxHeight: '92%' }}>
-                        <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginBottom: 16 }} />
+            <BaseBottomSheet visible={showAddDeposit} onClose={closeDepositModal} maxHeight="92%">
 
                         {/* Header with preview */}
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 }}>
@@ -4973,18 +5404,11 @@ export default function AnalyticsScreen() {
                                 <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{savingDeposit ? 'Сохранение…' : 'Сохранить'}</Text>
                             </TouchableOpacity>
                         </ScrollView>
-                    </View>
-                </KeyboardAvoidingView>
-            </Modal>
+            </BaseBottomSheet>
 
 
             {/* ══ EXTRAS CONFIG MODAL ═════════════════════════════════════ */}
-            <Modal visible={showExtrasModal} animationType="slide" transparent onRequestClose={() => setShowExtrasModal(false)}>
-                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-                    <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowExtrasModal(false)} />
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, maxHeight: '80%' }}>
-                        {/* Handle */}
-                        <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginBottom: 16 }} />
+            <BaseBottomSheet visible={showExtrasModal} onClose={() => setShowExtrasModal(false)} maxHeight="80%" scrollable={false}>
                         <Text style={{ fontSize: 18, fontWeight: '700', color: '#fff', marginBottom: 6 }}>Экстра-категории</Text>
                         <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 16 }}>
                             Отметь категории где есть{'\n'}пространство для экономии
@@ -5133,9 +5557,8 @@ export default function AnalyticsScreen() {
                                 {savingExtras ? 'Сохранение…' : 'Сохранить'}
                             </Text>
                         </TouchableOpacity>
-                    </View>
-                </KeyboardAvoidingView>
-            </Modal>
+            </BaseBottomSheet>
+
         </View>
     );
 }

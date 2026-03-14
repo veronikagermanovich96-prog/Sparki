@@ -34,10 +34,6 @@ import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
     ScrollView,
     Switch,
     Text,
@@ -45,6 +41,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { BaseBottomSheet } from '@/components/ui/BaseBottomSheet';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -441,15 +438,7 @@ export default function AccountDetailScreen() {
             {/* ════════════════════════════════════════
                 Edit bottom sheet
             ════════════════════════════════════════ */}
-            <Modal
-                visible={showEditSheet}
-                transparent
-                animationType="slide"
-                onRequestClose={() => setShowEditSheet(false)}
-            >
-                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-                    <Pressable style={{ flex: 1 }} onPress={() => setShowEditSheet(false)} />
-                    <View style={sheetStyle}>
+            <BaseBottomSheet visible={showEditSheet} onClose={() => setShowEditSheet(false)} maxHeight="92%">
                         <SheetHandle />
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
                             <Text style={titleStyle}>Редактировать счёт</Text>
@@ -458,7 +447,6 @@ export default function AccountDetailScreen() {
                             </TouchableOpacity>
                         </View>
 
-                        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                             <Label>Название</Label>
                             <TextInput
                                 style={inputStyle}
@@ -560,22 +548,12 @@ export default function AccountDetailScreen() {
                                 disabled={editSaving || !editName.trim()}
                             />
                             <DangerButton label="Удалить счёт" onPress={confirmDelete} />
-                        </ScrollView>
-                    </View>
-                </KeyboardAvoidingView>
-            </Modal>
+            </BaseBottomSheet>
 
             {/* ════════════════════════════════════════
                 Transfer-on-delete sheet
             ════════════════════════════════════════ */}
-            <Modal
-                visible={showTransferDeleteSheet}
-                transparent
-                animationType="slide"
-                onRequestClose={() => setShowTransferDeleteSheet(false)}
-            >
-                <Pressable style={{ flex: 1 }} onPress={() => setShowTransferDeleteSheet(false)} />
-                <View style={sheetStyle}>
+            <BaseBottomSheet visible={showTransferDeleteSheet} onClose={() => setShowTransferDeleteSheet(false)} scrollable={false}>
                     <SheetHandle />
                     <Text style={[titleStyle, { marginBottom: 6 }]}>Что сделать с историей?</Text>
                     <Text style={{ color: '#6b7280', fontSize: 14, marginBottom: 20 }}>
@@ -622,8 +600,7 @@ export default function AccountDetailScreen() {
                     >
                         <Text style={{ color: '#6b7280' }}>Назад</Text>
                     </TouchableOpacity>
-                </View>
-            </Modal>
+            </BaseBottomSheet>
         </View>
     );
 }
@@ -663,16 +640,6 @@ function DangerButton({ label, onPress }: { label: string; onPress: () => void }
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-
-const sheetStyle = {
-    backgroundColor: '#111827',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 40,
-    maxHeight: '92%',
-} as const;
 
 const titleStyle = {
     color: '#fff',
