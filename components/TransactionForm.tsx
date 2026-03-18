@@ -492,7 +492,7 @@ export default function TransactionForm({
             icon:         catIcon,
             color:        catColor,
             type:         formType === 'transfer' ? 'expense' : formType,
-            expense_type: formType === 'expense' ? (catExpType || 'operational') : null,
+            expense_type: formType === 'expense' ? (catExpType || 'everyday') : null,
             is_system:    false,
             is_hidden:    false,
         }).select().single();
@@ -663,10 +663,12 @@ export default function TransactionForm({
                                         <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 10 }}>ТИП РАСХОДА</Text>
                                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
                                             {([
-                                                { value: 'infrastructure', label: '🏠 Базовые',      desc: 'Жильё, ЖКУ, связь' },
-                                                { value: 'operational',    label: '🛒 Повседневные',  desc: 'Еда, транспорт' },
-                                                { value: 'investment',     label: '📈 Развитие',      desc: 'Здоровье, образование' },
-                                                { value: 'discretionary',  label: '🎉 Для себя',     desc: 'Развлечения, хобби' },
+                                                { value: 'base',        label: '🏠 Базовые',      desc: 'Жильё, ЖКУ, связь, кредиты' },
+                                                { value: 'everyday',    label: '🛒 Повседневные',  desc: 'Еда, транспорт, бытовые' },
+                                                { value: 'development', label: '📈 Развитие',      desc: 'Здоровье, образование, спорт' },
+                                                { value: 'forself',     label: '🎉 Для себя',     desc: 'Развлечения, хобби, подарки' },
+                                                { value: 'work',        label: '💼 Рабочие',      desc: 'Инструменты, офис' },
+                                                { value: 'other',       label: '📋 Прочее',       desc: 'Штрафы, налоги' },
                                             ]).map(opt => (
                                                 <TouchableOpacity key={opt.value} onPress={() => setCatExpType(opt.value as any)} activeOpacity={0.8}
                                                     style={{ width: '48%', padding: 10, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', borderColor: catExpType === opt.value ? '#2563eb' : '#374151', backgroundColor: catExpType === opt.value ? '#172554' : '#1f2937' }}>

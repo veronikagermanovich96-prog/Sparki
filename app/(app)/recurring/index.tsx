@@ -51,10 +51,12 @@ const FREQ_SHORT: Record<Frequency, string> = {
 };
 
 const EXPENSE_TYPE_LABELS: Record<ExpenseType, string> = {
-    infrastructure: 'Инфраструктурный',
-    operational:    'Операционный',
-    investment:     'Инвестиционный',
-    discretionary:  'Дискреционный',
+    base:        'Базовый',
+    everyday:    'Повседневный',
+    development: 'Развитие',
+    forself:     'Для себя',
+    work:        'Рабочий',
+    other:       'Прочее',
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -125,7 +127,7 @@ export default function RecurringScreen() {
     const [editing,     setEditing]     = useState<RecurringRow | null>(null);
     const [fName,       setFName]       = useState('');
     const [fType,       setFType]       = useState<'income' | 'expense'>('expense');
-    const [fExpType,    setFExpType]    = useState<ExpenseType>('operational');
+    const [fExpType,    setFExpType]    = useState<ExpenseType>('everyday');
     const [fAmount,     setFAmount]     = useState('');
     const [fFreq,       setFFreq]       = useState<Frequency>('monthly');
     const [fNextDate,   setFNextDate]   = useState('');
@@ -198,7 +200,7 @@ export default function RecurringScreen() {
 
     function openAdd() {
         setEditing(null);
-        setFName(''); setFType('expense'); setFExpType('operational');
+        setFName(''); setFType('expense'); setFExpType('everyday');
         setFAmount(''); setFFreq('monthly');
         setFNextDate(format(new Date(), 'yyyy-MM-dd'));
         setFNotify(3);
@@ -211,7 +213,7 @@ export default function RecurringScreen() {
         setEditing(item);
         setFName(item.name);
         setFType(item.type);
-        setFExpType(item.expense_type ?? 'operational');
+        setFExpType(item.expense_type ?? 'everyday');
         setFAmount(String(item.amount));
         setFFreq(item.frequency);
         setFNextDate(item.next_date);
@@ -239,7 +241,7 @@ export default function RecurringScreen() {
             category_id:        fCategoryId || null,
             name:               fName.trim(),
             type:               fType,
-            expense_type:       fType === 'expense' ? (categories.find(c => c.id === fCategoryId)?.expense_type ?? fExpType ?? 'operational') : null,
+            expense_type:       fType === 'expense' ? (categories.find(c => c.id === fCategoryId)?.expense_type ?? fExpType ?? 'everyday') : null,
             amount,
             currency:           acc?.currency ?? 'EUR',
             frequency:          fFreq,
@@ -329,7 +331,7 @@ export default function RecurringScreen() {
     // ── Derived ───────────────────────────────────────────────────────────────
 
     const monthlyInfra = items
-        .filter(r => r.is_active && r.type === 'expense' && r.expense_type === 'infrastructure')
+        .filter(r => r.is_active && r.type === 'expense' && r.expense_type === 'base')
         .reduce((sum, r) => {
             const toMonthly: Record<Frequency, number> = { daily: 30, weekly: 4.33, monthly: 1, yearly: 1 / 12 };
             return sum + r.amount * toMonthly[r.frequency];
@@ -344,7 +346,7 @@ export default function RecurringScreen() {
     });
     const expenseItems = items.filter(r => r.type === 'expense');
     const incomeItems  = items.filter(r => r.type === 'income');
-    const infraCurrency = items.find(r => r.expense_type === 'infrastructure')?.currency ?? 'EUR';
+    const infraCurrency = items.find(r => r.expense_type === 'base')?.currency ?? 'EUR';
 
     // ── Render helpers ────────────────────────────────────────────────────────
 
@@ -402,9 +404,9 @@ export default function RecurringScreen() {
                             <Text style={{ color: '#6b7280', fontSize: 12 }}>
                                 {FREQ_LABELS[item.frequency]} · {item.account_name}
                             </Text>
-                            {item.expense_type === 'infrastructure' && (
+                            {item.expense_type === 'base' && (
                                 <View style={{ backgroundColor: '#1e3a5f', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 }}>
-                                    <Text style={{ color: '#60a5fa', fontSize: 10, fontWeight: '600' }}>Инфра</Text>
+                                    <Text style={{ color: '#60a5fa', fontSize: 10, fontWeight: '600' }}>Базовый</Text>
                                 </View>
                             )}
                         </View>

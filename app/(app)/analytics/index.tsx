@@ -430,23 +430,36 @@ function BarChart({ data, currency }: { data: BarPoint[]; currency: string }) {
 
 function ForecastLineChart({ data, selectedIndex, onSelect, currency: cur }: { data: ForecastChartPoint[]; selectedIndex: number | null; onSelect: (i: number | null) => void; currency: string }) {
     const { width } = Dimensions.get('window');
-    const yAxisW = 40;
+    const sym = getCurrencySymbol(cur);
+
+    // Check for empty state
+    const allValues = data.flatMap(p => [p.factAmount, p.forecastAmount, p.paymentAmount]).filter(v => v > 0);
+    if (allValues.length === 0) {
+        return (
+            <View style={{ height: 100, alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Нет данных за этот период</Text>
+            </View>
+        );
+    }
+
+    // Y-axis: adaptive magnitude-based steps
+    const maxVal = Math.max(...allValues);
+    const yMax = Math.ceil(maxVal * 1.15) || 100;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(Math.max(yMax / 4, 1))));
+    const yStep = Math.ceil((yMax / 4) / magnitude) * magnitude || 1;
+    const niceMax = Math.ceil(yMax / yStep) * yStep;
+    const ySteps: number[] = [];
+    for (let v = 0; v <= niceMax; v += yStep) ySteps.push(v);
+
+    // Dynamic Y-axis width based on longest label
+    const longestLabel = `${sym}${niceMax.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}`;
+    const yAxisW = Math.max(32, longestLabel.length * 5.5 + 8);
     const W = width - 52;
     const chartW = W - yAxisW;
     const chartH = 120;
     const labelH = 20;
     const hasMonthLabels = data.some(p => p.monthLabel);
     const H = chartH + labelH + (hasMonthLabels ? 12 : 0);
-
-    // Y-axis: collect all non-zero values across all 3 datasets
-    const allValues = data.flatMap(p => [p.factAmount, p.forecastAmount, p.paymentAmount]).filter(v => v > 0);
-    const maxVal = allValues.length > 0 ? Math.max(...allValues) : 100;
-    const yMax = Math.ceil(maxVal * 1.15 / 100) * 100 || 100;
-    const yStep = Math.ceil(yMax / 4 / 50) * 50 || 50;
-    const niceMax = Math.ceil(yMax / yStep) * yStep;
-    const ySteps: number[] = [];
-    for (let v = 0; v <= niceMax; v += yStep) ySteps.push(v);
-    const sym = getCurrencySymbol(cur);
 
     const stepX = data.length > 1 ? chartW / (data.length - 1) : chartW / 2;
     const getX = (i: number) => yAxisW + (data.length > 1 ? i * stepX : chartW / 2);
@@ -478,7 +491,7 @@ function ForecastLineChart({ data, selectedIndex, onSelect, currency: cur }: { d
                     <G key={`y${v}`}>
                         <SvgLine x1={yAxisW} y1={gy} x2={W} y2={gy} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
                         <SvgText x={yAxisW - 4} y={gy + 3} textAnchor="end" fontSize={7} fill="rgba(255,255,255,0.25)">
-                            {sym}{v >= 1000 ? `${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}k` : String(v)}
+                            {sym}{v.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}
                         </SvgText>
                     </G>
                 );
@@ -1317,8 +1330,10 @@ export default function AnalyticsScreen() {
     // ── Forecast ────────────────────────────────────────────────────────────
     async function fetchForecast(hid: string) {
         setLoadingForecast(true);
+        // Use local timezone for today
         const now = new Date();
-        const today = startOfDay(now);
+        const localDateStr = now.toLocaleDateString('en-CA'); // yyyy-MM-dd in local TZ
+        const today = startOfDay(new Date(localDateStr + 'T00:00:00'));
         const { start: periodStart, end: periodEnd } = getForecastRange(forecastPeriod, customFrom, customTo);
 
         // 1) Avg daily spend from last 30 days (with category info for filtering)
@@ -1353,13 +1368,13 @@ export default function AnalyticsScreen() {
         type TxRow = { amount: number; amount_base: number | null; date: string; category_id: string | null };
         const allRows = (periodTxns ?? []) as unknown as TxRow[];
 
-        // Build set of "infrastructure" category IDs to exclude from daily avg
+        // Build set of "base" category IDs to exclude from daily avg
         const baseCatIds = new Set<string>();
         (catsRaw ?? []).forEach((c: any) => {
-            if (c.expense_type === 'infrastructure') baseCatIds.add(c.id as string);
+            if (c.expense_type === 'base') baseCatIds.add(c.id as string);
         });
 
-        // Avg daily from last 30 days — EXCLUDE infrastructure categories
+        // Avg daily from last 30 days — EXCLUDE base categories
         type Last30Row = { amount: number; amount_base: number | null; category_id: string | null };
         const last30Rows = (last30Txns ?? []) as unknown as Last30Row[];
         const filteredLast30 = last30Rows.filter(t =>
@@ -1405,7 +1420,7 @@ export default function AnalyticsScreen() {
         const projectedTotal = factSpend + projectedSpend + recurringTotal;
 
         // ── Chart buckets — always daily granularity ─────────────────────
-        // Split transactions: everyday vs base/infrastructure
+        // Split transactions: everyday vs base
         const everydayRows = allRows.filter(t =>
             !(t.category_id && baseCatIds.has(t.category_id))
         );
@@ -2129,7 +2144,7 @@ export default function AnalyticsScreen() {
                     name: 'Кредит',
                     icon: 'Landmark',
                     type: 'expense',
-                    expense_type: 'infrastructure',
+                    expense_type: 'base',
                 }).select('id').single();
                 creditCat = newCat;
             }
@@ -2151,7 +2166,7 @@ export default function AnalyticsScreen() {
                     category_id: creditCat.id,
                     name: `${loanName} · ${typeLabel}`,
                     type: 'expense',
-                    expense_type: 'infrastructure',
+                    expense_type: 'base',
                     amount: Math.round(monthlyPmt * 100) / 100,
                     currency: loanCurrency,
                     frequency: 'monthly',
@@ -2307,7 +2322,7 @@ export default function AnalyticsScreen() {
                 name: 'Кредит',
                 icon: 'Landmark',
                 type: 'expense',
-                expense_type: 'infrastructure',
+                expense_type: 'base',
             }).select('id').single();
             creditCat = newCat;
         }

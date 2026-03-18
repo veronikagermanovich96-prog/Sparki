@@ -21,10 +21,12 @@ import { Account, Budget, Category } from '@/types';
 
 const COLORS = ['#3b82f6', '#22c55e', '#a855f7', '#ef4444', '#f97316', '#eab308', '#14b8a6', '#ec4899'];
 const EXPENSE_TYPES = [
-    { value: 'infrastructure', label: '🏠 Базовые',      desc: 'Жильё, ЖКУ, связь' },
-    { value: 'operational',    label: '🛒 Повседневные',  desc: 'Еда, транспорт' },
-    { value: 'investment',     label: '📈 Развитие',      desc: 'Здоровье, образование' },
-    { value: 'discretionary',  label: '🎉 Для себя',     desc: 'Развлечения, хобби' },
+    { value: 'base',        label: '🏠 Базовые',      desc: 'Жильё, ЖКУ, связь, кредиты' },
+    { value: 'everyday',    label: '🛒 Повседневные',  desc: 'Еда, транспорт, бытовые' },
+    { value: 'development', label: '📈 Развитие',      desc: 'Здоровье, образование, спорт' },
+    { value: 'forself',     label: '🎉 Для себя',     desc: 'Развлечения, хобби, подарки' },
+    { value: 'work',        label: '💼 Рабочие',      desc: 'Инструменты, офис' },
+    { value: 'other',       label: '📋 Прочее',       desc: 'Штрафы, налоги' },
 ] as const;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -360,7 +362,7 @@ export default function SettingsScreen() {
         setEditCat(null);
         setEditCatName('');
         setEditCatColor('#3b82f6');
-        setEditCatExpType(catsTab === 'expense' ? 'operational' : null);
+        setEditCatExpType(catsTab === 'expense' ? 'everyday' : null);
         setCreatingCat(true);
     }
 

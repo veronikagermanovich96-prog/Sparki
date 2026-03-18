@@ -246,7 +246,7 @@ export default function Dashboard() {
                 .eq('type', 'income').gte('date', yearStart),
             supabase.from('budgets').select('amount').eq('household_id', member.household_id).eq('period', 'monthly'),
             supabase.from('recurring_payments').select('*')
-                .eq('household_id', member.household_id).eq('is_active', true).eq('expense_type', 'infrastructure'),
+                .eq('household_id', member.household_id).eq('is_active', true).eq('expense_type', 'base'),
             supabase.from('loans').select('*, loan_rate_periods(*)')
                 .eq('household_id', member.household_id).eq('is_active', true),
         ]);

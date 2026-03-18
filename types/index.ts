@@ -1,4 +1,4 @@
-export type ExpenseType = 'infrastructure' | 'operational' | 'investment' | 'discretionary';
+export type ExpenseType = 'base' | 'everyday' | 'development' | 'forself' | 'work' | 'other';
 export type TransactionType = 'income' | 'expense' | 'transfer';
 export type CategoryType = 'income' | 'expense';
 export type Frequency = 'daily' | 'weekly' | 'monthly' | 'yearly';

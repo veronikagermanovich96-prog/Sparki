@@ -95,7 +95,7 @@ type TagLight       = { id: string; name: string };
 
 type FilterType        = 'all' | 'income' | 'expense' | 'transfer';
 type FilterPeriod      = 'today' | 'yesterday' | 'week' | 'month' | 'year' | 'custom';
-type FilterExpenseType = 'all' | 'infrastructure' | 'operational' | 'investment' | 'discretionary';
+type FilterExpenseType = 'all' | 'base' | 'everyday' | 'development' | 'forself' | 'work' | 'other';
 function getPeriodRange(p: FilterPeriod, customFrom?: Date | null, customTo?: Date | null): { from: string | null; to: string | null } {
     const now = new Date();
     if (p === 'today')     return { from: format(startOfDay(now), 'yyyy-MM-dd'), to: format(endOfDay(now), 'yyyy-MM-dd') };
@@ -430,7 +430,7 @@ export default function TransactionsScreen() {
 
             {/* Row 2 — Фильтры button + sticky PeriodChip */}
             {(() => {
-                const expLabels: Record<FilterExpenseType, string> = { all: 'Тип расходов', infrastructure: 'Инфраструктурный', operational: 'Операционный', investment: 'Инвестиционный', discretionary: 'Дискреционный' };
+                const expLabels: Record<FilterExpenseType, string> = { all: 'Тип расходов', base: 'Базовые', everyday: 'Повседневные', development: 'Развитие', forself: 'Для себя', work: 'Рабочие', other: 'Прочее' };
                 const recLabels: Record<string, string> = { all: 'Рекуррентность', recurring: 'Рекуррентные', non_recurring: 'Разовые' };
                 const catName = filterCategoryId ? (categories.find(c => c.id === filterCategoryId)?.name ?? null) : null;
                 const tagName = filterTagId ? (filterSheetTags.find(t => t.id === filterTagId)?.name ?? null) : null;
@@ -655,11 +655,13 @@ export default function TransactionsScreen() {
                                             {secHeader('ТИП РАСХОДОВ')}
                                             <View style={{ gap: 2 }}>
                                                 {([
-                                                    { value: 'all' as const,            label: 'Все типы' },
-                                                    { value: 'operational' as const,    label: 'Операционные' },
-                                                    { value: 'infrastructure' as const, label: 'Инфраструктурные' },
-                                                    { value: 'investment' as const,     label: 'Инвестиционные' },
-                                                    { value: 'discretionary' as const,  label: 'Дискреционные' },
+                                                    { value: 'all' as const,         label: 'Все типы' },
+                                                    { value: 'base' as const,        label: 'Базовые' },
+                                                    { value: 'everyday' as const,    label: 'Повседневные' },
+                                                    { value: 'development' as const, label: 'Развитие' },
+                                                    { value: 'forself' as const,     label: 'Для себя' },
+                                                    { value: 'work' as const,        label: 'Рабочие' },
+                                                    { value: 'other' as const,       label: 'Прочее' },
                                                 ]).map(opt => {
                                                     const active = filterExpenseType === opt.value;
                                                     return (
@@ -793,11 +795,13 @@ export default function TransactionsScreen() {
                                 {activeSheet === 'expensetype' && (
                                     <View style={{ gap: 2 }}>
                                         {([
-                                            { value: 'all'            as const, label: 'Все типы',          sub: '' },
-                                            { value: 'operational'    as const, label: 'Операционные',      sub: 'Еда, транспорт, бытовые' },
-                                            { value: 'infrastructure' as const, label: 'Инфраструктурные',  sub: 'Аренда, ЖКХ, подписки' },
-                                            { value: 'investment'     as const, label: 'Инвестиционные',    sub: 'Курсы, здоровье, активы' },
-                                            { value: 'discretionary'  as const, label: 'Дискреционные',     sub: 'Развлечения, подарки' },
+                                            { value: 'all'         as const, label: 'Все типы',      sub: '' },
+                                            { value: 'base'        as const, label: 'Базовые',       sub: 'Жильё, ЖКУ, связь, кредиты' },
+                                            { value: 'everyday'    as const, label: 'Повседневные',  sub: 'Еда, транспорт, бытовые' },
+                                            { value: 'development' as const, label: 'Развитие',      sub: 'Курсы, здоровье, спорт' },
+                                            { value: 'forself'     as const, label: 'Для себя',      sub: 'Развлечения, хобби, подарки' },
+                                            { value: 'work'        as const, label: 'Рабочие',       sub: 'Инструменты, офис, командировки' },
+                                            { value: 'other'       as const, label: 'Прочее',        sub: 'Штрафы, налоги, прочее' },
                                         ]).map(opt => {
                                             const active = filterExpenseType === opt.value;
                                             return (
