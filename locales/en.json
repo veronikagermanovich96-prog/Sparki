@@ -337,6 +337,8 @@
     "forecastHalf": "Half-year",
     "forecastYear": "Year",
     "forecastCustom": "Custom",
+    "recurringPayment": "Recurring",
+    "loanPayment": "Loan",
     "forecastEndOfMonth": "FORECAST TO END OF MONTH",
     "forecastFor3Months": "FORECAST FOR 3 MONTHS",
     "from": "From",

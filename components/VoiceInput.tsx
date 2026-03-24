@@ -224,6 +224,21 @@ export default function VoiceInput({
                 await supabase.from('accounts')
                     .update({ balance: account.balance + delta })
                     .eq('id', accountId);
+
+                // Create recurring payment if detected
+                if (tx.isRecurring && tx.recurringFrequency) {
+                    await supabase.from('recurring_payments').insert({
+                        household_id: householdId,
+                        name: cat.name ?? tx.note,
+                        amount,
+                        currency: tx.currency || baseCurrency,
+                        account_id: accountId,
+                        category_id: cat.id,
+                        frequency: tx.recurringFrequency,
+                        next_date: tx.date,
+                        is_active: true,
+                    });
+                }
             }
 
             onSaved();
@@ -421,9 +436,20 @@ export default function VoiceInput({
 
                                         {/* Info */}
                                         <View style={{ flex: 1 }}>
-                                            <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600' }}>
-                                                {tx.category?.name ?? tx.note}
-                                            </Text>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600' }}>
+                                                    {tx.category?.name ?? tx.note}
+                                                </Text>
+                                                {tx.isRecurring && (
+                                                    <View style={{ backgroundColor: '#7C6FFF', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 }}>
+                                                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>
+                                                            {tx.recurringFrequency === 'monthly' ? '🔄 мес' :
+                                                             tx.recurringFrequency === 'weekly' ? '🔄 нед' :
+                                                             tx.recurringFrequency === 'daily' ? '🔄 дн' : '🔄 год'}
+                                                        </Text>
+                                                    </View>
+                                                )}
+                                            </View>
                                             {tx.note ? (
                                                 <Text style={{ color: colors.textMuted, fontSize: 12 }} numberOfLines={1}>
                                                     {tx.note}

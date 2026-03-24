@@ -194,6 +194,27 @@ export default function TransactionForm({
     const [localCategories, setLocalCategories] = useState<CategoryLight[]>(categories);
     useEffect(() => { setLocalCategories(categories); }, [categories]);
 
+    // ── Category usage counts for smart sorting ───────────────────────────────
+    const [catUsage, setCatUsage] = useState<Record<string, number>>({});
+    useEffect(() => {
+        if (!householdId) return;
+        supabase
+            .from('transactions')
+            .select('category_id')
+            .eq('household_id', householdId)
+            .not('category_id', 'is', null)
+            .then(({ data }) => {
+                if (!data) return;
+                const counts: Record<string, number> = {};
+                for (const row of data) {
+                    const cid = row.category_id as string;
+                    counts[cid] = (counts[cid] || 0) + 1;
+                }
+                setCatUsage(counts);
+            });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [householdId]);
+
     // ── Initialize form when visibility or editingTx changes ─────────────────
     useEffect(() => {
         if (!visible) return;
@@ -247,10 +268,28 @@ export default function TransactionForm({
 
     // ── Derived ──────────────────────────────────────────────────────────────
     const showRate = formCurrency !== baseCurrency;
-    const formCats = useMemo(
-        () => localCategories.filter(c => c.type === (formType === 'transfer' ? 'expense' : formType)),
-        [localCategories, formType],
-    );
+    const formCats = useMemo(() => {
+        const expTypeOrder: Record<string, number> = {
+            base: 0, everyday: 1, development: 2, forself: 3, work: 4, other: 5,
+        };
+        const filtered = localCategories.filter(c => c.type === (formType === 'transfer' ? 'expense' : formType));
+        const hasUsage = Object.keys(catUsage).length > 0;
+        return filtered.sort((a, b) => {
+            // Selected category always first
+            if (a.id === formCategoryId) return -1;
+            if (b.id === formCategoryId) return 1;
+            // Then by usage frequency
+            const usageA = catUsage[a.id] || 0;
+            const usageB = catUsage[b.id] || 0;
+            if (hasUsage && (usageA > 0 || usageB > 0)) {
+                if (usageA !== usageB) return usageB - usageA;
+            }
+            // Then by expense_type group
+            const groupA = expTypeOrder[a.expense_type ?? 'other'] ?? 5;
+            const groupB = expTypeOrder[b.expense_type ?? 'other'] ?? 5;
+            return groupA - groupB;
+        });
+    }, [localCategories, formType, catUsage, formCategoryId]);
 
     // ── Auto-fetch exchange rate ─────────────────────────────────────────────
     useEffect(() => {

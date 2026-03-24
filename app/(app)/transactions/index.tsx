@@ -1,7 +1,7 @@
 import {
     Activity, ArrowRightLeft, Award,
     Banknote, Bike, Bitcoin, BookOpen, Briefcase, Building2, Bus,
-    Camera, Car, Check, ChevronDown, CircleDollarSign, Coffee, Coins, CreditCard,
+    Camera, Car, Check, ChevronDown, ChevronRight, CircleDollarSign, Coffee, Coins, CreditCard,
     Droplets, Dumbbell, Film, Flag, Flame, Fuel, Gift, Globe, GraduationCap,
     Heart, Home, Landmark, MapPin, Monitor, Music,
     Package, PawPrint, Pill, Plane, Plus, Receipt, Scissors,
@@ -138,6 +138,7 @@ export default function TransactionsScreen() {
     const [filterCategoryId,   setFilterCategoryId]   = useState<string | null>(null);
     const [filterTagId,        setFilterTagId]        = useState<string | null>(null);
     const [filterSheetTags,    setFilterSheetTags]    = useState<TagLight[]>([]);
+    const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
     const [filterExpenseType,  setFilterExpenseType]  = useState<FilterExpenseType>('all');
     const [filterRecurring,    setFilterRecurring]    = useState<'all' | 'recurring' | 'non_recurring'>('all');
     const [customFrom,         setCustomFrom]         = useState<Date | null>(null);
@@ -403,14 +404,9 @@ export default function TransactionsScreen() {
             {/* Header */}
             <View style={{ paddingTop: 60, paddingBottom: 12, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Text style={{ color: colors.textPrimary, fontSize: 24, fontWeight: '700' }}>{t('transactions.title')}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                    <TouchableOpacity onPress={() => router.push('/recurring/index' as any)} style={{ padding: 4 }}>
-                        <Repeat color={colors.textSecondary} size={22} />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => { setSearchVisible(v => !v); if (searchVisible) setSearch(''); }} style={{ padding: 4 }}>
-                        {searchVisible ? <X color={colors.textSecondary} size={22} /> : <Search color={colors.textSecondary} size={22} />}
-                    </TouchableOpacity>
-                </View>
+                <TouchableOpacity onPress={() => { setSearchVisible(v => !v); if (searchVisible) setSearch(''); }} style={{ padding: 4 }}>
+                    {searchVisible ? <X color={colors.textSecondary} size={22} /> : <Search color={colors.textSecondary} size={22} />}
+                </TouchableOpacity>
             </View>
 
             {/* Search */}
@@ -616,8 +612,21 @@ export default function TransactionsScreen() {
 
                                             {/* Категория */}
                                             {secHeader(t('transactions.sectionCategory'))}
-                                            <View style={{ gap: 2 }}>
-                                                {[{ id: null as string | null, name: t('transactions.allCategories'), icon: null, color: null, type: 'expense' as const, expense_type: null, is_system: true },
+                                            <TouchableOpacity onPress={() => setCollapsedSections(prev => {
+                                                const next = new Set(prev);
+                                                next.has('category') ? next.delete('category') : next.add('category');
+                                                return next;
+                                            })} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
+                                                <Text style={{ color: filterCategoryId === null ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: '600' }}>
+                                                    {filterCategoryId === null ? t('transactions.allCategories') : categories.find(c => c.id === filterCategoryId)?.name ?? t('transactions.allCategories')}
+                                                </Text>
+                                                {collapsedSections.has('category')
+                                                    ? <ChevronRight color={colors.textMuted} size={16} />
+                                                    : <ChevronDown color={colors.textMuted} size={16} />
+                                                }
+                                            </TouchableOpacity>
+                                            {!collapsedSections.has('category') && <View style={{ gap: 2 }}>
+                                                {[{ id: null as string | null, name: t('transactions.allCategories'), icon: null, color: null, type: 'expense' as const, expense_type: null, is_system: true, slug: null },
                                                   ...categories.filter(c => filterType === 'income' ? c.type === 'income' : c.type === 'expense')
                                                 ].map(cat => {
                                                     const active = cat.id === filterCategoryId;
@@ -656,11 +665,29 @@ export default function TransactionsScreen() {
                                                         </View>
                                                     );
                                                 })}
-                                            </View>
+                                            </View>}
 
                                             {/* Тип расходов */}
                                             {secHeader(t('transactions.sectionExpenseType'))}
-                                            <View style={{ gap: 2 }}>
+                                            <TouchableOpacity onPress={() => setCollapsedSections(prev => {
+                                                const next = new Set(prev);
+                                                next.has('expType') ? next.delete('expType') : next.add('expType');
+                                                return next;
+                                            })} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
+                                                <Text style={{ color: filterExpenseType === 'all' ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: '600' }}>
+                                                    {filterExpenseType === 'all' ? t('transactions.allTypes') :
+                                                     filterExpenseType === 'base' ? t('transactions.base') :
+                                                     filterExpenseType === 'everyday' ? t('transactions.everyday') :
+                                                     filterExpenseType === 'development' ? t('transactions.development') :
+                                                     filterExpenseType === 'forself' ? t('transactions.forSelf') :
+                                                     filterExpenseType === 'work' ? t('transactions.work') : t('transactions.other')}
+                                                </Text>
+                                                {collapsedSections.has('expType')
+                                                    ? <ChevronRight color={colors.textMuted} size={16} />
+                                                    : <ChevronDown color={colors.textMuted} size={16} />
+                                                }
+                                            </TouchableOpacity>
+                                            {!collapsedSections.has('expType') && <View style={{ gap: 2 }}>
                                                 {([
                                                     { value: 'all' as const,         label: t('transactions.allTypes') },
                                                     { value: 'base' as const,        label: t('transactions.base') },
@@ -679,11 +706,25 @@ export default function TransactionsScreen() {
                                                         </TouchableOpacity>
                                                     );
                                                 })}
-                                            </View>
+                                            </View>}
 
                                             {/* Рекуррентность */}
                                             {secHeader(t('transactions.sectionRecurrence'))}
-                                            <View style={{ gap: 2, marginBottom: 24 }}>
+                                            <TouchableOpacity onPress={() => setCollapsedSections(prev => {
+                                                const next = new Set(prev);
+                                                next.has('recurrence') ? next.delete('recurrence') : next.add('recurrence');
+                                                return next;
+                                            })} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
+                                                <Text style={{ color: filterRecurring === 'all' ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: '600' }}>
+                                                    {filterRecurring === 'all' ? t('transactions.allPayments') :
+                                                     filterRecurring === 'recurring' ? t('transactions.recurring') : t('transactions.oneTime')}
+                                                </Text>
+                                                {collapsedSections.has('recurrence')
+                                                    ? <ChevronRight color={colors.textMuted} size={16} />
+                                                    : <ChevronDown color={colors.textMuted} size={16} />
+                                                }
+                                            </TouchableOpacity>
+                                            {!collapsedSections.has('recurrence') && <View style={{ gap: 2, marginBottom: 24 }}>
                                                 {([
                                                     { value: 'all' as const,          label: t('transactions.allPayments') },
                                                     { value: 'recurring' as const,    label: t('transactions.recurring') },
@@ -698,7 +739,7 @@ export default function TransactionsScreen() {
                                                         </TouchableOpacity>
                                                     );
                                                 })}
-                                            </View>
+                                            </View>}
 
                                             {/* Buttons */}
                                             <View style={{ flexDirection: 'row', gap: 12 }}>

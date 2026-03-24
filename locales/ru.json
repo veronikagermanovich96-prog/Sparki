@@ -337,6 +337,8 @@
     "forecastHalf": "Полгода",
     "forecastYear": "Год",
     "forecastCustom": "Свой",
+    "recurringPayment": "Рекуррентный",
+    "loanPayment": "Кредит",
     "forecastEndOfMonth": "ПРОГНОЗ ДО КОНЦА МЕСЯЦА",
     "forecastFor3Months": "ПРОГНОЗ НА 3 МЕСЯЦА",
     "from": "От",

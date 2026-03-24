@@ -337,6 +337,8 @@
     "forecastHalf": "Semestre",
     "forecastYear": "Année",
     "forecastCustom": "Personnalisé",
+    "recurringPayment": "Récurrent",
+    "loanPayment": "Crédit",
     "forecastEndOfMonth": "PRÉVISION JUSQU'À LA FIN DU MOIS",
     "forecastFor3Months": "PRÉVISION SUR 3 MOIS",
     "from": "Du",

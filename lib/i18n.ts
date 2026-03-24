@@ -32,12 +32,14 @@ i18n.use(initReactI18next).init({
     interpolation: { escapeValue: false },
 });
 
-// Restore saved language preference
-AsyncStorage.getItem(LANGUAGE_KEY).then(saved => {
-    if (saved && SUPPORTED_LANGUAGES.includes(saved as SupportedLanguage)) {
-        i18n.changeLanguage(saved);
-    }
-});
+// Restore saved language preference (guard against SSR where window is undefined)
+if (typeof window !== 'undefined') {
+    AsyncStorage.getItem(LANGUAGE_KEY).then(saved => {
+        if (saved && SUPPORTED_LANGUAGES.includes(saved as SupportedLanguage)) {
+            i18n.changeLanguage(saved);
+        }
+    });
+}
 
 export async function setLanguage(lang: SupportedLanguage) {
     await AsyncStorage.setItem(LANGUAGE_KEY, lang);

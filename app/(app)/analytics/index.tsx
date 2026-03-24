@@ -22,7 +22,7 @@ import { BaseBottomSheet } from '@/components/ui/BaseBottomSheet';
 import {
     Activity, ArrowRightLeft, Award,
     Banknote, Bike, Bitcoin, BookOpen, Briefcase, Building2, Bus,
-    Camera, Car, ChevronLeft, CircleDollarSign, Coffee, Coins, CreditCard,
+    Camera, Car, ChevronLeft, ChevronRight, CircleDollarSign, Coffee, Coins, CreditCard,
     Droplets, Dumbbell, Film, Flag, Flame, Fuel, Gift, Globe, GraduationCap,
     Heart, Home, Landmark, Laptop, MapPin, Monitor, Music,
     Package, PawPrint, Pencil, Pill, Plane, Receipt, Scissors,
@@ -55,6 +55,9 @@ import {
     startOfWeek,
     subDays,
     subMonths,
+    eachDayOfInterval,
+    getDay,
+    isToday as isTodayFn,
 } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
@@ -192,6 +195,15 @@ interface ExtraTag {
     comfortable: number;
     scaledComfortable: number;
     extra: number;
+}
+
+interface CalendarPayment {
+    id: string;
+    name: string;
+    amount: number;
+    currency: string;
+    type: 'recurring' | 'loan';
+    date: string;
 }
 
 interface ExtraCategory {
@@ -1065,6 +1077,11 @@ export default function AnalyticsScreen() {
         });
     }, []);
 
+    // ── Calendar ──────────────────────────────────────────────────────────────
+    const [calendarMonth, setCalendarMonth] = useState(new Date());
+    const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
+    const [calendarPayments, setCalendarPayments] = useState<Record<string, CalendarPayment[]>>({});
+
     // ── Loans ─────────────────────────────────────────────────────────────────
     const [loans, setLoans] = useState<LoanData[]>([]);
     const [showAddLoan, setShowAddLoan] = useState(false);
@@ -1150,6 +1167,42 @@ export default function AnalyticsScreen() {
         fetchAccounts(householdId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [householdId]);
+
+    // ── Calendar payments ──────────────────────────────────────────────────
+    async function fetchCalendarPayments(month: Date) {
+        if (!householdId) return;
+        const start = format(startOfMonth(month), 'yyyy-MM-dd');
+        const end = format(endOfMonth(month), 'yyyy-MM-dd');
+
+        const [{ data: recurring }, { data: loans }] = await Promise.all([
+            supabase.from('recurring_payments').select('id, name, amount, currency, next_date')
+                .eq('household_id', householdId).eq('is_active', true)
+                .gte('next_date', start).lte('next_date', end),
+            supabase.from('loan_accounts').select('id, name, monthly_payment, currency, next_payment_date')
+                .eq('household_id', householdId).eq('is_active', true)
+                .gte('next_payment_date', start).lte('next_payment_date', end),
+        ]);
+
+        const grouped: Record<string, CalendarPayment[]> = {};
+        recurring?.forEach(r => {
+            const d = r.next_date as string;
+            if (!grouped[d]) grouped[d] = [];
+            grouped[d].push({ id: r.id as string, name: r.name as string, amount: r.amount as number,
+                currency: r.currency as string, type: 'recurring', date: d });
+        });
+        loans?.forEach(l => {
+            const d = l.next_payment_date as string;
+            if (!grouped[d]) grouped[d] = [];
+            grouped[d].push({ id: l.id as string, name: l.name as string, amount: l.monthly_payment as number,
+                currency: l.currency as string, type: 'loan', date: d });
+        });
+        setCalendarPayments(grouped);
+    }
+
+    useEffect(() => {
+        if (tab === 'forecast' && householdId) fetchCalendarPayments(calendarMonth);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tab, householdId, calendarMonth]);
 
     // ── Overview ────────────────────────────────────────────────────────────
     async function fetchOverview(hid: string, p: Period) {
@@ -3089,6 +3142,116 @@ export default function AnalyticsScreen() {
                                             onChange={(_, d) => { if (d) setCustomTo(d); setShowCustomTo(false); }} />
                                     )}
                                 </>
+                            )}
+
+                            {/* ══ PAYMENT CALENDAR ═════════════════════ */}
+                            {(() => {
+                                function buildWeeks(month: Date): (Date | null)[][] {
+                                    const mStart = startOfMonth(month);
+                                    const mEnd = endOfMonth(month);
+                                    const days = eachDayOfInterval({ start: mStart, end: mEnd });
+                                    const startPad = (getDay(mStart) + 6) % 7;
+                                    const padded: (Date | null)[] = [...Array(startPad).fill(null), ...days];
+                                    const weeks: (Date | null)[][] = [];
+                                    for (let i = 0; i < padded.length; i += 7) {
+                                        const week = padded.slice(i, i + 7);
+                                        while (week.length < 7) week.push(null);
+                                        weeks.push(week);
+                                    }
+                                    return weeks;
+                                }
+                                const weeks = buildWeeks(calendarMonth);
+                                const dayHeaders = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+
+                                return (
+                                    <View style={{ backgroundColor: colors.bgSecondary, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.border }}>
+                                        {/* Month nav */}
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                                            <TouchableOpacity onPress={() => setCalendarMonth(subMonths(calendarMonth, 1))} style={{ padding: 4 }}>
+                                                <ChevronLeft color={colors.textMuted} size={20} />
+                                            </TouchableOpacity>
+                                            <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '600', textTransform: 'capitalize' }}>
+                                                {format(calendarMonth, 'LLLL yyyy', { locale: ru })}
+                                            </Text>
+                                            <TouchableOpacity onPress={() => setCalendarMonth(addMonths(calendarMonth, 1))} style={{ padding: 4 }}>
+                                                <ChevronRight color={colors.textMuted} size={20} />
+                                            </TouchableOpacity>
+                                        </View>
+
+                                        {/* Day headers */}
+                                        <View style={{ flexDirection: 'row', marginBottom: 8 }}>
+                                            {dayHeaders.map(d => (
+                                                <Text key={d} style={{ flex: 1, textAlign: 'center', color: colors.textMuted, fontSize: 12, fontWeight: '600' }}>{d}</Text>
+                                            ))}
+                                        </View>
+
+                                        {/* Calendar grid */}
+                                        {weeks.map((week, wi) => (
+                                            <View key={wi} style={{ flexDirection: 'row', marginBottom: 4 }}>
+                                                {week.map((day, di) => {
+                                                    if (!day) return <View key={di} style={{ flex: 1 }} />;
+                                                    const dateStr = format(day, 'yyyy-MM-dd');
+                                                    const payments = calendarPayments[dateStr] ?? [];
+                                                    const hasPayments = payments.length > 0;
+                                                    const today = isTodayFn(day);
+                                                    const isSelected = selectedCalendarDate === dateStr;
+
+                                                    return (
+                                                        <TouchableOpacity key={di} style={{ flex: 1, alignItems: 'center', paddingVertical: 4 }}
+                                                            onPress={() => setSelectedCalendarDate(isSelected ? null : dateStr)}>
+                                                            <View style={{
+                                                                width: 32, height: 32, borderRadius: 16,
+                                                                alignItems: 'center', justifyContent: 'center',
+                                                                backgroundColor: isSelected ? '#7C6FFF' : today ? colors.bgTertiary : 'transparent',
+                                                                borderWidth: hasPayments ? 2 : 0,
+                                                                borderColor: payments.some(p => p.type === 'loan') ? '#ef4444' : '#7C6FFF',
+                                                            }}>
+                                                                <Text style={{
+                                                                    color: isSelected ? '#fff' : today ? '#7C6FFF' : colors.textPrimary,
+                                                                    fontSize: 14, fontWeight: hasPayments ? '700' : '400',
+                                                                }}>{format(day, 'd')}</Text>
+                                                            </View>
+                                                            {hasPayments && (
+                                                                <View style={{ width: 4, height: 4, borderRadius: 2,
+                                                                    backgroundColor: payments.some(p => p.type === 'loan') ? '#ef4444' : '#7C6FFF', marginTop: 2 }} />
+                                                            )}
+                                                        </TouchableOpacity>
+                                                    );
+                                                })}
+                                            </View>
+                                        ))}
+
+                                        {/* Legend */}
+                                        <View style={{ flexDirection: 'row', gap: 16, marginTop: 8 }}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#7C6FFF' }} />
+                                                <Text style={{ color: colors.textMuted, fontSize: 12 }}>{t('analytics.recurringPayment')}</Text>
+                                            </View>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#ef4444' }} />
+                                                <Text style={{ color: colors.textMuted, fontSize: 12 }}>{t('analytics.loanPayment')}</Text>
+                                            </View>
+                                        </View>
+                                    </View>
+                                );
+                            })()}
+
+                            {/* Selected date payments */}
+                            {selectedCalendarDate && (calendarPayments[selectedCalendarDate] ?? []).length > 0 && (
+                                <View style={{ backgroundColor: colors.bgSecondary, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.border }}>
+                                    <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '700', marginBottom: 12 }}>
+                                        {format(new Date(selectedCalendarDate + 'T00:00:00'), 'd MMMM yyyy', { locale: ru })}
+                                    </Text>
+                                    {(calendarPayments[selectedCalendarDate] ?? []).map(payment => (
+                                        <View key={payment.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                                            <Text style={{ fontSize: 20, marginRight: 12 }}>{payment.type === 'loan' ? '🏦' : '🔁'}</Text>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '500' }}>{payment.name}</Text>
+                                                <Text style={{ color: colors.textMuted, fontSize: 13 }}>{formatAmount(payment.amount, payment.currency)}</Text>
+                                            </View>
+                                        </View>
+                                    ))}
+                                </View>
                             )}
 
                             {loadingForecast ? <Spinner /> : !forecastData ? null : (

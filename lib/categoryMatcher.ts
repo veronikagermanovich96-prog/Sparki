@@ -26,6 +26,7 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
     ],
     'transport': [
         'транспорт', 'такси', 'метро', 'автобус', 'бензин', 'заправка', 'парковка', 'убер', 'яндекс такси', 'каршеринг', 'электричка', 'поезд', 'трамвай', 'проездной',
+        'осаго', 'каско', 'техосмотр', 'шиномонтаж', 'автомобиль', 'тачка', 'автосервис',
         'transport', 'taxi', 'uber', 'lyft', 'gas', 'fuel', 'petrol', 'parking', 'bus', 'metro', 'subway', 'train', 'car',
         'tanken', 'benzin', 'bahn', 'fahrkarte', 'parken',
         'essence', 'métro', 'stationnement', 'péage',
@@ -194,17 +195,17 @@ interface ContextRule {
 
 const CONTEXTUAL_KEYWORDS: ContextRule[] = [
     // Insurance
-    { triggers: ['страховка', 'insurance', 'versicherung', 'assurance', 'seguro'],
-      context: ['авто', 'машина', 'car', 'auto', 'kfz', 'voiture', 'coche'],
+    { triggers: ['страховка', 'страхование', 'застраховал', 'застраховала', 'полис', 'insurance', 'versicherung', 'assurance', 'seguro'],
+      context: ['авто', 'машина', 'машины', 'автомобиль', 'автомобиля', 'тачка', 'тачки', 'car', 'auto', 'kfz', 'voiture', 'coche'],
       category: 'transport', confidence: 0.95 },
-    { triggers: ['страховка', 'insurance', 'versicherung', 'assurance', 'seguro'],
+    { triggers: ['страховка', 'страхование', 'застраховал', 'застраховала', 'полис', 'insurance', 'versicherung', 'assurance', 'seguro'],
       context: ['медицинская', 'здоровье', 'medical', 'health', 'kranken', 'santé', 'salud'],
       category: 'health', confidence: 0.95 },
-    { triggers: ['страховка', 'insurance', 'versicherung', 'assurance', 'seguro'],
-      context: ['путешествие', 'поездка', 'travel', 'trip', 'reise', 'voyage', 'viaje'],
+    { triggers: ['страховка', 'страхование', 'застраховал', 'застраховала', 'полис', 'insurance', 'versicherung', 'assurance', 'seguro'],
+      context: ['путешествие', 'поездка', 'поездки', 'travel', 'trip', 'reise', 'voyage', 'viaje'],
       category: 'travel', confidence: 0.95 },
-    { triggers: ['страховка', 'insurance', 'versicherung', 'assurance', 'seguro'],
-      context: ['квартира', 'дом', 'жильё', 'home', 'house', 'wohnung', 'maison', 'hogar'],
+    { triggers: ['страховка', 'страхование', 'застраховал', 'застраховала', 'полис', 'insurance', 'versicherung', 'assurance', 'seguro'],
+      context: ['квартира', 'квартиры', 'дом', 'дома', 'жильё', 'жилья', 'home', 'house', 'wohnung', 'maison', 'hogar'],
       category: 'rent', confidence: 0.95 },
     // Subscriptions
     { triggers: ['подписка', 'subscription', 'abonnement', 'suscripción'],
@@ -253,6 +254,80 @@ function levenshtein(a: string, b: string): number {
         dp[n] = prev;
     }
     return dp[n];
+}
+
+// ── Multilingual stemming ────────────────────────────────────────────────────
+
+function stemRu(word: string): string {
+    return word
+        .replace(/ование$|ание$|ение$/, '')
+        .replace(/ого$|ему$|ому$/, '')
+        .replace(/ой$|ий$|ый$|ая$|яя$/, '')
+        .replace(/ами$|ями$|ах$|ях$/, '')
+        .replace(/ов$|ев$|ей$/, '')
+        .replace(/ку$|ки$|ке$|ка$/, '')
+        .replace(/ть$|ться$|тся$/, '')
+        .replace(/ла$|ло$|ли$|лся$/, '')
+        .replace(/ны$|на$|но$/, '')
+        .replace(/у$|ю$|е$|и$|ы$|а$/, '');
+}
+
+function stemEn(word: string): string {
+    return word
+        .replace(/ing$/, '')
+        .replace(/tion$|sion$/, '')
+        .replace(/ness$|ment$|ful$|less$/, '')
+        .replace(/er$|or$|ist$/, '')
+        .replace(/ies$/, 'y')
+        .replace(/es$|s$/, '')
+        .replace(/ed$/, '');
+}
+
+function stemDe(word: string): string {
+    return word
+        .replace(/ung$|heit$|keit$|schaft$/, '')
+        .replace(/ieren$/, '')
+        .replace(/en$|er$|em$|es$|e$/, '')
+        .replace(/lich$|ig$/, '');
+}
+
+function stemFr(word: string): string {
+    return word
+        .replace(/ation$|tion$|sion$/, '')
+        .replace(/ment$|eur$|euse$/, '')
+        .replace(/er$|ir$|re$/, '')
+        .replace(/aux$/, 'al')
+        .replace(/ux$|es$|s$/, '')
+        .replace(/é$|è$|ê$/, 'e');
+}
+
+function stemEs(word: string): string {
+    return word
+        .replace(/ación$|ción$|sión$/, '')
+        .replace(/mente$|miento$|idad$/, '')
+        .replace(/ando$|iendo$/, '')
+        .replace(/ado$|ido$/, '')
+        .replace(/ar$|er$|ir$/, '')
+        .replace(/es$|s$/, '')
+        .replace(/ó/, 'o').replace(/é/, 'e').replace(/á/, 'a').replace(/í/, 'i').replace(/ú/, 'u');
+}
+
+function detectLanguage(text: string): 'ru' | 'en' | 'de' | 'fr' | 'es' {
+    if (/[а-яё]/i.test(text)) return 'ru';
+    if (/\b(der|die|das|und|ist|ich|mit)\b/i.test(text)) return 'de';
+    if (/\b(le|la|les|des|une|est|avec)\b/i.test(text)) return 'fr';
+    if (/\b(el|los|las|una|con|por)\b/i.test(text)) return 'es';
+    return 'en';
+}
+
+function stem(word: string, lang: string): string {
+    switch (lang) {
+        case 'ru': return stemRu(word);
+        case 'de': return stemDe(word);
+        case 'fr': return stemFr(word);
+        case 'es': return stemEs(word);
+        default: return stemEn(word);
+    }
 }
 
 // ── User learning (persisted) ───────────────────────────────────────────────
@@ -320,7 +395,10 @@ export function matchCategory(text: string, cats: Category[]): MatchResult {
     const lower = text.toLowerCase();
     console.log('=== matchCategory input:', text);
     console.log('=== categories available:', cats.map(c => c.name));
+    const lang = detectLanguage(text);
     const words = lower.split(/\s+/);
+    const stemmed = words.map(w => stem(w, lang));
+    const allWords = [...new Set([...words, ...stemmed.filter(s => s.length >= 2)])];
     const visible = cats.filter(c => !c.is_hidden);
 
     // Step 1: Learned corrections (highest priority)
@@ -336,8 +414,8 @@ export function matchCategory(text: string, cats: Category[]): MatchResult {
 
     // Step 3: Contextual matching (trigger + context → category)
     for (const rule of CONTEXTUAL_KEYWORDS) {
-        const hasTrigger = rule.triggers.some(t => lower.includes(t));
-        const hasContext = rule.context.some(ctx => lower.includes(ctx));
+        const hasTrigger = rule.triggers.some(t => lower.includes(t) || allWords.some(w => w === stem(t, lang)));
+        const hasContext = rule.context.some(ctx => lower.includes(ctx) || allWords.some(w => w === stem(ctx, lang)));
         if (hasTrigger && hasContext) {
             const cat = findCategoryByKey(rule.category, visible);
             if (cat) return { category: cat, confidence: rule.confidence };
@@ -358,13 +436,23 @@ export function matchCategory(text: string, cats: Category[]): MatchResult {
     let bestCategory: Category | null = null;
     let bestScore = 0;
 
+    const kwStems = new Map<string, string[]>();
+    for (const [catKey, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+        kwStems.set(catKey, keywords.map(kw => stem(kw, lang)));
+    }
+
     for (const [catKey, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
         let score = 0;
-        for (const word of words) {
+        const stems = kwStems.get(catKey)!;
+        for (const word of allWords) {
             if (word.length < 2) continue;
-            for (const kw of keywords) {
+            for (let ki = 0; ki < keywords.length; ki++) {
+                const kw = keywords[ki];
+                const ks = stems[ki];
                 if (word === kw) { score += 1.0; break; }
+                if (word === ks && ks.length >= 3) { score += 0.95; break; }
                 if (word.length >= 3 && (word.includes(kw) || kw.includes(word))) { score += 0.8; break; }
+                if (word.length >= 3 && ks.length >= 3 && (word.includes(ks) || ks.includes(word))) { score += 0.7; break; }
                 if (word.length >= 4 && kw.length >= 4 && levenshtein(word, kw) <= 2) { score += 0.6; break; }
             }
         }
@@ -382,13 +470,13 @@ export function matchCategory(text: string, cats: Category[]): MatchResult {
     // Step 5: First word / stem match on category names
     for (const c of visible) {
         const first = c.name.toLowerCase().split(' ')[0];
-        if (first.length >= 3 && lower.includes(first)) {
+        if (first.length >= 3 && allWords.some(w => w.includes(first) || first.includes(w))) {
             return { category: c, confidence: 0.5 };
         }
     }
     for (const c of visible) {
-        const stem = c.name.toLowerCase().slice(0, Math.min(c.name.length, 4));
-        if (stem.length >= 3 && words.some(w => w.startsWith(stem))) {
+        const nameStem = c.name.toLowerCase().slice(0, Math.min(c.name.length, 4));
+        if (nameStem.length >= 3 && allWords.some(w => w.startsWith(nameStem))) {
             return { category: c, confidence: 0.4 };
         }
     }
@@ -495,6 +583,26 @@ export function extractAmount(text: string): number {
     return 0;
 }
 
+// ── Recurring detection ──────────────────────────────────────────────────────
+
+export type RecurringFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+export function detectRecurring(text: string): {
+    isRecurring: boolean;
+    frequency: RecurringFrequency | null;
+} {
+    const t = text.toLowerCase();
+    if (/каждый месяц|ежемесячно|раз в месяц|monthly|every month|monatlich|mensuel|mensual/.test(t))
+        return { isRecurring: true, frequency: 'monthly' };
+    if (/каждую неделю|еженедельно|раз в неделю|weekly|every week|wöchentlich|hebdomadaire|semanal/.test(t))
+        return { isRecurring: true, frequency: 'weekly' };
+    if (/каждый день|ежедневно|раз в день|daily|every day|täglich|quotidien|diario/.test(t))
+        return { isRecurring: true, frequency: 'daily' };
+    if (/каждый год|ежегодно|раз в год|yearly|annually|jährlich|annuel|anual/.test(t))
+        return { isRecurring: true, frequency: 'yearly' };
+    return { isRecurring: false, frequency: null };
+}
+
 // ── Full text parser ────────────────────────────────────────────────────────
 
 export interface ParsedTransaction {
@@ -507,6 +615,8 @@ export interface ParsedTransaction {
     date: string;
     note: string;
     checked: boolean;
+    isRecurring: boolean;
+    recurringFrequency: RecurringFrequency | null;
 }
 
 function parseBasics(text: string, baseCurrency: string) {
@@ -535,11 +645,13 @@ export function parseVoiceText(
         const { category, confidence } = matchCategory(s, cats.filter(c =>
             !c.is_hidden && (basics.type === 'transfer' || c.type === basics.type || c.type === 'expense')
         ));
+        const { isRecurring, frequency } = detectRecurring(s);
 
         results.push({
             ...basics, category, confidence,
             accountId: defaultAccountId,
             note: s, checked: true,
+            isRecurring, recurringFrequency: frequency,
         });
     }
 
@@ -547,4 +659,4 @@ export function parseVoiceText(
 }
 
 // ── Init: load learned data on module import ────────────────────────────────
-loadLearned();
+if (typeof window !== 'undefined') loadLearned();
