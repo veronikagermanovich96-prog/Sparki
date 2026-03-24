@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { seedDefaultCategories } from '@/lib/seedCategories';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -42,6 +43,8 @@ export default function Register() {
                 user_id: data.user.id,
                 role: 'owner',
             });
+
+            await seedDefaultCategories(household.id);
         }
 
         setLoading(false);

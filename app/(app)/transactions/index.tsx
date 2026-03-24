@@ -179,7 +179,7 @@ export default function TransactionsScreen() {
         const [accsRes, catsRes, houseRes] = await Promise.all([
             supabase.from('accounts').select('id, name, color, currency, balance')
                 .eq('household_id', hid).eq('is_deleted', false).order('created_at'),
-            supabase.from('categories').select('id, name, icon, color, type, expense_type, is_system')
+            supabase.from('categories').select('id, name, slug, icon, color, type, expense_type, is_system')
                 .or(`household_id.eq.${hid},household_id.is.null`).eq('is_hidden', false),
             supabase.from('households').select('base_currency').eq('id', hid).single(),
         ]);

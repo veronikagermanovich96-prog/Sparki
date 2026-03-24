@@ -150,11 +150,8 @@
     "edit": "Edit",
     "history": "History",
     "newOperation": "New operation",
-    "add": "Add",
     "byVoice": "Record by voice",
-    "transfer": "Transfer",
     "expense": "Expense",
-    "income": "Income",
     "editAccount": "Edit account",
     "newAccount": "New account",
     "accountName": "Name",
@@ -866,7 +863,10 @@
       "Dec"
     ],
     "dayN_few": "{{count}} days",
-    "dayN_many": "{{count}} days"
+    "dayN_many": "{{count}} days",
+    "date": "DATE",
+    "note": "NOTE",
+    "categoryName": "Category name"
   },
   "currencyPicker": {
     "title": "Currency",
@@ -897,6 +897,14 @@
     "parseError": "Could not parse transactions",
     "saveError": "Save error",
     "authError": "Authentication error",
-    "noAccount": "No accounts available"
+    "noAccount": "No accounts available",
+    "amount": "Amount",
+    "currency": "Currency",
+    "type": "Type",
+    "category": "Category",
+    "orType": "or type manually",
+    "textFallback": "Microphone unavailable. Type instead:",
+    "textPlaceholder": "E.g.: coffee 350, taxi 200, salary 50000",
+    "parseText": "Parse"
   }
 }

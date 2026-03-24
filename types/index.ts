@@ -34,6 +34,7 @@ export interface Category {
     id: string;
     household_id: string | null;
     name: string;
+    slug: string | null;
     icon: string | null;
     color: string | null;
     type: CategoryType;

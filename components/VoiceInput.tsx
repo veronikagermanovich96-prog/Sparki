@@ -19,20 +19,10 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/context/ThemeContext';
 import { BaseBottomSheet } from '@/components/ui/BaseBottomSheet';
 import { supabase } from '@/lib/supabase';
-import { format, subDays } from 'date-fns';
+import { parseVoiceText, learnFromCorrection, type ParsedTransaction } from '@/lib/categoryMatcher';
 import type { Account, Category } from '@/types';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface ParsedTx {
-    type: 'expense' | 'income' | 'transfer';
-    amount: number;
-    currency: string;
-    category: Category | null;
-    date: string;
-    note: string;
-    checked: boolean;
-}
+type ParsedTx = ParsedTransaction;
 
 type Stage = 'recording' | 'processing' | 'results' | 'saving';
 
@@ -44,51 +34,6 @@ interface VoiceInputProps {
     accounts: Account[];
     categories: Category[];
     baseCurrency: string;
-}
-
-// ── Local text parser ─────────────────────────────────────────────────────────
-
-function parseVoiceText(text: string, cats: Category[], currency: string): ParsedTx[] {
-    const results: ParsedTx[] = [];
-    const sentences = text.split(/,|и ещё|ещё|также|плюс/i);
-
-    for (const sentence of sentences) {
-        const s = sentence.trim().toLowerCase();
-        if (!s) continue;
-
-        // Detect type
-        let type: 'expense' | 'income' | 'transfer' = 'expense';
-        if (/получил|зарплата|доход|пришло|заработал/.test(s)) type = 'income';
-        if (/перевёл|перевел|отправил/.test(s)) type = 'transfer';
-
-        // Extract amount
-        const amountMatch = s.match(/(\d+[\s\d]*[.,]?\d*)/);
-        const amount = amountMatch
-            ? parseFloat(amountMatch[1].replace(/\s/g, '').replace(',', '.'))
-            : 0;
-        if (!amount) continue;
-
-        // Match category by keyword
-        const category = cats.find(c =>
-            s.includes(c.name.toLowerCase()) ||
-            s.includes(c.name.toLowerCase().split(' ')[0]),
-        ) ?? null;
-
-        // Detect date
-        let date = format(new Date(), 'yyyy-MM-dd');
-        if (/вчера/.test(s)) date = format(subDays(new Date(), 1), 'yyyy-MM-dd');
-
-        results.push({
-            type, amount, currency,
-            category, date,
-            note: sentence.trim(),
-            checked: true,
-        });
-    }
-
-    console.log('Transcript:', text);
-    console.log('Parsed result:', JSON.stringify(results));
-    return results;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -105,8 +50,13 @@ export default function VoiceInput({
     const [parsed, setParsed] = useState<ParsedTx[]>([]);
     const [error, setError] = useState('');
     const [editingIdx, setEditingIdx] = useState<number | null>(null);
+    const [newCatName, setNewCatName] = useState('');
+    const [showNewCat, setShowNewCat] = useState(false);
+    const [creatingCat, setCreatingCat] = useState(false);
+    const [showCurrencyDrop, setShowCurrencyDrop] = useState(false);
     const pulseAnim = useRef(new Animated.Value(1)).current;
     const isListening = useRef(false);
+    const transcriptRef = useRef('');
 
     // ── Pulse animation ───────────────────────────────────────────────────────
     useEffect(() => {
@@ -124,25 +74,30 @@ export default function VoiceInput({
     // ── Voice handlers ────────────────────────────────────────────────────────
     useEffect(() => {
         if (!Voice) return;
-        const onResults = (e: SpeechResultsEvent) => {
+        Voice.onSpeechResults = (e: SpeechResultsEvent) => {
             const text = e.value?.[0] ?? '';
+            transcriptRef.current = text;
             setTranscript(text);
         };
-        const onError = (e: SpeechErrorEvent) => {
+        Voice.onSpeechPartialResults = (e: SpeechResultsEvent) => {
+            const text = e.value?.[0] ?? '';
+            transcriptRef.current = text;
+            setTranscript(text);
+        };
+        Voice.onSpeechError = (e: SpeechErrorEvent) => {
             console.warn('Voice error', e.error);
             if (isListening.current) {
-                stopAndProcess();
+                isListening.current = false;
+                processTranscript();
             }
         };
-        const onEnd = () => {
+        Voice.onSpeechEnd = () => {
             if (isListening.current) {
-                stopAndProcess();
+                isListening.current = false;
+                // Delay to let final results arrive
+                setTimeout(() => processTranscript(), 500);
             }
         };
-
-        Voice.onSpeechResults = onResults;
-        Voice.onSpeechError = onError;
-        Voice.onSpeechEnd = onEnd;
 
         return () => {
             Voice.destroy().then(Voice.removeAllListeners);
@@ -162,14 +117,17 @@ export default function VoiceInput({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [visible]);
 
+    const voiceAvailable = !!Voice;
+
     async function resetAndStart() {
         setStage('recording');
         setTranscript('');
+        transcriptRef.current = '';
         setParsed([]);
         setError('');
+        setEditingIdx(null);
         if (!Voice) {
-            setError(t('voice.micError'));
-            setStage('results');
+            // No native module — stay in 'recording' stage with text fallback
             return;
         }
         try {
@@ -182,29 +140,45 @@ export default function VoiceInput({
         }
     }
 
-    async function stopAndProcess() {
+    function submitTextInput() {
+        const text = transcript.trim();
+        if (!text) return;
+        setStage('processing');
+        setTimeout(() => {
+            const items = parseVoiceText(text, categories, baseCurrency, accounts[0]?.id ?? '');
+            if (items.length === 0) {
+                setError(t('voice.parseError'));
+            }
+            setParsed(items);
+            setStage('results');
+        }, 100);
+    }
+
+    async function stopRecording() {
         isListening.current = false;
         try { if (Voice) await Voice.stop(); } catch { /* ignore */ }
+        // Wait for final results then process
+        setTimeout(() => processTranscript(), 500);
+    }
+
+    function processTranscript() {
+        const text = transcriptRef.current.trim();
+        console.log('Processing transcript:', text);
+        if (!text) {
+            setError(t('voice.noSpeech'));
+            setStage('results');
+            return;
+        }
+        setStage('processing');
         setTimeout(() => {
-            setTranscript(prev => {
-                if (prev.trim()) {
-                    setStage('processing');
-                    // Parse locally (synchronous but wrapped in setTimeout for UI update)
-                    setTimeout(() => {
-                        const items = parseVoiceText(prev.trim(), categories, baseCurrency);
-                        if (items.length === 0) {
-                            setError(t('voice.parseError'));
-                        }
-                        setParsed(items);
-                        setStage('results');
-                    }, 100);
-                } else {
-                    setError(t('voice.noSpeech'));
-                    setStage('results');
-                }
-                return prev;
-            });
-        }, 300);
+            const items = parseVoiceText(text, categories, baseCurrency, accounts[0]?.id ?? '');
+            console.log('Parsed items:', items.length);
+            if (items.length === 0) {
+                setError(t('voice.parseError'));
+            }
+            setParsed(items);
+            setStage('results');
+        }, 100);
     }
 
     // ── Toggle item ───────────────────────────────────────────────────────────
@@ -221,8 +195,7 @@ export default function VoiceInput({
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) { setError(t('voice.authError')); setStage('results'); return; }
 
-        const defaultAccount = accounts[0];
-        if (!defaultAccount) { setError(t('voice.noAccount')); setStage('results'); return; }
+        if (!accounts.length) { setError(t('voice.noAccount')); setStage('results'); return; }
 
         try {
             for (const tx of toSave) {
@@ -231,7 +204,8 @@ export default function VoiceInput({
 
                 if (!cat) continue;
 
-                const accountId = defaultAccount.id;
+                const accountId = tx.accountId || accounts[0].id;
+                const account = accounts.find(a => a.id === accountId) ?? accounts[0];
                 const amount = Math.abs(tx.amount);
 
                 await supabase.from('transactions').insert({
@@ -248,7 +222,7 @@ export default function VoiceInput({
 
                 const delta = tx.type === 'income' ? amount : -amount;
                 await supabase.from('accounts')
-                    .update({ balance: defaultAccount.balance + delta })
+                    .update({ balance: account.balance + delta })
                     .eq('id', accountId);
             }
 
@@ -258,6 +232,37 @@ export default function VoiceInput({
             Alert.alert(t('common.error'), t('voice.saveError'));
             setStage('results');
         }
+    }
+
+    // ── Create new category ─────────────────────────────────────────────────
+    async function createCategory(idx: number) {
+        const name = newCatName.trim();
+        if (!name || !householdId) return;
+        setCreatingCat(true);
+        try {
+            const { data } = await supabase.from('categories').insert({
+                household_id: householdId,
+                name,
+                icon: '📁',
+                color: '#7C6FFF',
+                type: parsed[idx]?.type === 'income' ? 'income' : 'expense',
+                expense_type: 'variable',
+                is_system: false,
+                is_deleted: false,
+                is_hidden: false,
+                sort_order: 999,
+            }).select().single();
+            if (data) {
+                const newCat = data as Category;
+                categories.push(newCat);
+                setParsed(prev => prev.map((p, i) => i === idx ? { ...p, category: newCat } : p));
+                setShowNewCat(false);
+                setNewCatName('');
+            }
+        } catch (e) {
+            console.warn('Create category error', e);
+        }
+        setCreatingCat(false);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -282,34 +287,75 @@ export default function VoiceInput({
                 </TouchableOpacity>
             </View>
 
-            {/* RECORDING */}
+            {/* RECORDING + TEXT INPUT */}
             {stage === 'recording' && (
-                <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                    <Animated.View style={{ transform: [{ scale: pulseAnim }], marginBottom: 24 }}>
-                        <View style={{
-                            width: 80, height: 80, borderRadius: 40,
-                            backgroundColor: '#dc2626', alignItems: 'center', justifyContent: 'center',
-                        }}>
-                            <Mic color="#fff" size={36} />
+                <View style={{ paddingVertical: 16 }}>
+                    {/* Mic button (if Voice available) */}
+                    {voiceAvailable && (
+                        <View style={{ alignItems: 'center', marginBottom: 20 }}>
+                            <Animated.View style={{ transform: [{ scale: pulseAnim }], marginBottom: 16 }}>
+                                <View style={{
+                                    width: 64, height: 64, borderRadius: 32,
+                                    backgroundColor: '#dc2626', alignItems: 'center', justifyContent: 'center',
+                                }}>
+                                    <Mic color="#fff" size={28} />
+                                </View>
+                            </Animated.View>
+                            {transcript ? (
+                                <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center', paddingHorizontal: 20, marginBottom: 8 }}>
+                                    «{transcript}»
+                                </Text>
+                            ) : (
+                                <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: 8 }}>
+                                    {t('voice.listening')}
+                                </Text>
+                            )}
+                            <TouchableOpacity
+                                onPress={stopRecording}
+                                style={{ paddingVertical: 10, paddingHorizontal: 24, borderRadius: 12, backgroundColor: colors.bgTertiary }}
+                            >
+                                <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600' }}>
+                                    {t('voice.stopRecording')}
+                                </Text>
+                            </TouchableOpacity>
                         </View>
-                    </Animated.View>
-                    <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '600', marginBottom: 8 }}>
-                        {t('voice.listening')}
-                    </Text>
-                    {transcript ? (
-                        <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center', paddingHorizontal: 20, marginBottom: 16 }}>
-                            «{transcript}»
-                        </Text>
-                    ) : null}
-                    <TouchableOpacity
-                        onPress={stopAndProcess}
+                    )}
+
+                    {/* Divider */}
+                    {voiceAvailable && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                            <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+                            <Text style={{ color: colors.textMuted, fontSize: 12, marginHorizontal: 12 }}>
+                                {t('voice.orType')}
+                            </Text>
+                            <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+                        </View>
+                    )}
+
+                    {/* Text input (always shown) */}
+                    <TextInput
+                        value={transcript}
+                        onChangeText={v => { setTranscript(v); transcriptRef.current = v; }}
+                        placeholder={t('voice.textPlaceholder')}
+                        placeholderTextColor={colors.textDisabled}
+                        multiline
                         style={{
-                            paddingVertical: 14, paddingHorizontal: 32, borderRadius: 14,
-                            backgroundColor: colors.bgTertiary, marginTop: 8,
+                            backgroundColor: colors.bgTertiary, color: colors.textPrimary,
+                            borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12,
+                            fontSize: 15, minHeight: 70, textAlignVertical: 'top',
+                        }}
+                    />
+                    <TouchableOpacity
+                        onPress={submitTextInput}
+                        disabled={!transcript.trim()}
+                        style={{
+                            marginTop: 12, paddingVertical: 14, borderRadius: 14,
+                            backgroundColor: transcript.trim() ? '#4FFFB0' : 'rgba(79,255,176,0.2)',
+                            alignItems: 'center',
                         }}
                     >
-                        <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '600' }}>
-                            {t('voice.stopRecording')}
+                        <Text style={{ color: '#000', fontSize: 15, fontWeight: '700' }}>
+                            {t('voice.parseText')}
                         </Text>
                     </TouchableOpacity>
                 </View>
@@ -399,67 +445,192 @@ export default function VoiceInput({
                                         </TouchableOpacity>
                                     </TouchableOpacity>
 
-                                    {/* Inline edit fields */}
+                                    {/* Inline edit — TransactionForm style */}
                                     {editingIdx === idx && (
-                                        <View style={{ paddingHorizontal: 14, paddingBottom: 12, gap: 8 }}>
-                                            {/* Amount */}
-                                            <TextInput
-                                                value={String(tx.amount)}
-                                                onChangeText={v => setParsed(prev => prev.map((p, i) =>
-                                                    i === idx ? { ...p, amount: parseFloat(v) || 0 } : p,
-                                                ))}
-                                                keyboardType="decimal-pad"
-                                                style={{ backgroundColor: colors.bgTertiary, color: colors.textPrimary,
-                                                    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 15 }}
-                                            />
+                                        <View style={{ paddingHorizontal: 14, paddingBottom: 14, gap: 14 }}>
 
-                                            {/* Category selector */}
-                                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                                                <View style={{ flexDirection: 'row', gap: 8 }}>
-                                                    {categories.filter(c => c.type === tx.type || c.type === 'expense').map(cat => (
+                                            {/* Type */}
+                                            <View style={{ flexDirection: 'row', gap: 8, backgroundColor: colors.bgTertiary, borderRadius: 12, padding: 4 }}>
+                                                {([
+                                                    { key: 'expense' as const, label: t('dashboard.expense'), color: '#dc2626' },
+                                                    { key: 'income' as const, label: t('dashboard.income'), color: '#16a34a' },
+                                                    { key: 'transfer' as const, label: t('dashboard.transfer'), color: '#2563eb' },
+                                                ]).map(tp => (
+                                                    <TouchableOpacity key={tp.key}
+                                                        onPress={() => setParsed(prev => prev.map((p, i) => i === idx ? { ...p, type: tp.key } : p))}
+                                                        style={{ flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center',
+                                                            backgroundColor: tx.type === tp.key ? tp.color : 'transparent' }}>
+                                                        <Text style={{ color: tx.type === tp.key ? '#fff' : colors.textMuted, fontSize: 13, fontWeight: '700' }}>
+                                                            {tp.label}
+                                                        </Text>
+                                                    </TouchableOpacity>
+                                                ))}
+                                            </View>
+
+                                            {/* Account */}
+                                            <View>
+                                                <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 6 }}>
+                                                    {t('transactionForm.account')}
+                                                </Text>
+                                                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                                                        {accounts.map(acc => (
+                                                            <TouchableOpacity key={acc.id}
+                                                                onPress={() => setParsed(prev => prev.map((p, i) => i === idx ? { ...p, accountId: acc.id, currency: acc.currency } : p))}
+                                                                style={{ paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12,
+                                                                    backgroundColor: tx.accountId === acc.id ? 'rgba(124,111,255,0.15)' : colors.bgTertiary,
+                                                                    borderWidth: 1.5, borderColor: tx.accountId === acc.id ? '#7C6FFF' : 'transparent' }}>
+                                                                <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600' }}>{acc.name}</Text>
+                                                                <Text style={{ color: colors.textMuted, fontSize: 11 }}>{acc.currency} {acc.balance.toLocaleString()}</Text>
+                                                            </TouchableOpacity>
+                                                        ))}
+                                                    </View>
+                                                </ScrollView>
+                                            </View>
+
+                                            {/* Category */}
+                                            <View>
+                                                <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 6 }}>
+                                                    {t('transactionForm.category')}
+                                                </Text>
+                                                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                                                        {categories.filter(c => !c.is_hidden && (c.type === tx.type || c.type === 'expense')).map(cat => (
+                                                            <TouchableOpacity key={cat.id}
+                                                                onPress={() => {
+                                                                    setParsed(prev => prev.map((p, i) => i === idx ? { ...p, category: cat } : p));
+                                                                    learnFromCorrection(tx.note, cat.id);
+                                                                }}
+                                                                style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6,
+                                                                    backgroundColor: tx.category?.id === cat.id ? 'rgba(124,111,255,0.15)' : colors.bgTertiary,
+                                                                    borderWidth: 1.5, borderColor: tx.category?.id === cat.id ? '#7C6FFF' : 'transparent' }}>
+                                                                <Text style={{ fontSize: 16 }}>{cat.icon}</Text>
+                                                                {tx.category?.id === cat.id && (
+                                                                    <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: '600' }}>{cat.name}</Text>
+                                                                )}
+                                                                {tx.category?.id !== cat.id && (
+                                                                    <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{cat.name}</Text>
+                                                                )}
+                                                            </TouchableOpacity>
+                                                        ))}
+                                                    </View>
+                                                </ScrollView>
+
+                                                {/* Create new category */}
+                                                {!showNewCat ? (
+                                                    <TouchableOpacity onPress={() => setShowNewCat(true)}
+                                                        style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                        <Text style={{ color: '#7C6FFF', fontSize: 13, fontWeight: '600' }}>+ {t('transactionForm.newCategory')}</Text>
+                                                    </TouchableOpacity>
+                                                ) : (
+                                                    <View style={{ marginTop: 8, flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                                                        <TextInput
+                                                            value={newCatName}
+                                                            onChangeText={setNewCatName}
+                                                            placeholder={t('transactionForm.categoryName')}
+                                                            placeholderTextColor={colors.textDisabled}
+                                                            autoFocus
+                                                            style={{ flex: 1, backgroundColor: colors.bgTertiary, color: colors.textPrimary,
+                                                                borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14 }}
+                                                        />
                                                         <TouchableOpacity
-                                                            key={cat.id}
-                                                            onPress={() => setParsed(prev => prev.map((p, i) =>
-                                                                i === idx ? { ...p, category: cat } : p,
-                                                            ))}
-                                                            style={{
-                                                                paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
-                                                                backgroundColor: tx.category?.id === cat.id ? '#7C6FFF' : colors.bgTertiary,
-                                                            }}
-                                                        >
-                                                            <Text style={{ color: tx.category?.id === cat.id ? '#fff' : colors.textSecondary, fontSize: 13 }}>
-                                                                {cat.icon} {cat.name}
-                                                            </Text>
+                                                            onPress={() => createCategory(idx)}
+                                                            disabled={!newCatName.trim() || creatingCat}
+                                                            style={{ backgroundColor: newCatName.trim() ? '#7C6FFF' : colors.bgTertiary,
+                                                                borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 }}>
+                                                            {creatingCat
+                                                                ? <ActivityIndicator size="small" color="#fff" />
+                                                                : <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>+</Text>
+                                                            }
                                                         </TouchableOpacity>
-                                                    ))}
+                                                        <TouchableOpacity onPress={() => { setShowNewCat(false); setNewCatName(''); }} style={{ padding: 4 }}>
+                                                            <X color={colors.textMuted} size={16} />
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                )}
+                                            </View>
+
+                                            {/* Amount + Currency */}
+                                            <View>
+                                                <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 6 }}>
+                                                    {t('transactionForm.amount')}
+                                                </Text>
+                                                <View style={{ flexDirection: 'row', gap: 10 }}>
+                                                    <TextInput
+                                                        value={String(tx.amount)}
+                                                        onChangeText={v => setParsed(prev => prev.map((p, i) => i === idx ? { ...p, amount: parseFloat(v) || 0 } : p))}
+                                                        keyboardType="decimal-pad"
+                                                        style={{ flex: 1, backgroundColor: colors.bgTertiary, color: colors.textPrimary,
+                                                            borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 18, fontWeight: '700' }}
+                                                    />
+                                                    <TouchableOpacity
+                                                        onPress={() => setShowCurrencyDrop(prev => !prev)}
+                                                        style={{ backgroundColor: colors.bgTertiary, borderRadius: 12,
+                                                            paddingHorizontal: 16, justifyContent: 'center' }}>
+                                                        <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '700' }}>
+                                                            {tx.currency} ›
+                                                        </Text>
+                                                    </TouchableOpacity>
                                                 </View>
-                                            </ScrollView>
+                                                {showCurrencyDrop && (
+                                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                                                        {[
+                                                            'USD', 'EUR', 'RUB', 'GBP', 'CHF', 'GEL', 'KZT', 'TRY',
+                                                            'BYN', 'UAH', 'AED', 'SAR', 'PLN', 'CZK', 'HUF', 'RON',
+                                                            'SEK', 'NOK', 'DKK', 'ILS', 'JPY', 'CNY', 'KRW', 'INR',
+                                                            'THB', 'VND', 'BRL', 'ARS', 'MXN', 'CAD', 'AUD', 'NZD',
+                                                            'SGD', 'HKD', 'TWD', 'ZAR', 'EGP', 'AMD', 'UZS', 'AZN',
+                                                        ].map(cur => (
+                                                            <TouchableOpacity key={cur}
+                                                                onPress={() => {
+                                                                    setParsed(prev => prev.map((p, i) => i === idx ? { ...p, currency: cur } : p));
+                                                                    setShowCurrencyDrop(false);
+                                                                }}
+                                                                style={{
+                                                                    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10,
+                                                                    backgroundColor: tx.currency === cur ? '#7C6FFF' : colors.bgTertiary,
+                                                                    borderWidth: 1.5,
+                                                                    borderColor: tx.currency === cur ? '#7C6FFF' : 'transparent',
+                                                                }}>
+                                                                <Text style={{
+                                                                    color: tx.currency === cur ? '#fff' : colors.textSecondary,
+                                                                    fontSize: 14, fontWeight: tx.currency === cur ? '700' : '500',
+                                                                }}>{cur}</Text>
+                                                            </TouchableOpacity>
+                                                        ))}
+                                                    </View>
+                                                )}
+                                            </View>
 
                                             {/* Date */}
-                                            <View style={{ backgroundColor: colors.bgTertiary, borderRadius: 10,
-                                                paddingHorizontal: 12, paddingVertical: 8 }}>
-                                                <Text style={{ color: colors.textPrimary, fontSize: 14 }}>{tx.date}</Text>
+                                            <View>
+                                                <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 6 }}>
+                                                    {t('transactionForm.date')}
+                                                </Text>
+                                                <View style={{ backgroundColor: colors.bgTertiary, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 }}>
+                                                    <Text style={{ color: colors.textPrimary, fontSize: 15 }}>{tx.date}</Text>
+                                                </View>
                                             </View>
 
                                             {/* Note */}
-                                            <TextInput
-                                                value={tx.note}
-                                                onChangeText={v => setParsed(prev => prev.map((p, i) =>
-                                                    i === idx ? { ...p, note: v } : p,
-                                                ))}
-                                                placeholder={t('transactionForm.notePlaceholder')}
-                                                placeholderTextColor={colors.textDisabled}
-                                                style={{ backgroundColor: colors.bgTertiary, color: colors.textPrimary,
-                                                    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14 }}
-                                            />
+                                            <View>
+                                                <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 6 }}>
+                                                    {t('transactionForm.note')}
+                                                </Text>
+                                                <TextInput
+                                                    value={tx.note}
+                                                    onChangeText={v => setParsed(prev => prev.map((p, i) => i === idx ? { ...p, note: v } : p))}
+                                                    placeholder={t('transactionForm.notePlaceholder')}
+                                                    placeholderTextColor={colors.textDisabled}
+                                                    style={{ backgroundColor: colors.bgTertiary, color: colors.textPrimary,
+                                                        borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 }}
+                                                />
+                                            </View>
 
                                             {/* Done */}
-                                            <TouchableOpacity
-                                                onPress={() => setEditingIdx(null)}
-                                                style={{ backgroundColor: '#7C6FFF', borderRadius: 10,
-                                                    paddingVertical: 10, alignItems: 'center' }}
-                                            >
-                                                <Text style={{ color: '#fff', fontWeight: '600' }}>{t('common.done')}</Text>
+                                            <TouchableOpacity onPress={() => setEditingIdx(null)}
+                                                style={{ backgroundColor: '#7C6FFF', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}>
+                                                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{t('common.done')}</Text>
                                             </TouchableOpacity>
                                         </View>
                                     )}

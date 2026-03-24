@@ -122,7 +122,7 @@
     "add": "Ajouter",
     "analytics": "Analytique",
     "moreDetails": "Plus de détails →",
-    "income": "Revenus",
+    "income": "Revenu",
     "expenses": "Dépenses",
     "netBalance": "Solde net",
     "deleteAccount": "Supprimer le compte",
@@ -146,15 +146,12 @@
     "addFirstGoal": "Ajouter le premier objectif",
     "addGoal": "Ajouter un objectif",
     "topUp": "Recharger",
-    "transfer": "Virer",
+    "transfer": "Virement",
     "edit": "Modifier",
     "history": "Historique",
     "newOperation": "Nouvelle opération",
-    "add": "Ajouter",
     "byVoice": "Enregistrer par la voix",
-    "transfer": "Virement",
     "expense": "Dépense",
-    "income": "Revenu",
     "editAccount": "Modifier le compte",
     "newAccount": "Nouveau compte",
     "accountName": "Nom",
@@ -866,7 +863,10 @@
       "Déc"
     ],
     "dayN_few": "{{count}} jours",
-    "dayN_many": "{{count}} jours"
+    "dayN_many": "{{count}} jours",
+    "date": "DATE",
+    "note": "NOTE",
+    "categoryName": "Nom de la catégorie"
   },
   "currencyPicker": {
     "title": "Devise",
@@ -897,6 +897,9 @@
     "parseError": "Impossible d'analyser les transactions",
     "saveError": "Erreur de sauvegarde",
     "authError": "Erreur d'authentification",
-    "noAccount": "Aucun compte disponible"
+    "noAccount": "Aucun compte disponible",
+    "textFallback": "Micro indisponible. Saisissez le texte :",
+    "textPlaceholder": "Ex : café 350, taxi 200, salaire 50000",
+    "parseText": "Analyser"
   }
 }

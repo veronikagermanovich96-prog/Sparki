@@ -122,7 +122,7 @@
     "add": "Hinzufügen",
     "analytics": "Analyse",
     "moreDetails": "Mehr Details →",
-    "income": "Einnahmen",
+    "income": "Einnahme",
     "expenses": "Ausgaben",
     "netBalance": "Nettosaldo",
     "deleteAccount": "Konto löschen",
@@ -146,15 +146,12 @@
     "addFirstGoal": "Erstes Ziel hinzufügen",
     "addGoal": "Ziel hinzufügen",
     "topUp": "Einzahlen",
-    "transfer": "Überweisen",
+    "transfer": "Überweisung",
     "edit": "Bearbeiten",
     "history": "Verlauf",
     "newOperation": "Neue Buchung",
-    "add": "Hinzufügen",
     "byVoice": "Per Sprache aufnehmen",
-    "transfer": "Überweisung",
     "expense": "Ausgabe",
-    "income": "Einnahme",
     "editAccount": "Konto bearbeiten",
     "newAccount": "Neues Konto",
     "accountName": "Name",
@@ -866,7 +863,10 @@
       "Dez"
     ],
     "dayN_few": "{{count}} Tage",
-    "dayN_many": "{{count}} Tagen"
+    "dayN_many": "{{count}} Tagen",
+    "date": "DATUM",
+    "note": "NOTIZ",
+    "categoryName": "Kategoriename"
   },
   "currencyPicker": {
     "title": "Währung",
@@ -897,6 +897,9 @@
     "parseError": "Transaktionen konnten nicht analysiert werden",
     "saveError": "Speicherfehler",
     "authError": "Authentifizierungsfehler",
-    "noAccount": "Keine Konten verfügbar"
+    "noAccount": "Keine Konten verfügbar",
+    "textFallback": "Mikrofon nicht verfügbar. Text eingeben:",
+    "textPlaceholder": "Z.B.: Kaffee 350, Taxi 200, Gehalt 50000",
+    "parseText": "Analysieren"
   }
 }
