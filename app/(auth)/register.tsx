@@ -2,12 +2,14 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 export default function Register() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const router = useRouter();
+    const { t } = useTranslation();
 
     async function signUpWithEmail() {
         setLoading(true);
@@ -17,7 +19,7 @@ export default function Register() {
         });
 
         if (error) {
-            Alert.alert('Ошибка', error.message);
+            Alert.alert(t('common.error'), error.message);
             setLoading(false);
             return;
         }
@@ -25,12 +27,12 @@ export default function Register() {
         if (data.user) {
             const { data: household, error: householdError } = await supabase
                 .from('households')
-                .insert({ name: 'Мой бюджет', base_currency: 'EUR' })
+                .insert({ name: t('auth.defaultHousehold'), base_currency: 'EUR' })
                 .select()
                 .single();
 
             if (householdError) {
-                Alert.alert('Ошибка', householdError.message);
+                Alert.alert(t('common.error'), householdError.message);
                 setLoading(false);
                 return;
             }
@@ -43,12 +45,12 @@ export default function Register() {
         }
 
         setLoading(false);
-        router.replace('/(app)');
+        router.replace('/(auth)/categories-quiz');
     }
 
     return (
         <View className="flex-1 bg-gray-950 justify-center px-8">
-            <Text className="text-3xl font-bold text-white mb-8 text-center">Создать аккаунт</Text>
+            <Text className="text-3xl font-bold text-white mb-8 text-center">{t('auth.createAccount')}</Text>
 
             <View className="gap-y-4 mb-8">
                 <TextInput
@@ -62,7 +64,7 @@ export default function Register() {
                 />
                 <TextInput
                     className="bg-gray-900 border border-gray-800 rounded-2xl p-4 text-white text-lg"
-                    placeholder="Пароль"
+                    placeholder={t('auth.password')}
                     placeholderTextColor="#6b7280"
                     value={password}
                     onChangeText={setPassword}
@@ -75,14 +77,14 @@ export default function Register() {
                 onPress={signUpWithEmail}
                 disabled={loading}
             >
-                <Text className="font-bold text-gray-950 text-lg">Зарегистрироваться</Text>
+                <Text className="font-bold text-gray-950 text-lg">{t('auth.register')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
                 className="mt-6 items-center"
                 onPress={() => router.push('/(auth)/login')}
             >
-                <Text className="text-gray-400">Уже есть аккаунт? <Text className="text-white font-bold">Войти</Text></Text>
+                <Text className="text-gray-400">{t('auth.hasAccount')}<Text className="text-white font-bold">{t('auth.login')}</Text></Text>
             </TouchableOpacity>
         </View>
     );

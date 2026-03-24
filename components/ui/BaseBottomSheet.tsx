@@ -10,6 +10,7 @@ import {
     type StyleProp,
     type ViewStyle,
 } from 'react-native';
+import { useTheme } from '@/context/ThemeContext';
 
 interface BaseBottomSheetProps {
     visible: boolean;
@@ -34,6 +35,8 @@ export function BaseBottomSheet({
     animationType = 'slide',
     style,
 }: BaseBottomSheetProps) {
+    const { colors } = useTheme();
+
     function handleBackdropPress() {
         Keyboard.dismiss();
         onClose();
@@ -52,7 +55,7 @@ export function BaseBottomSheet({
                 <View
                     style={[
                         {
-                            backgroundColor: '#111827',
+                            backgroundColor: colors.bgSecondary,
                             borderTopLeftRadius: 24,
                             borderTopRightRadius: 24,
                             paddingHorizontal: 24,

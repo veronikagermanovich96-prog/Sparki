@@ -1,13 +1,14 @@
 /**
  * Analytics Screen – real Supabase data
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
     Dimensions,
     FlatList,
-    KeyboardAvoidingView,
+
     Modal,
     Platform,
     ScrollView,
@@ -35,6 +36,9 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { supabase } from '@/lib/supabase';
 import { formatAmount, getCurrencySymbol, CURRENCIES } from '@/constants/currencies';
 import { Account } from '@/types';
+import { useTranslation } from 'react-i18next';
+import i18n from '@/lib/i18n';
+import { useTheme } from '@/context/ThemeContext';
 import {
     addDays,
     addMonths,
@@ -361,6 +365,7 @@ function getPeriodInMonths(start: Date, end: Date): number {
 // ─── BarChart ─────────────────────────────────────────────────────────────────
 
 function BarChart({ data, currency }: { data: BarPoint[]; currency: string }) {
+    const { colors } = useTheme();
     const [selected, setSelected] = useState<number | null>(null);
     const { width } = Dimensions.get('window');
     const W = width - 48;
@@ -393,7 +398,7 @@ function BarChart({ data, currency }: { data: BarPoint[]; currency: string }) {
                         <Rect x={x} y={tipH} width={groupW} height={barsH} fill="transparent" onPress={() => setSelected(isSelected ? null : i)} />
                         {hasI && iH > 0 && <Rect x={iX} y={tipH + barsH - iH} width={iW} height={iH} fill="#4FFFB0" rx={2} opacity={selected !== null && !isSelected ? 0.3 : 1} />}
                         {hasE && eH > 0 && <Rect x={eX} y={tipH + barsH - eH} width={eW} height={eH} fill="#FF6B6B" rx={2} opacity={selected !== null && !isSelected ? 0.3 : 1} />}
-                        <SvgText x={x + groupW / 2} y={H - 2} textAnchor="middle" fontSize={8} fill={isSelected ? '#fff' : 'rgba(255,255,255,0.35)'} fontWeight={isSelected ? '700' : '400'}>
+                        <SvgText x={x + groupW / 2} y={H - 2} textAnchor="middle" fontSize={8} fill={isSelected ? '#fff' : colors.textMuted} fontWeight={isSelected ? '700' : '400'}>
                             {d.label}
                         </SvgText>
                     </G>
@@ -429,6 +434,8 @@ function BarChart({ data, currency }: { data: BarPoint[]; currency: string }) {
 // ─── ForecastLineChart ────────────────────────────────────────────────────────
 
 function ForecastLineChart({ data, selectedIndex, onSelect, currency: cur }: { data: ForecastChartPoint[]; selectedIndex: number | null; onSelect: (i: number | null) => void; currency: string }) {
+    const { colors } = useTheme();
+    const { t } = useTranslation();
     const { width } = Dimensions.get('window');
     const sym = getCurrencySymbol(cur);
 
@@ -437,7 +444,7 @@ function ForecastLineChart({ data, selectedIndex, onSelect, currency: cur }: { d
     if (allValues.length === 0) {
         return (
             <View style={{ height: 100, alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Нет данных за этот период</Text>
+                <Text style={{ color: colors.textDisabled, fontSize: 13 }}>{t('analytics.noDataForPeriod')}</Text>
             </View>
         );
     }
@@ -490,7 +497,7 @@ function ForecastLineChart({ data, selectedIndex, onSelect, currency: cur }: { d
                 return (
                     <G key={`y${v}`}>
                         <SvgLine x1={yAxisW} y1={gy} x2={W} y2={gy} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
-                        <SvgText x={yAxisW - 4} y={gy + 3} textAnchor="end" fontSize={7} fill="rgba(255,255,255,0.25)">
+                        <SvgText x={yAxisW - 4} y={gy + 3} textAnchor="end" fontSize={7} fill={colors.textDisabled}>
                             {sym}{v.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}
                         </SvgText>
                     </G>
@@ -559,7 +566,7 @@ function ForecastLineChart({ data, selectedIndex, onSelect, currency: cur }: { d
                         <G key={`ml${i}`}>
                             <SvgLine x1={getX(i)} y1={chartH} x2={getX(i)} y2={chartH + 4} stroke="rgba(255,255,255,0.15)" strokeWidth={1} />
                             <SvgText x={getX(i)} y={chartH + 14} textAnchor="middle" fontSize={8}
-                                fill={selectedIndex === i ? '#fff' : 'rgba(255,255,255,0.35)'} fontWeight="500">
+                                fill={selectedIndex === i ? '#fff' : colors.textMuted} fontWeight="500">
                                 {p.monthLabel}
                             </SvgText>
                         </G>
@@ -570,7 +577,7 @@ function ForecastLineChart({ data, selectedIndex, onSelect, currency: cur }: { d
                     if (i % showEveryN !== 0 && i !== data.length - 1) return null;
                     return (
                         <SvgText key={`l${i}`} x={getX(i)} y={chartH + 12} textAnchor="middle" fontSize={8}
-                            fill={selectedIndex === i ? '#fff' : 'rgba(255,255,255,0.3)'} fontWeight={selectedIndex === i ? '700' : '400'}>
+                            fill={selectedIndex === i ? '#fff' : colors.textDisabled} fontWeight={selectedIndex === i ? '700' : '400'}>
                             {p.label}
                         </SvgText>
                     );
@@ -592,6 +599,8 @@ function DonutChart({ categories, totalAmount, currency: cur, active, onPress, v
     onMorePress?: () => void;
     hiddenCount: number;
 }) {
+    const { colors } = useTheme();
+    const { t } = useTranslation();
     const SIZE = 120;
     const cx = SIZE / 2, cy = SIZE / 2, r = 38, sw = 14;
     const C = 2 * Math.PI * r;
@@ -633,22 +642,22 @@ function DonutChart({ categories, totalAmount, currency: cur, active, onPress, v
                     {activeCat ? (
                         <>
                             <CategoryIcon iconName={activeCat.icon} color={activeCat.color} size={20} />
-                            <Text style={{ fontSize: 13, fontWeight: '800', color: '#fff', marginTop: 2 }}>
+                            <Text style={{ fontSize: 13, fontWeight: '800', color: colors.textPrimary, marginTop: 2 }}>
                                 {formatAmount(activeCat.amount, cur)}
                             </Text>
                             <Text style={{ fontSize: 10, fontWeight: '600', color: activeCat.color }}>
                                 {Math.round(activeCat.percent)}%
                             </Text>
-                            <Text style={{ fontSize: 8, color: 'rgba(255,255,255,0.5)', textAlign: 'center', maxWidth: 60 }} numberOfLines={1}>
+                            <Text style={{ fontSize: 8, color: colors.textMuted, textAlign: 'center', maxWidth: 60 }} numberOfLines={1}>
                                 {activeCat.name}
                             </Text>
                         </>
                     ) : (
                         <>
-                            <Text style={{ fontSize: 15, fontWeight: '800', color: '#fff' }}>
+                            <Text style={{ fontSize: 15, fontWeight: '800', color: colors.textPrimary }}>
                                 {formatAmount(totalAmount, cur)}
                             </Text>
-                            <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)' }}>расходы</Text>
+                            <Text style={{ fontSize: 9, color: colors.textMuted }}>{t('analytics.expensesLabel')}</Text>
                         </>
                     )}
                 </View>
@@ -667,15 +676,15 @@ function DonutChart({ categories, totalAmount, currency: cur, active, onPress, v
                             <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: cat.color + '26', alignItems: 'center', justifyContent: 'center' }}>
                                 <CategoryIcon iconName={cat.icon} color={cat.color} size={14} />
                             </View>
-                            <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', flex: 1 }} numberOfLines={1}>{cat.name}</Text>
+                            <Text style={{ fontSize: 12, color: colors.textPrimary, flex: 1 }} numberOfLines={1}>{cat.name}</Text>
                             <Text style={{ fontSize: 11, color: cat.color, fontWeight: '600' }}>{Math.round(cat.percent)}%</Text>
-                            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{formatAmount(cat.amount, cur)}</Text>
+                            <Text style={{ fontSize: 11, color: colors.textMuted }}>{formatAmount(cat.amount, cur)}</Text>
                         </TouchableOpacity>
                     );
                 })}
                 {hiddenCount > 0 && onMorePress && (
                     <TouchableOpacity onPress={onMorePress} style={{ marginTop: 4 }}>
-                        <Text style={{ fontSize: 12, color: '#7C6FFF', fontWeight: '600' }}>+ ещё {hiddenCount} →</Text>
+                        <Text style={{ fontSize: 12, color: '#7C6FFF', fontWeight: '600' }}>{t('analytics.moreN', { n: hiddenCount })}</Text>
                     </TouchableOpacity>
                 )}
             </View>
@@ -686,6 +695,8 @@ function DonutChart({ categories, totalAmount, currency: cur, active, onPress, v
 // ─── BudgetBar ────────────────────────────────────────────────────────────────
 
 function BudgetBar({ item, currency }: { item: BudgetItem; currency: string }) {
+    const { colors } = useTheme();
+    const { t } = useTranslation();
     const ratio = item.spent / item.limit;
     const color = ratio > 1 ? '#FF6B6B' : ratio > 0.75 ? '#FFB84F' : '#4FFFB0';
     const over = item.spent > item.limit;
@@ -694,11 +705,11 @@ function BudgetBar({ item, currency }: { item: BudgetItem; currency: string }) {
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Text style={{ fontSize: 16 }}>{item.icon}</Text>
-                    <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>{item.name}</Text>
+                    <Text style={{ fontSize: 13, color: colors.textPrimary }}>{item.name}</Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
                     <Text style={{ fontSize: 12, color, fontWeight: '700' }}>{formatAmount(item.spent, currency)}</Text>
-                    <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>из {formatAmount(item.limit, currency)}</Text>
+                    <Text style={{ fontSize: 10, color: colors.textDisabled }}>{t('analytics.outOf', { amount: formatAmount(item.limit, currency) })}</Text>
                 </View>
             </View>
             <View style={{ height: 5, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 3, overflow: 'hidden' }}>
@@ -706,7 +717,7 @@ function BudgetBar({ item, currency }: { item: BudgetItem; currency: string }) {
             </View>
             {over && (
                 <Text style={{ marginTop: 5, fontSize: 10, color: '#FF6B6B' }}>
-                    ⚠ Превышен на {formatAmount(item.spent - item.limit, currency)}
+                    {t('analytics.exceededBy', { amount: formatAmount(item.spent - item.limit, currency) })}
                 </Text>
             )}
         </View>
@@ -790,12 +801,14 @@ function calcAccruedInterest(
 // ─── GoalCard ─────────────────────────────────────────────────────────────────
 
 function GoalCard({ goal, onPress, onEdit }: { goal: GoalItem; onPress: () => void; onEdit: () => void }) {
+    const { colors } = useTheme();
+    const { t } = useTranslation();
     const ratio     = goal.target > 0 ? Math.min(goal.saved / goal.target, 1) : 0;
     const remaining = Math.max(goal.target - goal.saved, 0);
     const pct       = Math.round(ratio * 100);
     const subtitle  = goal.targetDate
-        ? `до ${format(new Date(goal.targetDate), 'd MMM yyyy', { locale: ru })}`
-        : `Цель: ${formatAmount(goal.target, goal.currency)}`;
+        ? t('analytics.goalDeadline', { date: format(new Date(goal.targetDate), 'd MMM yyyy', { locale: ru }) })
+        : t('analytics.goalTarget', { amount: formatAmount(goal.target, goal.currency) });
 
     // Mini 20-dot preview (2 rows × 10)
     const miniDots = Array.from({ length: 20 }).map((_, i) => ({
@@ -808,7 +821,7 @@ function GoalCard({ goal, onPress, onEdit }: { goal: GoalItem; onPress: () => vo
             activeOpacity={0.75}
             style={{
                 width: 200, flexShrink: 0,
-                backgroundColor: '#161E35',
+                backgroundColor: colors.bgSecondary,
                 borderWidth: 1, borderColor: 'rgba(124,111,255,0.2)',
                 borderRadius: 18, padding: 16,
             }}
@@ -817,8 +830,8 @@ function GoalCard({ goal, onPress, onEdit }: { goal: GoalItem; onPress: () => vo
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                 <Text style={{ fontSize: 22 }}>{goal.icon}</Text>
                 <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }} numberOfLines={1}>{goal.name}</Text>
-                    <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 1 }}>{subtitle}</Text>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }} numberOfLines={1}>{goal.name}</Text>
+                    <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 1 }}>{subtitle}</Text>
                 </View>
                 <TouchableOpacity onPress={onEdit} hitSlop={8} style={{
                     width: 26, height: 26, borderRadius: 8,
@@ -846,12 +859,12 @@ function GoalCard({ goal, onPress, onEdit }: { goal: GoalItem; onPress: () => vo
                 <Text style={{ fontSize: 15, fontWeight: '800', color: '#4FFFB0' }}>
                     {formatAmount(goal.saved, goal.currency)}
                 </Text>
-                <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{pct}%</Text>
+                <Text style={{ fontSize: 11, color: colors.textMuted }}>{pct}%</Text>
             </View>
 
             {remaining > 0 && (
-                <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>
-                    Осталось: {formatAmount(remaining, goal.currency)}
+                <Text style={{ fontSize: 10, color: colors.textDisabled, marginTop: 4 }}>
+                    {t('analytics.goalRemaining', { amount: formatAmount(remaining, goal.currency) })}
                 </Text>
             )}
         </TouchableOpacity>
@@ -860,24 +873,26 @@ function GoalCard({ goal, onPress, onEdit }: { goal: GoalItem; onPress: () => vo
 
 // ─── PeriodPills ──────────────────────────────────────────────────────────────
 
-const PERIOD_OPTIONS: { id: Period; label: string }[] = [
-    { id: 'day', label: 'Дн' },
-    { id: 'week', label: 'Нд' },
-    { id: 'month', label: 'Мс' },
-    { id: 'quarter', label: 'Кв' },
-    { id: 'year', label: 'Гд' },
+const PERIOD_KEYS: { id: Period; key: string }[] = [
+    { id: 'day', key: 'analytics.periodDay' },
+    { id: 'week', key: 'analytics.periodWeek' },
+    { id: 'month', key: 'analytics.periodMonth' },
+    { id: 'quarter', key: 'analytics.periodQuarter' },
+    { id: 'year', key: 'analytics.periodYear' },
 ];
 
 function PeriodPills({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
+    const { colors } = useTheme();
+    const { t } = useTranslation();
     return (
         <View style={{ flexDirection: 'row', gap: 2, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 14, padding: 2 }}>
-            {PERIOD_OPTIONS.map(p => (
+            {PERIOD_KEYS.map(p => (
                 <TouchableOpacity key={p.id} onPress={() => onChange(p.id)} style={{
                     paddingHorizontal: 9, paddingVertical: 3, borderRadius: 12,
                     backgroundColor: value === p.id ? 'rgba(124,111,255,0.25)' : 'transparent',
                 }}>
-                    <Text style={{ fontSize: 10, fontWeight: '600', color: value === p.id ? '#7C6FFF' : 'rgba(255,255,255,0.3)' }}>
-                        {p.label}
+                    <Text style={{ fontSize: 10, fontWeight: '600', color: value === p.id ? '#7C6FFF' : colors.textDisabled }}>
+                        {t(p.key)}
                     </Text>
                 </TouchableOpacity>
             ))}
@@ -888,9 +903,10 @@ function PeriodPills({ value, onChange }: { value: Period; onChange: (p: Period)
 // ─── Card wrapper ─────────────────────────────────────────────────────────────
 
 function Card({ children, style }: { children: React.ReactNode; style?: object }) {
+    const { colors } = useTheme();
     return (
         <View style={[{
-            backgroundColor: '#131929',
+            backgroundColor: colors.bgSecondary,
             borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
             borderRadius: 18, padding: 18, marginBottom: 12,
         }, style]}>
@@ -902,7 +918,8 @@ function Card({ children, style }: { children: React.ReactNode; style?: object }
 // ─── Spinner ──────────────────────────────────────────────────────────────────
 
 function Spinner() {
-    return <ActivityIndicator color="rgba(255,255,255,0.4)" style={{ marginVertical: 24 }} />;
+    const { colors } = useTheme();
+    return <ActivityIndicator color={colors.textMuted} style={{ marginVertical: 24 }} />;
 }
 
 // ─── Shared form styles ───────────────────────────────────────────────────────
@@ -927,6 +944,8 @@ const inputStyle = {
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function AnalyticsScreen() {
+    const { colors } = useTheme();
+    const { t } = useTranslation();
     const router = useRouter();
     const [tab, setTab] = useState<AnalyticsTab>('overview');
     const [summaryPeriod, setSummaryPeriod] = useState<Period>('month');
@@ -967,7 +986,7 @@ export default function AnalyticsScreen() {
     const [extraCategories, setExtraCategories] = useState<ExtraCategory[]>([]);
     const [showExtrasModal, setShowExtrasModal] = useState(false);
     const [extraDraft, setExtraDraft] = useState<Record<string, DraftEntry>>({});
-    const [allCategories, setAllCategories] = useState<CatWithTags[]>([]);
+    const [allCategories] = useState<CatWithTags[]>([]);
     const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
     const [savingExtras, setSavingExtras] = useState(false);
 
@@ -1028,16 +1047,23 @@ export default function AnalyticsScreen() {
     const [goalTopUpDate, setGoalTopUpDate] = useState<Date>(new Date());
     const [showGoalTopUpDatePicker, setShowGoalTopUpDatePicker] = useState(false);
     const [savingGoalTopUp, setSavingGoalTopUp] = useState(false);
-    const [archivingGoal, setArchivingGoal] = useState(false);
-    const [showArchiveGoal, setShowArchiveGoal] = useState(false);
+
     const [showDeleteGoal, setShowDeleteGoal] = useState(false);
     const [deleteTransferMode, setDeleteTransferMode] = useState<'account' | 'goal' | 'none'>('account');
     const [deleteTransferAccountId, setDeleteTransferAccountId] = useState('');
     const [deleteTransferGoalId, setDeleteTransferGoalId] = useState('');
     const [deletingGoal, setDeletingGoal] = useState(false);
+    const goalDetailScrollRef = useRef<ScrollView>(null);
 
     // ── AI Recommendation ────────────────────────────────────────────────────
     const [recommendation, setRecommendation] = useState('');
+    const [hintsEnabled, setHintsEnabled] = useState(true);
+
+    useEffect(() => {
+        AsyncStorage.getItem('hints').then(val => {
+            if (val !== null) setHintsEnabled(val === 'true');
+        });
+    }, []);
 
     // ── Loans ─────────────────────────────────────────────────────────────────
     const [loans, setLoans] = useState<LoanData[]>([]);
@@ -1075,6 +1101,7 @@ export default function AnalyticsScreen() {
     useFocusEffect(useCallback(() => {
         loadHousehold();
         if (householdId) fetchForecast(householdId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [householdId]));
 
     async function loadHousehold() {
@@ -1101,6 +1128,7 @@ export default function AnalyticsScreen() {
                 fetchOverview(householdId, p);
             }
         });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [householdId, summaryPeriod, chartPeriod, catPeriod]);
 
     // Reset active category when category period changes
@@ -1110,6 +1138,7 @@ export default function AnalyticsScreen() {
     useEffect(() => {
         if (!householdId) return;
         fetchForecast(householdId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [householdId, forecastPeriod, customFrom, customTo]);
 
     // ── Fetch savings & accounts once when household loads ────────────────
@@ -1119,6 +1148,7 @@ export default function AnalyticsScreen() {
         fetchDeposits(householdId);
         fetchLoans(householdId);
         fetchAccounts(householdId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [householdId]);
 
     // ── Overview ────────────────────────────────────────────────────────────
@@ -1209,9 +1239,9 @@ export default function AnalyticsScreen() {
             const id = t.category_id;
             if (!id) return;
             if (!catMap[id]) catMap[id] = {
-                name: t.category?.name ?? 'Прочее',
+                name: t.category?.name ?? i18n.t('analytics.otherCategory'),
                 icon: t.category?.icon ?? '📦',
-                color: getCategoryColor(t.category?.name ?? 'Прочее', t.category?.color ?? null, id),
+                color: getCategoryColor(t.category?.name ?? i18n.t('analytics.otherCategory'), t.category?.color ?? null, id),
                 total: 0,
             };
             catMap[id].total += getAmt(t);
@@ -1294,7 +1324,7 @@ export default function AnalyticsScreen() {
 
             const grouped: Record<string, { name: string; icon: string; color: string; total: number }> = {};
             rows.forEach(t => {
-                const catName = t.category?.name ?? 'Без категории';
+                const catName = t.category?.name ?? i18n.t('analytics.uncategorized');
                 if (!grouped[catName]) {
                     grouped[catName] = { name: catName, icon: t.category?.icon ?? '📦', color: t.category?.color ?? '#888', total: 0 };
                 }
@@ -1313,7 +1343,7 @@ export default function AnalyticsScreen() {
             const items: DayDetailTx[] = [];
 
             if (avgDaily > 0) {
-                items.push({ name: 'Среднедневные расходы', icon: '~', color: '#888', amount: avgDaily });
+                items.push({ name: i18n.t('analytics.avgDailyExpenses'), icon: '~', color: '#888', amount: avgDaily });
             }
 
             point.paymentDetails.forEach(rd => {
@@ -1471,7 +1501,7 @@ export default function AnalyticsScreen() {
                     if (t.date === dateStr) baseTotal += getAmt(t);
                 });
                 if (baseTotal > 0) {
-                    paymentDetails.push({ name: 'Базовые расходы', amount: baseTotal });
+                    paymentDetails.push({ name: i18n.t('analytics.baseExpenses'), amount: baseTotal });
                     paymentAmount += baseTotal;
                 }
                 // Past: confirmed recurring (their txn already in baseRows or everydayRows)
@@ -1501,7 +1531,7 @@ export default function AnalyticsScreen() {
         // Budgets
         type BudgetRow = { category_id: string; amount: number; category: { name: string; icon: string | null; color: string | null } | null };
         const budgets: BudgetItem[] = ((budgetsRaw ?? []) as unknown as BudgetRow[]).map(b => ({
-            name: b.category?.name ?? 'Категория',
+            name: b.category?.name ?? i18n.t('transactions.category'),
             icon: b.category?.icon ?? '📦',
             limit: b.amount,
             spent: catSpend[b.category_id] ?? 0,
@@ -1518,13 +1548,13 @@ export default function AnalyticsScreen() {
     function getPeriodMultiplier(fp: ForecastPeriod, pStart: Date, pEnd: Date): { multiplier: number; label: string } {
         switch (fp) {
             case 'month':   return { multiplier: 1, label: '' };
-            case 'quarter': return { multiplier: 3, label: '× 3 мес' };
-            case 'half':    return { multiplier: 6, label: '× 6 мес' };
-            case 'year':    return { multiplier: 12, label: '× 12 мес' };
+            case 'quarter': return { multiplier: 3, label: `× 3 ${i18n.t('common.perMonth').replace('/', '')}` };
+            case 'half':    return { multiplier: 6, label: `× 6 ${i18n.t('common.perMonth').replace('/', '')}` };
+            case 'year':    return { multiplier: 12, label: `× 12 ${i18n.t('common.perMonth').replace('/', '')}` };
             case 'custom': {
                 const days = differenceInDays(pEnd, pStart) + 1;
                 const m = Math.round((days / 30) * 10) / 10;
-                return { multiplier: m, label: `× ${m} мес` };
+                return { multiplier: m, label: `× ${m} ${i18n.t('common.perMonth').replace('/', '')}` };
             }
         }
     }
@@ -1600,7 +1630,7 @@ export default function AnalyticsScreen() {
                 const scaled = te.comfortable * multiplier;
                 return {
                     tagId: te.tagId,
-                    tagName: te.tagId ? (tagNames[te.tagId] ?? 'Подкатегория') : cat.category!.name,
+                    tagName: te.tagId ? (tagNames[te.tagId] ?? i18n.t('analytics.uncategorized')) : cat.category!.name,
                     spent,
                     comfortable: te.comfortable,
                     scaledComfortable: scaled,
@@ -1625,64 +1655,6 @@ export default function AnalyticsScreen() {
         }).filter(e => e.spent > 0 || e.scaledComfortable > 0);
 
         setExtraCategories(extras);
-    }
-
-    async function openExtrasModal(hid: string) {
-        // Load all expense categories with their tags
-        const [{ data: cats }, { data: tagsRaw }] = await Promise.all([
-            supabase.from('categories').select('id, name, icon, color')
-                .eq('household_id', hid).eq('type', 'expense').order('name'),
-            supabase.from('category_tags').select('id, name, category_id')
-                .eq('household_id', hid).order('sort_order'),
-        ]);
-
-        const tagsByCat: Record<string, { id: string; name: string }[]> = {};
-        (tagsRaw ?? []).forEach(t => {
-            const cid = t.category_id as string;
-            if (!tagsByCat[cid]) tagsByCat[cid] = [];
-            tagsByCat[cid].push({ id: t.id as string, name: t.name as string });
-        });
-
-        const catList: CatWithTags[] = (cats ?? []).map(c => ({
-            id: c.id as string,
-            name: c.name as string,
-            icon: (c.icon as string | null) ?? '📦',
-            color: getCategoryColor(c.name as string, c.color as string | null, c.id as string),
-            tags: tagsByCat[c.id as string] ?? [],
-        }));
-        setAllCategories(catList);
-
-        // Load existing extras
-        const { data: existing } = await supabase
-            .from('category_extras')
-            .select('category_id, tag_id, comfortable_amount, is_active')
-            .eq('household_id', hid);
-
-        const draft: Record<string, DraftEntry> = {};
-        // Initialize all cats and tags
-        catList.forEach(c => {
-            draft[`cat:${c.id}`] = { active: false, amount: '' };
-            c.tags.forEach(t => { draft[`tag:${t.id}`] = { active: false, amount: '' }; });
-        });
-        // Fill from DB
-        (existing ?? []).forEach(e => {
-            const tagId = e.tag_id as string | null;
-            const key = tagId ? `tag:${tagId}` : `cat:${e.category_id}`;
-            draft[key] = {
-                active: e.is_active as boolean,
-                amount: String(e.comfortable_amount as number),
-            };
-        });
-        setExtraDraft(draft);
-        // Auto-expand cats that have active entries
-        const expanded = new Set<string>();
-        catList.forEach(c => {
-            const catActive = draft[`cat:${c.id}`]?.active;
-            const anyTagActive = c.tags.some(t => draft[`tag:${t.id}`]?.active);
-            if (catActive || anyTagActive) expanded.add(c.id);
-        });
-        setExpandedCats(expanded);
-        setShowExtrasModal(true);
     }
 
     async function saveExtras(hid: string) {
@@ -1805,7 +1777,7 @@ export default function AnalyticsScreen() {
 
         if (depErr) {
             console.error('Deposit insert error:', depErr);
-            Alert.alert('Ошибка', depErr.message);
+            Alert.alert(t('common.error'), depErr.message);
             setSavingDeposit(false);
             return;
         }
@@ -1833,7 +1805,7 @@ export default function AnalyticsScreen() {
                     account_id: topUpAccountId,
                     amount: -amt,
                     currency: depositCurrency,
-                    description: `Открытие депозита "${depositName}"`,
+                    description: `${depositName}`,
                     date: format(depositStartDate, 'yyyy-MM-dd'),
                     type: 'expense',
                 });
@@ -1860,7 +1832,7 @@ export default function AnalyticsScreen() {
 
         // Validate start date vs end date
         if (depositEndDate && depositStartDate >= depositEndDate) {
-            Alert.alert('Ошибка', 'Дата начала должна быть раньше даты окончания');
+            Alert.alert(t('common.error'), t('analytics.dateStartBeforeEnd'));
             setSavingDeposit(false);
             return;
         }
@@ -1879,7 +1851,7 @@ export default function AnalyticsScreen() {
 
         if (updErr) {
             console.error('Deposit update error:', updErr);
-            Alert.alert('Ошибка', updErr.message);
+            Alert.alert(t('common.error'), updErr.message);
             setSavingDeposit(false);
             return;
         }
@@ -1922,7 +1894,7 @@ export default function AnalyticsScreen() {
                 account_id: depositTopUpAccountId,
                 amount: -amt,
                 currency: editingDeposit.currency,
-                description: `Пополнение депозита "${editingDeposit.name}"`,
+                description: `${editingDeposit.name}`,
                 date: format(depositTopUpDate, 'yyyy-MM-dd'),
                 type: 'expense',
             });
@@ -2074,7 +2046,6 @@ export default function AnalyticsScreen() {
             const ratePeriods = periodsByLoan[id] ?? [];
             const currentRate = ratePeriods.length > 0 ? ratePeriods[ratePeriods.length - 1].rate : 0;
             const totalMonths = differenceInMonths(endDate, startDate);
-            const remaining = totalAmount - paidAmount;
 
             let monthlyPayment = 0;
             if (paymentType === 'annuity') {
@@ -2115,7 +2086,7 @@ export default function AnalyticsScreen() {
         if (validPeriods.length === 0) { setSavingLoan(false); return; }
 
         if (loanStartDate >= loanEndDate) {
-            Alert.alert('Ошибка', 'Дата начала должна быть раньше даты окончания');
+            Alert.alert(t('common.error'), t('analytics.dateStartBeforeEnd'));
             setSavingLoan(false);
             return;
         }
@@ -2198,7 +2169,7 @@ export default function AnalyticsScreen() {
 
         if (error) {
             console.error('Loan create error:', error);
-            Alert.alert('Ошибка', error.message);
+            Alert.alert(t('common.error'), error.message);
             setSavingLoan(false);
             return;
         }
@@ -2278,7 +2249,7 @@ export default function AnalyticsScreen() {
                 : calcDifferentiatedPayment(amt, rate, totalMonths, 0);
             await supabase.from('recurring_payments').update({
                 amount: Math.round(monthlyPmt * 100) / 100,
-                name: `Кредит: ${loanName}`,
+                name: `${loanName}`,
             }).eq('id', editingLoan.recurringId);
         }
 
@@ -2288,9 +2259,9 @@ export default function AnalyticsScreen() {
 
     async function closeLoanAction(loan: LoanData) {
         if (!householdId) return;
-        Alert.alert('Закрыть кредит?', 'Кредит будет помечен как закрытый', [
-            { text: 'Отмена', style: 'cancel' },
-            { text: 'Закрыть', style: 'destructive', onPress: async () => {
+        Alert.alert(t('analytics.closeLoan'), t('analytics.closeLoanMsg'), [
+            { text: t('common.cancel'), style: 'cancel' },
+            { text: t('common.close'), style: 'destructive', onPress: async () => {
                 await supabase.from('loans').update({ is_active: false }).eq('id', loan.id);
                 if (loan.recurringId) {
                     await supabase.from('recurring_payments').update({ is_active: false }).eq('id', loan.recurringId);
@@ -2340,13 +2311,13 @@ export default function AnalyticsScreen() {
             type: 'expense',
             amount: Math.round(paymentAmount * 100) / 100,
             currency: loan.currency,
-            note: `Платёж по кредиту: ${loan.name}`,
+            note: `${loan.name}`,
             date: format(new Date(), 'yyyy-MM-dd'),
         });
 
         if (txErr) {
             console.error('Loan payment tx error:', txErr);
-            Alert.alert('Ошибка', txErr.message);
+            Alert.alert(t('common.error'), txErr.message);
             setConfirmingPayment(false);
             return;
         }
@@ -2387,7 +2358,7 @@ export default function AnalyticsScreen() {
         setSelectedLoan({ ...loan, paidAmount: newPaid });
         fetchLoans(householdId);
         if (householdId) fetchAccounts(householdId);
-        Alert.alert('Готово', `Платёж ${formatAmount(paymentAmount, loan.currency)} подтверждён`);
+        Alert.alert(t('common.done'), t('analytics.paymentConfirmed', { amount: formatAmount(paymentAmount, loan.currency) }));
     }
 
     function openEditLoan(loan: LoanData) {
@@ -2431,7 +2402,7 @@ export default function AnalyticsScreen() {
     }
 
     const LOAN_TYPE_LABELS: Record<LoanType, string> = {
-        mortgage: 'Ипотека', auto: 'Автокредит', consumer: 'Потребительский', other: 'Другой',
+        mortgage: t('analytics.mortgage'), auto: t('analytics.carLoan'), consumer: t('analytics.consumer'), other: t('analytics.otherLoan'),
     };
 
     // ── Savings ─────────────────────────────────────────────────────────────
@@ -2495,7 +2466,7 @@ export default function AnalyticsScreen() {
             if (d.endDate) {
                 const monthsLeft = differenceInMonths(d.endDate, today);
                 if (monthsLeft >= 0 && monthsLeft <= 2) {
-                    return `Депозит «${d.name}» закрывается ${format(d.endDate, 'd MMMM', { locale: ru })} — не забудь продлить, чтобы деньги продолжали работать.`;
+                    return t('analytics.depositClosing', { name: d.name, date: format(d.endDate, 'd MMMM', { locale: ru }) });
                 }
             }
         }
@@ -2506,9 +2477,10 @@ export default function AnalyticsScreen() {
             const worst = overExtras.reduce((a, b) => b.extra > a.extra ? b : a);
             const goalRef = goalsState.length > 0 ? goalsState[0] : null;
             if (goalRef) {
-                return `В этом месяце «${worst.name}» — перерасход ${formatAmount(worst.extra, currency)}. Это ${goalRef.target > 0 ? Math.round(worst.extra / goalRef.target * 100) + '% от цели' : 'часть взноса в'} «${goalRef.name}».`;
+                const goalPart = goalRef.target > 0 ? t('analytics.recOverspendGoalPct', { pct: Math.round(worst.extra / goalRef.target * 100) }) : t('analytics.recOverspendGoalPart');
+                return t('analytics.recOverspend', { name: worst.name, amount: formatAmount(worst.extra, currency), goalPart, goalName: goalRef.name });
             }
-            return `В этом месяце «${worst.name}» — перерасход ${formatAmount(worst.extra, currency)}. Эту сумму можно было отложить на накопления.`;
+            return t('analytics.recOverspendNoGoal', { name: worst.name, amount: formatAmount(worst.extra, currency) });
         }
 
         // Priority 3: Goal with deadline — calculate timeline
@@ -2519,11 +2491,11 @@ export default function AnalyticsScreen() {
                 if (monthsLeft > 0 && monthsLeft <= 6) {
                     const remaining = Math.max(g.target - g.saved, 0);
                     const perMonth = Math.ceil(remaining / monthsLeft);
-                    return `До «${g.name}» ${monthsLeft} мес. Осталось ${formatAmount(remaining, g.currency)} — нужно откладывать ~${formatAmount(perMonth, g.currency)}/мес.`;
+                    return t('analytics.recGoalDeadline', { name: g.name, months: monthsLeft, remaining: formatAmount(remaining, g.currency), perMonth: formatAmount(perMonth, g.currency) });
                 }
                 if (monthsLeft > 6) {
                     const pct = g.target > 0 ? Math.round(g.saved / g.target * 100) : 0;
-                    return `«${g.name}» — ${pct}% готово. До дедлайна ещё ${monthsLeft} мес., хороший темп.`;
+                    return t('analytics.recGoalProgress', { name: g.name, pct, months: monthsLeft });
                 }
             }
         }
@@ -2533,9 +2505,9 @@ export default function AnalyticsScreen() {
         if (bestDep && bestDep.currentRate > 0) {
             const accrued = calcAccruedInterest(bestDep.amount, bestDep.ratePeriods, bestDep.capitalization, bestDep.startDate);
             if (accrued > 0) {
-                return `Депозит «${bestDep.name}» уже принёс ${formatAmount(accrued, bestDep.currency)} процентного дохода при ставке ${bestDep.currentRate}%.`;
+                return t('analytics.recDepositEarned', { name: bestDep.name, amount: formatAmount(accrued, bestDep.currency), rate: bestDep.currentRate });
             }
-            return `Депозит «${bestDep.name}» работает под ${bestDep.currentRate}% годовых — деньги не простаивают.`;
+            return t('analytics.recDepositWorking', { name: bestDep.name, rate: bestDep.currentRate });
         }
 
         // Priority 5: General goals progress
@@ -2543,10 +2515,10 @@ export default function AnalyticsScreen() {
             const totalSaved = goalsState.reduce((s, g) => s + g.saved, 0);
             const totalTarget = goalsState.reduce((s, g) => s + g.target, 0);
             const pct = totalTarget > 0 ? Math.round(totalSaved / totalTarget * 100) : 0;
-            return `Общий прогресс по целям — ${pct}%. ${pct < 30 ? 'Регулярные пополнения помогут набрать темп.' : pct < 70 ? 'Хороший прогресс, продолжайте!' : 'Отличный результат, цели почти достигнуты!'}`;
+            return `${t('analytics.recGoalsOverall', { pct })} ${pct < 30 ? t('analytics.recGoalsLow') : pct < 70 ? t('analytics.recGoalsMid') : t('analytics.recGoalsHigh')}`;
         }
 
-        return 'Создайте первую цель или депозит, чтобы получить персональную рекомендацию.';
+        return t('analytics.createFirstGoal');
     }
 
     useEffect(() => {
@@ -2554,6 +2526,7 @@ export default function AnalyticsScreen() {
         if (goalsState.length > 0 || deposits.length > 0 || extraCategories.length > 0) {
             setRecommendation(generateRecommendation());
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tab, goalsState, deposits, extraCategories]);
 
     // ── Open add-goal modal (reset form + pre-select first account) ─────────
@@ -2618,7 +2591,7 @@ export default function AnalyticsScreen() {
                         amount:       initialAmt,
                         currency:     goalCurrency,
                         date:         format(new Date(), 'yyyy-MM-dd'),
-                        description:  `Начальный взнос → ${goalName.trim()}`,
+                        description:  `${t('analytics.initialDeposit')} → ${goalName.trim()}`,
                         created_by:   uid,
                     });
                 }
@@ -2695,7 +2668,6 @@ export default function AnalyticsScreen() {
     function closeGoalDetail() {
         setSelectedGoal(null);
         setShowGoalTopUp(false);
-        setShowArchiveGoal(false);
         setShowDeleteGoal(false);
     }
 
@@ -2717,18 +2689,6 @@ export default function AnalyticsScreen() {
         return { interest, forecast, needToAdd, endDate, daysLeft };
     })();
 
-    async function confirmArchiveGoal() {
-        if (!selectedGoal) return;
-        setArchivingGoal(true);
-        await supabase.from('savings_goals')
-            .update({ is_archived: true, is_active: false })
-            .eq('id', selectedGoal.id);
-        setArchivingGoal(false);
-        setShowArchiveGoal(false);
-        closeGoalDetail();
-        if (householdId) fetchSavings(householdId);
-    }
-
     function openDeleteGoal() {
         if (!selectedGoal) return;
         setDeleteTransferMode('account');
@@ -2736,6 +2696,7 @@ export default function AnalyticsScreen() {
         const otherGoals = goalsState.filter(g => g.id !== selectedGoal.id);
         setDeleteTransferGoalId(otherGoals[0]?.id || '');
         setShowDeleteGoal(true);
+        setTimeout(() => goalDetailScrollRef.current?.scrollToEnd({ animated: true }), 100);
     }
 
     async function confirmDeleteGoal() {
@@ -2760,7 +2721,7 @@ export default function AnalyticsScreen() {
                             amount: savedAmt,
                             currency: selectedGoal.currency,
                             date: format(new Date(), 'yyyy-MM-dd'),
-                            description: `Возврат с цели «${selectedGoal.name}»`,
+                            description: `${selectedGoal.name}`,
                             created_by: uid,
                         });
                     }
@@ -2816,7 +2777,7 @@ export default function AnalyticsScreen() {
                                 amount: amt,
                                 currency: selectedGoal.currency,
                                 date: format(goalTopUpDate, 'yyyy-MM-dd'),
-                                description: `Пополнение цели «${selectedGoal.name}»`,
+                                description: `${t('analytics.topUpGoal')} «${selectedGoal.name}»`,
                                 created_by: uid,
                             });
                         }
@@ -2831,7 +2792,7 @@ export default function AnalyticsScreen() {
             closeGoalDetail();
             if (householdId) fetchSavings(householdId);
         } catch (e: any) {
-            Alert.alert('Ошибка', e.message);
+            Alert.alert(t('common.error'), e.message);
         } finally {
             setSavingGoalTopUp(false);
         }
@@ -2849,24 +2810,24 @@ export default function AnalyticsScreen() {
     const balance = summaryData ? totalIncome - summaryData.expenses : 0;
 
     const DEPOSIT_PERIOD_LABEL: Record<Period, string> = {
-        day: 'сегодня', week: 'эту неделю', month: 'этот месяц', quarter: 'этот квартал', year: 'в этом году',
+        day: t('analytics.todayPeriod'), week: t('analytics.thisWeek'), month: t('analytics.thisMonth'), quarter: t('analytics.thisQuarter'), year: t('analytics.thisYear'),
     };
     const TABS: { id: AnalyticsTab; label: string }[] = [
-        { id: 'overview', label: 'Обзор' },
-        { id: 'forecast', label: 'Прогноз' },
-        { id: 'savings', label: 'Накопления' },
-        { id: 'loans', label: 'Кредиты' },
+        { id: 'overview', label: t('analytics.overview') },
+        { id: 'forecast', label: t('analytics.forecast') },
+        { id: 'savings', label: t('analytics.savings') },
+        { id: 'loans', label: t('analytics.loans') },
     ];
 
     // ── Render ──────────────────────────────────────────────────────────────
     return (
-        <View style={{ flex: 1, backgroundColor: '#090D1A' }}>
+        <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
             {/* Header */}
             <View style={{ paddingTop: 60, paddingHorizontal: 20, paddingBottom: 12, flexDirection: 'row', alignItems: 'center' }}>
                 <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={{ marginRight: 12 }}>
                     <ChevronLeft color="#fff" size={24} />
                 </TouchableOpacity>
-                <Text style={{ fontSize: 24, fontWeight: '800', color: '#fff', flex: 1 }}>Аналитика</Text>
+                <Text style={{ fontSize: 24, fontWeight: '800', color: colors.textPrimary, flex: 1 }}>{t('analytics.title')}</Text>
             </View>
 
             {/* Tab bar */}
@@ -2874,9 +2835,9 @@ export default function AnalyticsScreen() {
                 {TABS.map(t => (
                     <TouchableOpacity key={t.id} onPress={() => setTab(t.id)} style={{
                         paddingHorizontal: 16, paddingVertical: 8, borderRadius: 30,
-                        backgroundColor: tab === t.id ? 'rgba(255,255,255,0.08)' : 'transparent',
+                        backgroundColor: tab === t.id ? '#7C6FFF' : 'transparent',
                     }}>
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: tab === t.id ? '#fff' : 'rgba(255,255,255,0.4)' }}>
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: tab === t.id ? '#ffffff' : colors.textMuted }}>
                             {t.label}
                         </Text>
                     </TouchableOpacity>
@@ -2891,37 +2852,37 @@ export default function AnalyticsScreen() {
                         {/* Summary card */}
                         <Card>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                                <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff' }}>Сводка</Text>
+                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }}>{t('analytics.summary')}</Text>
                                 <PeriodPills value={summaryPeriod} onChange={setSummaryPeriod} />
                             </View>
                             {fetchingPeriods.has(summaryPeriod) && !summaryData ? <Spinner /> : summaryData ? (
                                 <>
                                     <View style={{ flexDirection: 'row', gap: 16, marginBottom: 16 }}>
                                         <View style={{ flex: 1 }}>
-                                            <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Доходы</Text>
+                                            <Text style={{ fontSize: 10, color: colors.textMuted, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('analytics.income')}</Text>
                                             <Text style={{ fontSize: 20, fontWeight: '800', color: '#4FFFB0' }}>
                                                 +{formatAmount(summaryData.income, currency)}
                                             </Text>
                                             {summaryData.prevIncome > 0 && (
                                                 <Text style={{ fontSize: 10, color: incomeChange >= 0 ? '#4FFFB0' : '#FF6B6B', marginTop: 3 }}>
-                                                    {incomeChange >= 0 ? '↑' : '↓'} {Math.abs(incomeChange)}% vs прошлый
+                                                    {t('analytics.vsLastPeriod', { pct: `${incomeChange >= 0 ? '↑' : '↓'} ${Math.abs(incomeChange)}` })}
                                                 </Text>
                                             )}
                                         </View>
                                         <View style={{ flex: 1 }}>
-                                            <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Расходы</Text>
+                                            <Text style={{ fontSize: 10, color: colors.textMuted, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('analytics.expenses')}</Text>
                                             <Text style={{ fontSize: 20, fontWeight: '800', color: '#FF6B6B' }}>
                                                 −{formatAmount(summaryData.expenses, currency)}
                                             </Text>
                                             {summaryData.prevExpenses > 0 && (
                                                 <Text style={{ fontSize: 10, color: expChange <= 0 ? '#4FFFB0' : '#FF6B6B', marginTop: 3 }}>
-                                                    {expChange >= 0 ? '↑' : '↓'} {Math.abs(expChange)}% vs прошлый
+                                                    {t('analytics.vsLastPeriod', { pct: `${expChange >= 0 ? '↑' : '↓'} ${Math.abs(expChange)}` })}
                                                 </Text>
                                             )}
                                         </View>
                                     </View>
                                     <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)', paddingTop: 14 }}>
-                                        <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>Чистый баланс</Text>
+                                        <Text style={{ fontSize: 10, color: colors.textMuted, marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('analytics.netBalance')}</Text>
                                         <Text style={{ fontSize: 24, fontWeight: '800', color: balance >= 0 ? '#4FFFB0' : '#FF6B6B' }}>
                                             {balance >= 0 ? '+' : '−'}{formatAmount(Math.abs(balance), currency)}
                                         </Text>
@@ -2934,11 +2895,11 @@ export default function AnalyticsScreen() {
                         {summaryData && summaryData.deposits.length > 0 && summaryData.depositInterest > 0 && (
                             <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/(app)/analytics?tab=savings')}>
                                 <Card>
-                                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 2 }}>
-                                        💰 Деньги работали {DEPOSIT_PERIOD_LABEL[summaryPeriod]}
+                                    <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 2 }}>
+                                        {t('analytics.moneyWorked', { period: DEPOSIT_PERIOD_LABEL[summaryPeriod] })}
                                     </Text>
-                                    <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 14 }}>
-                                        Проценты по вашим депозитам
+                                    <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 14 }}>
+                                        {t('analytics.depositInterest')}
                                     </Text>
                                     <Text style={{ fontSize: 22, fontWeight: '800', color: '#4FFFB0', marginBottom: 14 }}>
                                         +{formatAmount(summaryData.depositInterest, currency)}
@@ -2955,8 +2916,8 @@ export default function AnalyticsScreen() {
                                                 <Text style={{ fontSize: 15 }}>{dep.icon}</Text>
                                             </View>
                                             <View style={{ flex: 1 }}>
-                                                <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>{dep.name}</Text>
-                                                <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{dep.rate}% годовых</Text>
+                                                <Text style={{ fontSize: 13, color: colors.textPrimary }}>{dep.name}</Text>
+                                                <Text style={{ fontSize: 10, color: colors.textDisabled }}>{t('analytics.annualRate', { rate: dep.rate })}</Text>
                                             </View>
                                             <Text style={{ fontSize: 14, fontWeight: '700', color: '#4FFFB0' }}>
                                                 +{formatAmount(dep.interest, dep.currency)}
@@ -2970,7 +2931,7 @@ export default function AnalyticsScreen() {
                         {/* Bar chart */}
                         <Card>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                                <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff' }}>Динамика</Text>
+                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }}>{t('analytics.dynamics')}</Text>
                                 <PeriodPills value={chartPeriod} onChange={setChartPeriod} />
                             </View>
                             {fetchingPeriods.has(chartPeriod) && !chartData ? <Spinner /> : chartData ? (
@@ -2978,11 +2939,11 @@ export default function AnalyticsScreen() {
                                     <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                                             <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: '#4FFFB0' }} />
-                                            <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Доходы</Text>
+                                            <Text style={{ fontSize: 10, color: colors.textMuted }}>{t('analytics.income')}</Text>
                                         </View>
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                                             <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: '#FF6B6B' }} />
-                                            <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Расходы</Text>
+                                            <Text style={{ fontSize: 10, color: colors.textMuted }}>{t('analytics.expenses')}</Text>
                                         </View>
                                     </View>
                                     <BarChart data={chartData.chart} currency={currency} />
@@ -2993,7 +2954,7 @@ export default function AnalyticsScreen() {
                         {/* Donut + Categories */}
                         <Card>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                                <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff' }}>Расходы</Text>
+                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }}>{t('analytics.expenses')}</Text>
                                 <PeriodPills value={catPeriod} onChange={setCatPeriod} />
                             </View>
                             {fetchingPeriods.has(catPeriod) && !catData ? <Spinner /> : catData && catData.categories.length > 0 ? (() => {
@@ -3005,9 +2966,9 @@ export default function AnalyticsScreen() {
                                     <>
                                         {/* Expanded: header with collapse */}
                                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                                            <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>Структура расходов</Text>
+                                            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}>{t('analytics.expenseStructure')}</Text>
                                             <TouchableOpacity onPress={() => setCatExpanded(false)}>
-                                                <Text style={{ fontSize: 12, color: '#7C6FFF', fontWeight: '600' }}>Свернуть</Text>
+                                                <Text style={{ fontSize: 12, color: '#7C6FFF', fontWeight: '600' }}>{t('analytics.collapse')}</Text>
                                             </TouchableOpacity>
                                         </View>
                                         {/* Full category list with progress bars */}
@@ -3025,8 +2986,8 @@ export default function AnalyticsScreen() {
                                                 </View>
                                                 <View style={{ flex: 1 }}>
                                                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                                                        <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>{cat.name}</Text>
-                                                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>{formatAmount(cat.amount, currency)}</Text>
+                                                        <Text style={{ fontSize: 13, color: colors.textPrimary }}>{cat.name}</Text>
+                                                        <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}>{formatAmount(cat.amount, currency)}</Text>
                                                     </View>
                                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                                                         <View style={{ flex: 1, height: 3, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 2, overflow: 'hidden' }}>
@@ -3055,7 +3016,7 @@ export default function AnalyticsScreen() {
                                 );
                             })() : catData ? (
                                 <View style={{ alignItems: 'center', paddingVertical: 20 }}>
-                                    <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>Нет расходов за период</Text>
+                                    <Text style={{ fontSize: 12, color: colors.textDisabled }}>{t('analytics.noExpenses')}</Text>
                                 </View>
                             ) : null}
                         </Card>
@@ -3065,26 +3026,26 @@ export default function AnalyticsScreen() {
                 {/* ══ FORECAST ══════════════════════════════════════════════ */}
                 {tab === 'forecast' && (() => {
                     const FORECAST_PILLS: { id: ForecastPeriod; label: string }[] = [
-                        { id: 'month', label: 'Месяц' },
-                        { id: 'quarter', label: 'Квартал' },
-                        { id: 'half', label: 'Полгода' },
-                        { id: 'year', label: 'Год' },
-                        { id: 'custom', label: 'Свой' },
+                        { id: 'month', label: t('analytics.forecastMonth') },
+                        { id: 'quarter', label: t('analytics.forecastQuarter') },
+                        { id: 'half', label: t('analytics.forecastHalf') },
+                        { id: 'year', label: t('analytics.forecastYear') },
+                        { id: 'custom', label: t('analytics.forecastCustom') },
                     ];
                     const FORECAST_TITLES: Record<ForecastPeriod, string> = {
-                        month: 'ПРОГНОЗ ДО КОНЦА МЕСЯЦА',
-                        quarter: 'ПРОГНОЗ НА 3 МЕСЯЦА',
-                        half: 'ПРОГНОЗ НА 6 МЕСЯЦЕВ',
-                        year: 'ПРОГНОЗ НА 12 МЕСЯЦЕВ',
-                        custom: 'ПРОГНОЗ НА ПЕРИОД',
+                        month: t('analytics.forecastEndOfMonth'),
+                        quarter: t('analytics.forecastFor3Months'),
+                        half: `${t('analytics.forecast').toUpperCase()} · ${t('analytics.forecastHalf')}`,
+                        year: `${t('analytics.forecast').toUpperCase()} · ${t('analytics.forecastYear')}`,
+                        custom: `${t('analytics.forecast').toUpperCase()} · ${t('analytics.forecastCustom')}`,
                     };
 
                     function formatRemaining(days: number): string {
-                        if (days <= 0) return '0 дн';
+                        if (days <= 0) return `0 ${t('analytics.dayShort')}`;
                         const m = Math.floor(days / 30);
                         const d = days % 30;
-                        if (m >= 1) return `${m} мес${d > 0 ? ` ${d} дн` : ''}`;
-                        return `${days} дн`;
+                        if (m >= 1) return `${m} ${t('analytics.monthShort')}${d > 0 ? ` ${d} ${t('analytics.dayShort')}` : ''}`;
+                        return `${days} ${t('analytics.dayShort')}`;
                     }
 
                     return (
@@ -3097,7 +3058,7 @@ export default function AnalyticsScreen() {
                                         paddingVertical: 6, borderRadius: 12,
                                         backgroundColor: forecastPeriod === p.id ? 'rgba(124,111,255,0.25)' : 'transparent',
                                     }}>
-                                        <Text style={{ fontSize: 11, fontWeight: '600', color: forecastPeriod === p.id ? '#7C6FFF' : 'rgba(255,255,255,0.3)' }}>
+                                        <Text style={{ fontSize: 11, fontWeight: '600', color: forecastPeriod === p.id ? '#7C6FFF' : colors.textDisabled }}>
                                             {p.label}
                                         </Text>
                                     </TouchableOpacity>
@@ -3110,13 +3071,13 @@ export default function AnalyticsScreen() {
                                     <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
                                         <TouchableOpacity onPress={() => { setShowCustomFrom(f => !f); setShowCustomTo(false); }}
                                             style={{ flex: 1, backgroundColor: showCustomFrom ? 'rgba(124,111,255,0.15)' : 'rgba(255,255,255,0.06)', borderRadius: 12, padding: 12, borderWidth: showCustomFrom ? 1 : 0, borderColor: 'rgba(124,111,255,0.3)' }}>
-                                            <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', marginBottom: 4, textTransform: 'uppercase' }}>От</Text>
-                                            <Text style={{ fontSize: 13, color: '#fff', fontWeight: '600' }}>{format(customFrom, 'dd.MM.yyyy')}</Text>
+                                            <Text style={{ fontSize: 9, color: colors.textMuted, marginBottom: 4, textTransform: 'uppercase' }}>{t('analytics.from')}</Text>
+                                            <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: '600' }}>{format(customFrom, 'dd.MM.yyyy')}</Text>
                                         </TouchableOpacity>
                                         <TouchableOpacity onPress={() => { setShowCustomTo(f => !f); setShowCustomFrom(false); }}
                                             style={{ flex: 1, backgroundColor: showCustomTo ? 'rgba(124,111,255,0.15)' : 'rgba(255,255,255,0.06)', borderRadius: 12, padding: 12, borderWidth: showCustomTo ? 1 : 0, borderColor: 'rgba(124,111,255,0.3)' }}>
-                                            <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', marginBottom: 4, textTransform: 'uppercase' }}>До</Text>
-                                            <Text style={{ fontSize: 13, color: '#fff', fontWeight: '600' }}>{format(customTo, 'dd.MM.yyyy')}</Text>
+                                            <Text style={{ fontSize: 9, color: colors.textMuted, marginBottom: 4, textTransform: 'uppercase' }}>{t('analytics.to')}</Text>
+                                            <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: '600' }}>{format(customTo, 'dd.MM.yyyy')}</Text>
                                         </TouchableOpacity>
                                     </View>
                                     {showCustomFrom && (
@@ -3134,14 +3095,14 @@ export default function AnalyticsScreen() {
                                 <>
                                     {/* Forecast summary — two parts */}
                                     <Card>
-                                        <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                        <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                                             {FORECAST_TITLES[forecastPeriod]}
                                         </Text>
 
                                         {forecastData.insufficientData && (
                                             <View style={{ backgroundColor: 'rgba(255,184,79,0.1)', borderRadius: 10, padding: 10, marginBottom: 12 }}>
                                                 <Text style={{ fontSize: 12, color: '#FFB84F' }}>
-                                                    Недостаточно данных · только запланированные платежи
+                                                    {t('analytics.insufficientData')}
                                                 </Text>
                                             </View>
                                         )}
@@ -3149,8 +3110,8 @@ export default function AnalyticsScreen() {
                                         {/* PART 1 — Projected daily spending */}
                                         {!forecastData.insufficientData && (
                                             <View style={{ marginBottom: 12 }}>
-                                                <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginBottom: 4, textTransform: 'uppercase' }}>
-                                                    Прогноз расходов ({forecastData.daysLeft} дн.)
+                                                <Text style={{ fontSize: 10, color: colors.textMuted, marginBottom: 4, textTransform: 'uppercase' }}>
+                                                    {t('analytics.forecastExpenses', { days: forecastData.daysLeft })}
                                                 </Text>
                                                 <Text style={{ fontSize: 24, fontWeight: '800', color: '#FFB84F' }}>
                                                     {formatAmount(forecastData.projectedDaily, currency)}
@@ -3161,13 +3122,13 @@ export default function AnalyticsScreen() {
                                         {/* PART 2 — Upcoming scheduled payments */}
                                         {forecastData.upcomingRecurring.length > 0 && (
                                             <View style={{ marginBottom: 12 }}>
-                                                <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginBottom: 8, textTransform: 'uppercase' }}>
-                                                    Запланированные платежи
+                                                <Text style={{ fontSize: 10, color: colors.textMuted, marginBottom: 8, textTransform: 'uppercase' }}>
+                                                    {t('analytics.scheduledPayments')}
                                                 </Text>
                                                 {forecastData.upcomingRecurring.map((r, i) => (
                                                     <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: i < forecastData.upcomingRecurring.length - 1 ? 1 : 0, borderBottomColor: 'rgba(255,255,255,0.06)' }}>
-                                                        <Text style={{ fontSize: 14, color: '#fff' }}>{r.name}</Text>
-                                                        <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>
+                                                        <Text style={{ fontSize: 14, color: colors.textPrimary }}>{r.name}</Text>
+                                                        <Text style={{ fontSize: 14, color: colors.textSecondary, fontWeight: '600' }}>
                                                             {formatAmount(r.amount, currency)}
                                                         </Text>
                                                     </View>
@@ -3180,7 +3141,7 @@ export default function AnalyticsScreen() {
 
                                         {/* TOTAL */}
                                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                                            <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>Итого</Text>
+                                            <Text style={{ fontSize: 13, color: colors.textMuted, fontWeight: '600' }}>{t('analytics.total')}</Text>
                                             <Text style={{ fontSize: 22, fontWeight: '800', color: '#FFB84F' }}>
                                                 {formatAmount(forecastData.projectedDaily + forecastData.recurringTotal, currency)}
                                             </Text>
@@ -3188,12 +3149,12 @@ export default function AnalyticsScreen() {
 
                                         <View style={{ flexDirection: 'row', gap: 10 }}>
                                             <View style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: 10 }}>
-                                                <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', marginBottom: 4, textTransform: 'uppercase' }}>Осталось</Text>
-                                                <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>{formatRemaining(forecastData.daysLeft)}</Text>
+                                                <Text style={{ fontSize: 9, color: colors.textMuted, marginBottom: 4, textTransform: 'uppercase' }}>{t('analytics.remaining')}</Text>
+                                                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}>{formatRemaining(forecastData.daysLeft)}</Text>
                                             </View>
                                             <View style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: 10 }}>
-                                                <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', marginBottom: 4, textTransform: 'uppercase' }}>Уже потрачено</Text>
-                                                <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>{formatAmount(forecastData.factSpend, currency)}</Text>
+                                                <Text style={{ fontSize: 9, color: colors.textMuted, marginBottom: 4, textTransform: 'uppercase' }}>{t('analytics.alreadySpent')}</Text>
+                                                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}>{formatAmount(forecastData.factSpend, currency)}</Text>
                                             </View>
                                         </View>
                                     </Card>
@@ -3201,21 +3162,21 @@ export default function AnalyticsScreen() {
                                     {/* Fact vs Forecast chart */}
                                     {forecastData.chart.length > 0 && (
                                         <Card>
-                                            <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 4 }}>Факт vs Прогноз</Text>
-                                            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 14 }}>{forecastData.chartSubtitle}</Text>
+                                            <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 4 }}>{t('analytics.factVsForecast')}</Text>
+                                            <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 14 }}>{forecastData.chartSubtitle}</Text>
                                             <ForecastLineChart data={forecastData.chart} selectedIndex={chartSelectedIdx} onSelect={handleChartSelect} currency={currency} />
                                             <View style={{ flexDirection: 'row', gap: 14, marginTop: 8 }}>
                                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                                                     <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#7C6FFF' }} />
-                                                    <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Факт</Text>
+                                                    <Text style={{ fontSize: 10, color: colors.textMuted }}>{t('analytics.fact')}</Text>
                                                 </View>
                                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                                                     <View style={{ width: 16, height: 0, borderTopWidth: 2, borderColor: 'rgba(124,111,255,0.5)', borderStyle: 'dashed' }} />
-                                                    <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Прогноз</Text>
+                                                    <Text style={{ fontSize: 10, color: colors.textMuted }}>{t('analytics.forecastLabel')}</Text>
                                                 </View>
                                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                                                     <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#E24B4A' }} />
-                                                    <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Платёж</Text>
+                                                    <Text style={{ fontSize: 10, color: colors.textMuted }}>{t('analytics.payment')}</Text>
                                                 </View>
                                             </View>
 
@@ -3225,9 +3186,9 @@ export default function AnalyticsScreen() {
                                                     {/* Date header with lines */}
                                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                                                         <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.1)' }} />
-                                                        <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
+                                                        <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '600' }}>
                                                             {dayDetailDate ? format(new Date(dayDetailDate), 'd MMMM yyyy', { locale: ru }) : ''}
-                                                            {!dayDetailIsFact ? ' · прогноз' : ''}
+                                                            {!dayDetailIsFact ? ` ${t('analytics.forecastSuffix')}` : ''}
                                                         </Text>
                                                         <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.1)' }} />
                                                     </View>
@@ -3235,7 +3196,7 @@ export default function AnalyticsScreen() {
                                                     {dayDetailLoading ? (
                                                         <ActivityIndicator color="#7C6FFF" style={{ marginVertical: 12 }} />
                                                     ) : dayDetailItems.length === 0 ? (
-                                                        <Text style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginVertical: 8, fontSize: 12 }}>Нет данных</Text>
+                                                        <Text style={{ color: colors.textMuted, textAlign: 'center', marginVertical: 8, fontSize: 12 }}>{t('common.noData')}</Text>
                                                     ) : (
                                                         <>
                                                             {dayDetailItems.map((item, idx) => (
@@ -3247,7 +3208,7 @@ export default function AnalyticsScreen() {
                                                                             <CategoryIcon iconName={item.icon} color={item.color} size={16} />
                                                                         )}
                                                                         <Text style={{ fontSize: 12, color: item.isScheduled && dayDetailIsFact ? '#E24B4A' : '#fff', flex: 1 }} numberOfLines={1}>
-                                                                            {item.name}{item.isScheduled ? (dayDetailIsFact ? ' · не оплачен' : ' (запланирован)') : ''}
+                                                                            {item.name}{item.isScheduled ? (dayDetailIsFact ? ` ${t('analytics.unpaid')}` : ` ${t('analytics.scheduled')}`) : ''}
                                                                         </Text>
                                                                     </View>
                                                                     <Text style={{ fontSize: 12, fontWeight: '600', color: '#FF6B6B' }}>−{formatAmount(item.amount, currency)}</Text>
@@ -3255,8 +3216,8 @@ export default function AnalyticsScreen() {
                                                             ))}
 
                                                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)' }}>
-                                                                <Text style={{ fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
-                                                                    {dayDetailIsFact ? 'Итого за день:' : 'Прогноз на день:'}
+                                                                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textMuted }}>
+                                                                    {dayDetailIsFact ? t('analytics.totalForDay') : t('analytics.forecastForDay')}
                                                                 </Text>
                                                                 <Text style={{ fontSize: 13, fontWeight: '700', color: '#FF6B6B' }}>−{formatAmount(dayDetailTotal, currency)}</Text>
                                                             </View>
@@ -3270,7 +3231,7 @@ export default function AnalyticsScreen() {
                                     {/* Budget by category */}
                                     {forecastData.budgets.length > 0 && (
                                         <Card>
-                                            <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 4 }}>Бюджет по категориям</Text>
+                                            <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 4 }}>{t('analytics.budgetByCategory')}</Text>
                                             {forecastData.budgets.map((item, i) => <BudgetBar key={i} item={item} currency={currency} />)}
                                         </Card>
                                     )}
@@ -3278,9 +3239,9 @@ export default function AnalyticsScreen() {
                                     {/* ── Block 3: Extra Categories ────────────────── */}
                                     <Card>
                                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                                            <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff' }}>Экстра-категории</Text>
+                                            <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }}>{t('analytics.extraCategories')}</Text>
                                             <TouchableOpacity onPress={() => router.push({ pathname: '/settings', params: { openExtras: '1' } } as any)}>
-                                                <Text style={{ fontSize: 12, color: '#7C6FFF' }}>Настроить</Text>
+                                                <Text style={{ fontSize: 12, color: '#7C6FFF' }}>{t('analytics.configure')}</Text>
                                             </TouchableOpacity>
                                         </View>
 
@@ -3302,7 +3263,7 @@ export default function AnalyticsScreen() {
                                                                         setExpandedCats(prev => {
                                                                             const next = new Set(prev);
                                                                             const k = `disp:${ec.categoryId}`;
-                                                                            next.has(k) ? next.delete(k) : next.add(k);
+                                                                            if (next.has(k)) { next.delete(k); } else { next.add(k); }
                                                                             return next;
                                                                         });
                                                                     }
@@ -3313,21 +3274,21 @@ export default function AnalyticsScreen() {
                                                                     <CategoryIcon iconName={ec.icon} color={ec.color} size={16} />
                                                                 </View>
                                                                 <View style={{ flex: 1 }}>
-                                                                    <Text style={{ fontSize: 13, color: '#fff', fontWeight: '600' }}>{ec.name}</Text>
+                                                                    <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: '600' }}>{ec.name}</Text>
                                                                 </View>
                                                                 {hasMultipleTags && (
-                                                                    <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>{isExpanded ? '▼' : '▶'}</Text>
+                                                                    <Text style={{ fontSize: 10, color: colors.textDisabled }}>{isExpanded ? '▼' : '▶'}</Text>
                                                                 )}
                                                             </TouchableOpacity>
                                                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                                                                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
+                                                                <Text style={{ fontSize: 12, color: colors.textSecondary }}>
                                                                     {formatAmount(ec.spent, currency)}
-                                                                    <Text style={{ color: 'rgba(255,255,255,0.3)' }}>
-                                                                        {' / '}{formatAmount(ec.scaledComfortable, currency)} комфортно
+                                                                    <Text style={{ color: colors.textDisabled }}>
+                                                                        {t('analytics.comfortableAmount', { amount: formatAmount(ec.scaledComfortable, currency) })}
                                                                     </Text>
                                                                 </Text>
                                                                 {periodLabel ? (
-                                                                    <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>({periodLabel})</Text>
+                                                                    <Text style={{ fontSize: 10, color: colors.textDisabled }}>({periodLabel})</Text>
                                                                 ) : null}
                                                             </View>
                                                             <View style={{ height: 6, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 3, overflow: 'hidden' }}>
@@ -3340,7 +3301,7 @@ export default function AnalyticsScreen() {
                                                             </View>
                                                             {ec.extra > 0 && (
                                                                 <Text style={{ fontSize: 11, color: '#FF6B6B', marginTop: 3 }}>
-                                                                    экстра: {formatAmount(ec.extra, currency)}
+                                                                    {t('analytics.extraAmount', { amount: formatAmount(ec.extra, currency) })}
                                                                 </Text>
                                                             )}
                                                             {/* Expanded tag breakdown */}
@@ -3353,10 +3314,10 @@ export default function AnalyticsScreen() {
                                                                         return (
                                                                             <View key={tag.tagId || 'whole'} style={{ marginBottom: 8 }}>
                                                                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
-                                                                                    <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                                                                                    <Text style={{ fontSize: 11, color: colors.textMuted }}>
                                                                                         └ {tag.tagName}
                                                                                     </Text>
-                                                                                    <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                                                                                    <Text style={{ fontSize: 11, color: colors.textMuted }}>
                                                                                         {formatAmount(tag.spent, currency)} / {formatAmount(tag.scaledComfortable, currency)}
                                                                                     </Text>
                                                                                 </View>
@@ -3364,7 +3325,7 @@ export default function AnalyticsScreen() {
                                                                                     <View style={{ height: 4, width: `${tBarPct}%`, backgroundColor: tOver ? '#FF6B6B' : ec.color, borderRadius: 2, opacity: 0.7 }} />
                                                                                 </View>
                                                                                 {tag.extra > 0 && (
-                                                                                    <Text style={{ fontSize: 10, color: '#FF6B6B', marginTop: 1 }}>экстра: {formatAmount(tag.extra, currency)}</Text>
+                                                                                    <Text style={{ fontSize: 10, color: '#FF6B6B', marginTop: 1 }}>{t('analytics.extraAmount', { amount: formatAmount(tag.extra, currency) })}</Text>
                                                                                 )}
                                                                             </View>
                                                                         );
@@ -3381,7 +3342,7 @@ export default function AnalyticsScreen() {
                                                     return (
                                                         <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)', paddingTop: 10, marginTop: 4 }}>
                                                             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                                                <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>Итого экстра:</Text>
+                                                                <Text style={{ fontSize: 13, color: colors.textMuted }}>{t('analytics.total')}:</Text>
                                                                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#FF6B6B' }}>{formatAmount(totalExtra, currency)}</Text>
                                                             </View>
                                                         </View>
@@ -3390,38 +3351,38 @@ export default function AnalyticsScreen() {
                                             </>
                                         ) : (
                                             <View style={{ alignItems: 'center', paddingVertical: 16 }}>
-                                                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', textAlign: 'center' }}>
-                                                    Нажмите «Настроить», чтобы выбрать{'\n'}категории для отслеживания
+                                                <Text style={{ fontSize: 12, color: colors.textDisabled, textAlign: 'center' }}>
+                                                    {t('analytics.configureHint')}
                                                 </Text>
                                             </View>
                                         )}
                                     </Card>
 
                                     {/* ── Block 4: Forecast Insight ─────────────────── */}
-                                    {forecastData && (
+                                    {hintsEnabled && forecastData && (
                                         <Card style={{ backgroundColor: 'rgba(124,111,255,0.08)', borderWidth: 1, borderColor: 'rgba(124,111,255,0.2)' }}>
-                                            <Text style={{ fontSize: 13, color: '#fff', fontWeight: '600', marginBottom: 6 }}>
-                                                💡 Прогноз
+                                            <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: '600', marginBottom: 6 }}>
+                                                {t('analytics.hintForecast')}
                                             </Text>
-                                            <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', lineHeight: 20 }}>
-                                                {`Потрачено за ${forecastData.daysPassed} ${forecastData.daysPassed === 1 ? 'день' : forecastData.daysPassed < 5 ? 'дня' : 'дней'}: ${formatAmount(forecastData.factSpend, currency)}.`}
+                                            <Text style={{ fontSize: 12, color: colors.textMuted, lineHeight: 20 }}>
+                                                {t('analytics.spentForNDays', { days: forecastData.daysPassed, daysWord: forecastData.daysPassed === 1 ? t('analytics.day_one') : forecastData.daysPassed < 5 ? t('analytics.day_few') : t('analytics.day_many'), amount: formatAmount(forecastData.factSpend, currency) })}
                                                 {forecastData.upcomingRecurring.length > 0 ? (
-                                                    `\nС учётом предстоящих платежей (${forecastData.upcomingRecurring
+                                                    t('analytics.withUpcoming', { payments: forecastData.upcomingRecurring
                                                         .sort((a, b) => b.amount - a.amount)
                                                         .slice(0, 3)
                                                         .map(r => `${r.name} ${formatAmount(r.amount, currency)}`)
-                                                        .join(', ')}${forecastData.upcomingRecurring.length > 3 ? ` и ещё ${forecastData.upcomingRecurring.length - 3}` : ''})`
+                                                        .join(', '), more: forecastData.upcomingRecurring.length > 3 ? t('analytics.andMore', { n: forecastData.upcomingRecurring.length - 3 }) : '' })
                                                 ) : ''}
-                                                {`\nпрогноз до конца периода: ${formatAmount(forecastData.projectedTotal, currency)}`}
+                                                {t('analytics.forecastEndPeriod', { amount: formatAmount(forecastData.projectedTotal, currency) })}
                                             </Text>
                                         </Card>
                                     )}
 
                                     {/* ── Insight: extra savings acceleration ──────── */}
-                                    {(() => {
+                                    {hintsEnabled && (() => {
                                         const totalExtra = extraCategories.reduce((s, e) => s + e.extra, 0);
                                         if (totalExtra <= 0) return null;
-                                        const periodName = forecastPeriod === 'month' ? 'месяц' : forecastPeriod === 'quarter' ? 'квартал' : forecastPeriod === 'half' ? 'полгода' : forecastPeriod === 'year' ? 'год' : 'период';
+                                        const periodName = forecastPeriod === 'month' ? t('analytics.periodNameMonth') : forecastPeriod === 'quarter' ? t('analytics.periodNameQuarter') : forecastPeriod === 'half' ? t('analytics.periodNameHalf') : forecastPeriod === 'year' ? t('analytics.periodNameYear') : t('analytics.periodNameCustom');
                                         // Find nearest unclosed savings goal
                                         const openGoal = goalsState.find(g => g.saved < g.target);
                                         let accelText = '';
@@ -3430,16 +3391,16 @@ export default function AnalyticsScreen() {
                                             const monthlyContrib = openGoal.saved > 0 ? openGoal.saved / Math.max(1, 3) : totalExtra; // fallback
                                             const weeksAccel = monthlyContrib > 0 ? Math.round((totalExtra / monthlyContrib) * 4.3) : 0;
                                             if (weeksAccel > 0) {
-                                                accelText = `это ускорит «${openGoal.name}» на ${weeksAccel} нед`;
+                                                accelText = t('analytics.accelGoal', { name: openGoal.name, weeks: weeksAccel });
                                             }
                                         }
                                         return (
                                             <Card style={{ backgroundColor: 'rgba(124,111,255,0.08)', borderWidth: 1, borderColor: 'rgba(124,111,255,0.2)' }}>
-                                                <Text style={{ fontSize: 13, color: '#fff', fontWeight: '600', marginBottom: 6 }}>
-                                                    💡 Экстра за {periodName}: {formatAmount(totalExtra, currency)}
+                                                <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: '600', marginBottom: 6 }}>
+                                                    {t('analytics.hintExtra', { period: periodName, amount: formatAmount(totalExtra, currency) })}
                                                 </Text>
-                                                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', lineHeight: 18 }}>
-                                                    Если сократить до комфортного уровня, сэкономишь {formatAmount(totalExtra, currency)}
+                                                <Text style={{ fontSize: 12, color: colors.textMuted, lineHeight: 18 }}>
+                                                    {t('analytics.hintExtraDesc', { amount: formatAmount(totalExtra, currency) })}
                                                     {accelText ? ` — ${accelText}` : ''}
                                                 </Text>
                                             </Card>
@@ -3454,7 +3415,7 @@ export default function AnalyticsScreen() {
                 {/* ══ SAVINGS ═══════════════════════════════════════════════ */}
                 {tab === 'savings' && (
                     <>
-                        <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 12 }}>Мои цели</Text>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 12 }}>{t('analytics.myGoals')}</Text>
 
                         {loadingSavings ? <Spinner /> : (
                             <>
@@ -3476,8 +3437,8 @@ export default function AnalyticsScreen() {
                                 ) : (
                                     <View style={{ alignItems: 'center', paddingVertical: 24 }}>
                                         <Text style={{ fontSize: 36, marginBottom: 12 }}>🎯</Text>
-                                        <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', textAlign: 'center' }}>
-                                            Нет активных целей накоплений
+                                        <Text style={{ fontSize: 14, color: colors.textMuted, textAlign: 'center' }}>
+                                            {t('analytics.noActiveGoals')}
                                         </Text>
                                     </View>
                                 )}
@@ -3492,11 +3453,11 @@ export default function AnalyticsScreen() {
                                         borderStyle: 'dashed',
                                         borderRadius: 16, alignItems: 'center', marginBottom: 12,
                                     }}>
-                                    <Text style={{ color: '#4FFFB0', fontSize: 14, fontWeight: '600' }}>+ Новая цель накоплений</Text>
+                                    <Text style={{ color: '#4FFFB0', fontSize: 14, fontWeight: '600' }}>{t('analytics.newSavingsGoal')}</Text>
                                 </TouchableOpacity>
 
                                 {/* ── Block 2: Deposits ─────────────────────── */}
-                                <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff', marginTop: 8, marginBottom: 12 }}>Депозиты</Text>
+                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginTop: 8, marginBottom: 12 }}>{t('analytics.deposits')}</Text>
 
                                 {deposits.length > 0 ? (
                                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20, paddingLeft: 20, marginBottom: 12 }} contentContainerStyle={{ paddingRight: 20, gap: 10 }}>
@@ -3512,28 +3473,28 @@ export default function AnalyticsScreen() {
                                                     <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: dep.color + '20', borderWidth: 1.5, borderColor: dep.color + '40', alignItems: 'center', justifyContent: 'center' }}>
                                                         <CategoryIcon iconName={dep.icon} color={dep.color} size={18} />
                                                     </View>
-                                                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff', flex: 1 }}>{dep.name}</Text>
+                                                    <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, flex: 1 }}>{dep.name}</Text>
                                                 </View>
 
                                                 {[
-                                                    { label: 'Ставка', value: `${dep.currentRate}%` },
-                                                    { label: 'Сумма', value: formatAmount(dep.amount, dep.currency) },
+                                                    { label: t('analytics.rate'), value: `${dep.currentRate}%` },
+                                                    { label: t('analytics.sum'), value: formatAmount(dep.amount, dep.currency) },
                                                 ].map((row, i) => (
                                                     <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 }}>
-                                                        <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>{row.label}:</Text>
-                                                        <Text style={{ fontSize: 12, color: '#fff', fontWeight: '600' }}>{row.value}</Text>
+                                                        <Text style={{ fontSize: 12, color: colors.textMuted }}>{row.label}:</Text>
+                                                        <Text style={{ fontSize: 12, color: colors.textPrimary, fontWeight: '600' }}>{row.value}</Text>
                                                     </View>
                                                 ))}
 
                                                 <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' }}>
                                                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 }}>
-                                                        <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
-                                                            Прогноз {dep.endDate ? format(dep.endDate, 'dd.MM.yy') : '5 лет'}
+                                                        <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                                                            {t('analytics.forecastDate', { date: dep.endDate ? format(dep.endDate, 'dd.MM.yy') : '5Y' })}
                                                         </Text>
                                                         <Text style={{ fontSize: 12, color: '#4FFFB0', fontWeight: '700' }}>{formatAmount(dep.projectedValue, dep.currency)}</Text>
                                                     </View>
                                                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 }}>
-                                                        <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>% доход</Text>
+                                                        <Text style={{ fontSize: 11, color: colors.textDisabled }}>{t('analytics.percentIncome')}</Text>
                                                         <Text style={{ fontSize: 11, color: '#7C6FFF', fontWeight: '600' }}>{formatAmount(dep.interestEarned, dep.currency)}</Text>
                                                     </View>
                                                 </View>
@@ -3550,7 +3511,7 @@ export default function AnalyticsScreen() {
                                                 borderStyle: 'dashed',
                                             }}>
                                             <Text style={{ color: '#7C6FFF', fontSize: 28, fontWeight: '300', marginBottom: 4 }}>+</Text>
-                                            <Text style={{ color: '#7C6FFF', fontSize: 11, fontWeight: '600' }}>Добавить</Text>
+                                            <Text style={{ color: '#7C6FFF', fontSize: 11, fontWeight: '600' }}>{t('dashboard.add')}</Text>
                                         </TouchableOpacity>
                                     </ScrollView>
                                 ) : (
@@ -3563,22 +3524,22 @@ export default function AnalyticsScreen() {
                                             borderStyle: 'dashed',
                                             borderRadius: 16, alignItems: 'center', marginBottom: 12,
                                         }}>
-                                        <Text style={{ color: '#7C6FFF', fontSize: 14, fontWeight: '600' }}>+ Добавить депозит</Text>
+                                        <Text style={{ color: '#7C6FFF', fontSize: 14, fontWeight: '600' }}>{t('analytics.addDeposit')}</Text>
                                     </TouchableOpacity>
                                 )}
 
                                 {/* ── Block 3: Summary ─────────────────────── */}
                                 {(goalsState.length > 0 || deposits.length > 0) && (
                                     <Card>
-                                        <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 14 }}>Сводка накоплений</Text>
+                                        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 14 }}>{t('analytics.savingsSummary')}</Text>
 
                                         {/* Goals section */}
                                         {goalsState.length > 0 && (
                                             <>
-                                                <Text style={{ fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Цели</Text>
+                                                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textDisabled, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>{t('analytics.goals')}</Text>
                                                 {[
-                                                    { label: 'Накоплено', value: formatAmount(goalsState.reduce((s, g) => s + g.saved, 0), currency), color: '#4FFFB0' },
-                                                    { label: 'Осталось', value: formatAmount(goalsState.reduce((s, g) => s + Math.max(g.target - g.saved, 0), 0), currency), color: '#7C6FFF' },
+                                                    { label: t('analytics.saved'), value: formatAmount(goalsState.reduce((s, g) => s + g.saved, 0), currency), color: '#4FFFB0' },
+                                                    { label: t('analytics.remaining2'), value: formatAmount(goalsState.reduce((s, g) => s + Math.max(g.target - g.saved, 0), 0), currency), color: '#7C6FFF' },
                                                 ].map((item, i) => (
                                                     <View key={`g${i}`} style={{
                                                         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
@@ -3586,7 +3547,7 @@ export default function AnalyticsScreen() {
                                                         borderBottomWidth: i === 0 ? 1 : 0,
                                                         borderBottomColor: 'rgba(255,255,255,0.05)',
                                                     }}>
-                                                        <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{item.label}</Text>
+                                                        <Text style={{ fontSize: 13, color: colors.textSecondary }}>{item.label}</Text>
                                                         <Text style={{ fontSize: 14, fontWeight: '700', color: item.color }}>{item.value}</Text>
                                                     </View>
                                                 ))}
@@ -3596,13 +3557,13 @@ export default function AnalyticsScreen() {
                                         {/* Deposits section */}
                                         {deposits.length > 0 && (
                                             <>
-                                                <Text style={{ fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.3)', marginTop: goalsState.length > 0 ? 16 : 0, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Депозиты</Text>
+                                                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textDisabled, marginTop: goalsState.length > 0 ? 16 : 0, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>{t('analytics.deposits')}</Text>
                                                 {(() => {
                                                     const totalDeposited = deposits.reduce((s, d) => s + d.amount, 0);
                                                     const totalAccrued = deposits.reduce((s, d) => s + calcAccruedInterest(d.amount, d.ratePeriods, d.capitalization, d.startDate), 0);
                                                     return [
-                                                        { label: 'Вложено', value: formatAmount(totalDeposited, currency), color: 'rgba(255,255,255,0.5)' },
-                                                        { label: 'Доход с %', value: `+ ${formatAmount(totalAccrued, currency)}`, color: '#4FFFB0' },
+                                                        { label: t('analytics.invested'), value: formatAmount(totalDeposited, currency), color: colors.textMuted },
+                                                        { label: t('analytics.interestIncome'), value: `+ ${formatAmount(totalAccrued, currency)}`, color: '#4FFFB0' },
                                                     ].map((item, i) => (
                                                         <View key={`d${i}`} style={{
                                                             flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
@@ -3610,7 +3571,7 @@ export default function AnalyticsScreen() {
                                                             borderBottomWidth: i === 0 ? 1 : 0,
                                                             borderBottomColor: 'rgba(255,255,255,0.05)',
                                                         }}>
-                                                            <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{item.label}</Text>
+                                                            <Text style={{ fontSize: 13, color: colors.textSecondary }}>{item.label}</Text>
                                                             <Text style={{ fontSize: 14, fontWeight: '700', color: item.color }}>{item.value}</Text>
                                                         </View>
                                                     ));
@@ -3621,12 +3582,14 @@ export default function AnalyticsScreen() {
                                 )}
 
                                 {/* Recommendation */}
-                                <View style={{ backgroundColor: 'rgba(79,255,176,0.04)', borderWidth: 1, borderColor: 'rgba(79,255,176,0.1)', borderRadius: 14, padding: 14 }}>
-                                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#4FFFB0', marginBottom: 6 }}>Рекомендация</Text>
-                                    <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', lineHeight: 19 }}>
-                                        {recommendation || 'Создайте первую цель или депозит, чтобы получить персональную рекомендацию.'}
-                                    </Text>
-                                </View>
+                                {hintsEnabled && (
+                                    <View style={{ backgroundColor: 'rgba(79,255,176,0.04)', borderWidth: 1, borderColor: 'rgba(79,255,176,0.1)', borderRadius: 14, padding: 14 }}>
+                                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#4FFFB0', marginBottom: 6 }}>{t('analytics.recommendation')}</Text>
+                                        <Text style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 19 }}>
+                                            {recommendation || t('analytics.createFirstGoal')}
+                                        </Text>
+                                    </View>
+                                )}
                             </>
                         )}
                     </>
@@ -3652,19 +3615,19 @@ export default function AnalyticsScreen() {
                                                     <CategoryIcon iconName={loan.icon} color={loan.color} size={20} />
                                                 </View>
                                                 <View style={{ flex: 1 }}>
-                                                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff' }} numberOfLines={1}>{loan.name}</Text>
-                                                    <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{typeLabel}</Text>
+                                                    <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }} numberOfLines={1}>{loan.name}</Text>
+                                                    <Text style={{ fontSize: 11, color: colors.textMuted }}>{typeLabel}</Text>
                                                 </View>
                                             </View>
 
                                             {/* Info rows */}
                                             {[
-                                                { label: 'Остаток', value: formatAmount(remaining, loan.currency), color: '#fff' },
-                                                { label: 'Выплачено', value: formatAmount(loan.paidAmount, loan.currency), color: '#4FFFB0' },
-                                                { label: 'Платёж/мес', value: formatAmount(loan.monthlyPayment, loan.currency), color: '#FF6B6B' },
+                                                { label: t('analytics.loanBalance'), value: formatAmount(remaining, loan.currency), color: colors.textPrimary },
+                                                { label: t('analytics.loanPaid'), value: formatAmount(loan.paidAmount, loan.currency), color: '#4FFFB0' },
+                                                { label: t('analytics.loanMonthlyPayment'), value: formatAmount(loan.monthlyPayment, loan.currency), color: '#FF6B6B' },
                                             ].map((row, i) => (
                                                 <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 }}>
-                                                    <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{row.label}:</Text>
+                                                    <Text style={{ fontSize: 11, color: colors.textMuted }}>{row.label}:</Text>
                                                     <Text style={{ fontSize: 12, color: row.color, fontWeight: '600' }}>{row.value}</Text>
                                                 </View>
                                             ))}
@@ -3678,14 +3641,14 @@ export default function AnalyticsScreen() {
                                                     }} />
                                                 ))}
                                             </View>
-                                            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', textAlign: 'center', marginTop: 4 }}>{pct}% выплачено</Text>
+                                            <Text style={{ fontSize: 11, color: colors.textMuted, textAlign: 'center', marginTop: 4 }}>{t('analytics.loanPaidPercent', { pct })}</Text>
                                         </TouchableOpacity>
                                     </View>
                                 );
                             }) : (
                                 <View style={{ alignItems: 'center', paddingVertical: 32, width: 260 }}>
                                     <Text style={{ fontSize: 32, marginBottom: 8 }}>🏦</Text>
-                                    <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>Нет кредитов</Text>
+                                    <Text style={{ fontSize: 13, color: colors.textDisabled }}>{t('analytics.noLoans')}</Text>
                                 </View>
                             )}
 
@@ -3701,21 +3664,21 @@ export default function AnalyticsScreen() {
                                 borderStyle: 'dashed',
                                 borderRadius: 16, alignItems: 'center', marginBottom: 16,
                             }}>
-                            <Text style={{ color: '#FF6B6B', fontSize: 14, fontWeight: '600' }}>+ Добавить кредит</Text>
+                            <Text style={{ color: '#FF6B6B', fontSize: 14, fontWeight: '600' }}>{t('analytics.addLoan')}</Text>
                         </TouchableOpacity>
 
                         {/* ── Block 2: Summary ── */}
                         {loans.length > 0 && (
                             <Card>
-                                <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 14 }}>Кредиты</Text>
+                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 14 }}>{t('analytics.loans')}</Text>
                                 {[
-                                    { label: 'Общий долг', value: formatAmount(loans.reduce((s, l) => s + l.totalAmount, 0), currency), color: '#fff' },
-                                    { label: 'Уже выплачено', value: formatAmount(loans.reduce((s, l) => s + l.paidAmount, 0), currency), color: '#4FFFB0' },
-                                    { label: 'Ежемесячно уходит', value: formatAmount(loans.reduce((s, l) => s + l.monthlyPayment, 0), currency), color: '#FF6B6B' },
-                                    { label: 'Из них % банку', value: formatAmount(loans.reduce((s, l) => s + calcCurrentInterest(l), 0), currency), color: '#FFB84F' },
+                                    { label: t('analytics.totalDebt'), value: formatAmount(loans.reduce((s, l) => s + l.totalAmount, 0), currency), color: colors.textPrimary },
+                                    { label: t('analytics.alreadyPaid'), value: formatAmount(loans.reduce((s, l) => s + l.paidAmount, 0), currency), color: '#4FFFB0' },
+                                    { label: t('analytics.monthlySpend'), value: formatAmount(loans.reduce((s, l) => s + l.monthlyPayment, 0), currency), color: '#FF6B6B' },
+                                    { label: t('analytics.bankInterest'), value: formatAmount(loans.reduce((s, l) => s + calcCurrentInterest(l), 0), currency), color: '#FFB84F' },
                                 ].map((row, i) => (
                                     <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderTopWidth: i > 0 ? 1 : 0, borderTopColor: 'rgba(255,255,255,0.06)' }}>
-                                        <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>{row.label}</Text>
+                                        <Text style={{ fontSize: 13, color: colors.textMuted }}>{row.label}</Text>
                                         <Text style={{ fontSize: 14, color: row.color, fontWeight: '700' }}>{row.value}</Text>
                                     </View>
                                 ))}
@@ -3736,9 +3699,9 @@ export default function AnalyticsScreen() {
 
                             return (
                                 <Card>
-                                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 4 }}>Что если платить больше?</Text>
-                                    <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginBottom: 14 }}>
-                                        Текущий платёж: {formatAmount(totalMonthly, currency)}
+                                    <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 4 }}>{t('analytics.whatIfPayMore')}</Text>
+                                    <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 14 }}>
+                                        {t('analytics.currentPayment', { amount: formatAmount(totalMonthly, currency) })}
                                     </Text>
 
                                     {/* Simulation buttons */}
@@ -3750,8 +3713,8 @@ export default function AnalyticsScreen() {
                                                 backgroundColor: simMode === mode ? 'rgba(79,255,176,0.12)' : 'rgba(255,255,255,0.05)',
                                                 borderWidth: 1.5, borderColor: simMode === mode ? 'rgba(79,255,176,0.3)' : 'rgba(255,255,255,0.08)',
                                             }}>
-                                                <Text style={{ fontSize: 13, color: simMode === mode ? '#4FFFB0' : 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
-                                                    {mode === '+5' ? '+5%' : mode === '+10' ? '+10%' : 'Своя сумма'}
+                                                <Text style={{ fontSize: 13, color: simMode === mode ? '#4FFFB0' : colors.textMuted, fontWeight: '600' }}>
+                                                    {mode === '+5' ? '+5%' : mode === '+10' ? '+10%' : t('analytics.customAmount')}
                                                 </Text>
                                             </TouchableOpacity>
                                         ))}
@@ -3762,8 +3725,8 @@ export default function AnalyticsScreen() {
                                         <TextInput
                                             style={[inputStyle, { marginBottom: 12 }]}
                                             keyboardType="decimal-pad"
-                                            placeholder="Сумма доплаты в месяц"
-                                            placeholderTextColor="rgba(255,255,255,0.2)"
+                                            placeholder={t('analytics.extraPaymentPlaceholder')}
+                                            placeholderTextColor={colors.textDisabled}
                                             value={simCustomAmount}
                                             onChangeText={v => setSimCustomAmount(v.replace(/[^0-9.,]/g, ''))}
                                         />
@@ -3773,13 +3736,13 @@ export default function AnalyticsScreen() {
                                     {sim && extraAmt > 0 && (
                                         <View style={{ backgroundColor: 'rgba(79,255,176,0.05)', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: 'rgba(79,255,176,0.12)' }}>
                                             {[
-                                                { label: 'Доплата', value: `+ ${formatAmount(extraAmt, currency)}`, color: '#4FFFB0' },
-                                                { label: 'Новый платёж', value: formatAmount(sim.newPayment, currency), color: '#fff' },
-                                                { label: 'Экономия на %', value: formatAmount(sim.savedInterest, currency), color: '#4FFFB0' },
-                                                { label: 'Закроется быстрее', value: `на ${sim.monthsSaved} мес`, color: '#4FFFB0' },
+                                                { label: t('analytics.extraPayment'), value: `+ ${formatAmount(extraAmt, currency)}`, color: '#4FFFB0' },
+                                                { label: t('analytics.newPayment'), value: formatAmount(sim.newPayment, currency), color: colors.textPrimary },
+                                                { label: t('analytics.interestSaved'), value: formatAmount(sim.savedInterest, currency), color: '#4FFFB0' },
+                                                { label: t('analytics.closeFaster'), value: t('analytics.closeFasterValue', { months: sim.monthsSaved }), color: '#4FFFB0' },
                                             ].map((row, i) => (
                                                 <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5 }}>
-                                                    <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>{row.label}</Text>
+                                                    <Text style={{ fontSize: 13, color: colors.textMuted }}>{row.label}</Text>
                                                     <Text style={{ fontSize: 14, color: row.color, fontWeight: '700' }}>{row.value}</Text>
                                                 </View>
                                             ))}
@@ -3790,7 +3753,7 @@ export default function AnalyticsScreen() {
                         })()}
 
                         {/* ── Block 4: Recommendation ── */}
-                        {loans.length > 0 && (() => {
+                        {hintsEnabled && loans.length > 0 && (() => {
                             const mainLoan = [...loans].sort((a, b) => (b.totalAmount - b.paidAmount) - (a.totalAmount - a.paidAmount))[0];
                             if (!mainLoan) return null;
                             const interest = calcCurrentInterest(mainLoan);
@@ -3803,11 +3766,18 @@ export default function AnalyticsScreen() {
                                     borderRadius: 16, padding: 16, marginBottom: 16,
                                     borderWidth: 1, borderColor: 'rgba(79,255,176,0.1)',
                                 }}>
-                                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#4FFFB0', marginBottom: 6 }}>Рекомендация</Text>
-                                    <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', lineHeight: 19 }}>
-                                        У тебя {typeLabel} на {formatAmount(mainLoan.totalAmount, mainLoan.currency)} под {mainLoan.currentRate}%.{'\n'}
-                                        Сейчас из платежа {formatAmount(mainLoan.monthlyPayment, mainLoan.currency)} банку уходит {formatAmount(interest, mainLoan.currency)} на проценты.{'\n'}
-                                        Доплачивая {formatAmount(extra10, mainLoan.currency)}/мес (+10%), сэкономишь {formatAmount(sim10.savedInterest, mainLoan.currency)} и закроешь кредит на {sim10.monthsSaved} мес раньше.
+                                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#4FFFB0', marginBottom: 6 }}>{t('analytics.loanRec')}</Text>
+                                    <Text style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 19 }}>
+                                        {t('analytics.loanRecText', {
+                                            type: typeLabel,
+                                            total: formatAmount(mainLoan.totalAmount, mainLoan.currency),
+                                            rate: mainLoan.currentRate,
+                                            payment: formatAmount(mainLoan.monthlyPayment, mainLoan.currency),
+                                            interest: formatAmount(interest, mainLoan.currency),
+                                            extra: formatAmount(extra10, mainLoan.currency),
+                                            saved: formatAmount(sim10.savedInterest, mainLoan.currency),
+                                            months: sim10.monthsSaved,
+                                        })}
                                     </Text>
                                 </View>
                             );
@@ -3833,18 +3803,18 @@ export default function AnalyticsScreen() {
                                             <CategoryIcon iconName={loan.icon} color={loan.color} size={24} />
                                         </View>
                                         <View style={{ flex: 1 }}>
-                                            <Text style={{ fontSize: 18, fontWeight: '800', color: '#fff' }}>{loan.name}</Text>
-                                            <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>{loan.loanType === 'other' && loan.customTypeName ? loan.customTypeName : LOAN_TYPE_LABELS[loan.loanType]}</Text>
+                                            <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary }}>{loan.name}</Text>
+                                            <Text style={{ fontSize: 12, color: colors.textMuted }}>{loan.loanType === 'other' && loan.customTypeName ? loan.customTypeName : LOAN_TYPE_LABELS[loan.loanType]}</Text>
                                         </View>
                                     </View>
 
                                     {/* Info rows */}
                                     {[
-                                        { label: 'Остаток долга', value: formatAmount(remaining, loan.currency), color: '#fff' },
-                                        { label: 'Уже выплачено', value: formatAmount(loan.paidAmount, loan.currency), color: '#4FFFB0' },
+                                        { label: t('analytics.loanDebtRemaining'), value: formatAmount(remaining, loan.currency), color: colors.textPrimary },
+                                        { label: t('analytics.alreadyPaid'), value: formatAmount(loan.paidAmount, loan.currency), color: '#4FFFB0' },
                                     ].map((row, i) => (
                                         <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 }}>
-                                            <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>{row.label}:</Text>
+                                            <Text style={{ fontSize: 13, color: colors.textMuted }}>{row.label}:</Text>
                                             <Text style={{ fontSize: 14, color: row.color, fontWeight: '600' }}>{row.value}</Text>
                                         </View>
                                     ))}
@@ -3854,34 +3824,34 @@ export default function AnalyticsScreen() {
                                         <View style={{ flex: 1, height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.06)' }}>
                                             <View style={{ width: `${Math.min(pct, 100)}%`, height: 10, borderRadius: 5, backgroundColor: loan.color }} />
                                         </View>
-                                        <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>{pct}%</Text>
+                                        <Text style={{ fontSize: 13, color: colors.textSecondary, fontWeight: '700' }}>{pct}%</Text>
                                     </View>
 
                                     {/* Next payment */}
                                     <View style={{ backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 14, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' }}>
-                                        <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 4 }}>Следующий платёж</Text>
+                                        <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 4 }}>{t('analytics.nextPayment')}</Text>
                                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                                             <Text style={{ fontSize: 18, fontWeight: '800', color: '#FF6B6B' }}>{formatAmount(loan.monthlyPayment, loan.currency)}</Text>
-                                            <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>{format(nextPayDate, 'd MMMM', { locale: ru })}</Text>
+                                            <Text style={{ fontSize: 13, color: colors.textMuted }}>{format(nextPayDate, 'd MMMM', { locale: ru })}</Text>
                                         </View>
                                     </View>
 
                                     {/* Current rate */}
                                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, marginBottom: 8 }}>
-                                        <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>Текущая ставка:</Text>
-                                        <Text style={{ fontSize: 14, color: '#7C6FFF', fontWeight: '700' }}>{loan.currentRate}% годовых</Text>
+                                        <Text style={{ fontSize: 13, color: colors.textMuted }}>{t('analytics.currentRate')}</Text>
+                                        <Text style={{ fontSize: 14, color: '#7C6FFF', fontWeight: '700' }}>{t('analytics.annualRate2', { rate: loan.currentRate })}</Text>
                                     </View>
 
                                     {/* Rate periods */}
                                     {loan.ratePeriods.length > 0 && (
                                         <View style={{ backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 14, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' }}>
-                                            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Периоды ставок</Text>
+                                            <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('analytics.ratePeriods')}</Text>
                                             {loan.ratePeriods.map((rp, i) => (
                                                 <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 }}>
-                                                    <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
-                                                        {format(rp.from, 'dd.MM.yyyy')} — {rp.to ? format(rp.to, 'dd.MM.yyyy') : 'бессрочно'}
+                                                    <Text style={{ fontSize: 13, color: colors.textMuted }}>
+                                                        {format(rp.from, 'dd.MM.yyyy')} — {rp.to ? format(rp.to, 'dd.MM.yyyy') : t('analytics.indefinite')}
                                                     </Text>
-                                                    <Text style={{ fontSize: 13, color: i === loan.ratePeriods.length - 1 ? '#7C6FFF' : 'rgba(255,255,255,0.5)', fontWeight: '600' }}>{rp.rate}%</Text>
+                                                    <Text style={{ fontSize: 13, color: i === loan.ratePeriods.length - 1 ? '#7C6FFF' : colors.textMuted, fontWeight: '600' }}>{rp.rate}%</Text>
                                                 </View>
                                             ))}
                                         </View>
@@ -3889,16 +3859,16 @@ export default function AnalyticsScreen() {
 
                                     {/* Payment info */}
                                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, marginBottom: 4 }}>
-                                        <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>Тип платежа:</Text>
-                                        <Text style={{ fontSize: 12, color: '#fff' }}>{loan.paymentType === 'annuity' ? 'Аннуитетный' : 'Дифференцированный'}</Text>
+                                        <Text style={{ fontSize: 12, color: colors.textMuted }}>{t('analytics.paymentType')}</Text>
+                                        <Text style={{ fontSize: 12, color: colors.textPrimary }}>{loan.paymentType === 'annuity' ? t('analytics.annuity') : t('analytics.differentiated')}</Text>
                                     </View>
                                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, marginBottom: 4 }}>
-                                        <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>Срок:</Text>
-                                        <Text style={{ fontSize: 12, color: '#fff' }}>{format(loan.startDate, 'dd.MM.yyyy')} — {format(loan.endDate, 'dd.MM.yyyy')}</Text>
+                                        <Text style={{ fontSize: 12, color: colors.textMuted }}>{t('analytics.term')}</Text>
+                                        <Text style={{ fontSize: 12, color: colors.textPrimary }}>{format(loan.startDate, 'dd.MM.yyyy')} — {format(loan.endDate, 'dd.MM.yyyy')}</Text>
                                     </View>
                                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, marginBottom: 16 }}>
-                                        <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>Осталось месяцев:</Text>
-                                        <Text style={{ fontSize: 12, color: '#fff' }}>{Math.max(0, totalMonths - monthsPaid)}</Text>
+                                        <Text style={{ fontSize: 12, color: colors.textMuted }}>{t('analytics.monthsRemaining')}</Text>
+                                        <Text style={{ fontSize: 12, color: colors.textPrimary }}>{Math.max(0, totalMonths - monthsPaid)}</Text>
                                     </View>
 
                                     {/* Confirm payment */}
@@ -3913,7 +3883,7 @@ export default function AnalyticsScreen() {
                                                 marginBottom: 10, opacity: confirmingPayment ? 0.5 : 1,
                                             }}>
                                             <Text style={{ color: '#4FFFB0', fontSize: 14, fontWeight: '700' }}>
-                                                {confirmingPayment ? 'Обработка…' : `Подтвердить платёж · ${formatAmount(loan.monthlyPayment, loan.currency)}`}
+                                                {confirmingPayment ? t('analytics.processing') : t('analytics.confirmPayment', { amount: formatAmount(loan.monthlyPayment, loan.currency) })}
                                             </Text>
                                         </TouchableOpacity>
                                     )}
@@ -3925,7 +3895,7 @@ export default function AnalyticsScreen() {
                                         borderWidth: 1.5, borderColor: 'rgba(124,111,255,0.25)',
                                         marginBottom: 10,
                                     }}>
-                                        <Text style={{ color: '#7C6FFF', fontSize: 14, fontWeight: '600' }}>Редактировать</Text>
+                                        <Text style={{ color: '#7C6FFF', fontSize: 14, fontWeight: '600' }}>{t('common.edit')}</Text>
                                     </TouchableOpacity>
 
                                     <TouchableOpacity onPress={() => closeLoanAction(loan)} style={{
@@ -3933,7 +3903,7 @@ export default function AnalyticsScreen() {
                                         backgroundColor: 'rgba(239,68,68,0.07)',
                                         borderWidth: 1, borderColor: 'rgba(239,68,68,0.18)',
                                     }}>
-                                        <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '600' }}>Закрыть кредит</Text>
+                                        <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '600' }}>{t('analytics.closeLoan')}</Text>
                                     </TouchableOpacity>
                                 </ScrollView>
                             );
@@ -3953,9 +3923,9 @@ export default function AnalyticsScreen() {
                                 <CategoryIcon iconName={loanIcon} color={loanColor} size={24} />
                             </View>
                             <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 18, fontWeight: '800', color: '#fff' }}>{editingLoan ? 'Редактировать кредит' : 'Новый кредит'}</Text>
-                                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 1 }}>
-                                    {loanName.trim() || 'Введите название ниже'}
+                                <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary }}>{editingLoan ? t('analytics.editLoan') : t('analytics.newLoan')}</Text>
+                                <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 1 }}>
+                                    {loanName.trim() || t('analytics.goalFormEnterName')}
                                 </Text>
                             </View>
                         </View>
@@ -3963,7 +3933,7 @@ export default function AnalyticsScreen() {
                         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
                             {/* Icon */}
-                            <Text style={labelStyle}>Иконка</Text>
+                            <Text style={labelStyle}>{t('common.icon')}</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
                                 <View style={{ flexDirection: 'row', gap: 6 }}>
                                     {['Home', 'Car', 'CreditCard', 'Landmark', 'Briefcase', 'ShoppingCart', 'Laptop', 'Heart', 'GraduationCap', 'Plane'].map(ic => (
@@ -3972,14 +3942,14 @@ export default function AnalyticsScreen() {
                                             backgroundColor: loanIcon === ic ? 'rgba(255,107,107,0.25)' : 'rgba(255,255,255,0.05)',
                                             borderWidth: 1.5, borderColor: loanIcon === ic ? '#FF6B6B' : 'transparent',
                                         }}>
-                                            <CategoryIcon iconName={ic} color={loanIcon === ic ? '#FF6B6B' : 'rgba(255,255,255,0.5)'} size={20} />
+                                            <CategoryIcon iconName={ic} color={loanIcon === ic ? '#FF6B6B' : colors.textMuted} size={20} />
                                         </TouchableOpacity>
                                     ))}
                                 </View>
                             </ScrollView>
 
                             {/* Color */}
-                            <Text style={labelStyle}>Цвет</Text>
+                            <Text style={labelStyle}>{t('common.color')}</Text>
                             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
                                 {['#FF6B6B', '#FF8C42', '#FFB84F', '#F472B6', '#7C6FFF', '#4FC3FF', '#4FFFB0', '#34D399'].map(c => (
                                     <TouchableOpacity key={c} onPress={() => setLoanColor(c)} style={{
@@ -3994,11 +3964,11 @@ export default function AnalyticsScreen() {
                             </View>
 
                             {/* Name */}
-                            <Text style={labelStyle}>Название</Text>
-                            <TextInput style={inputStyle} placeholder="Ипотека" placeholderTextColor="rgba(255,255,255,0.2)" value={loanName} onChangeText={setLoanName} />
+                            <Text style={labelStyle}>{t('common.name')}</Text>
+                            <TextInput style={inputStyle} placeholder={t('analytics.mortgagePlaceholder')} placeholderTextColor={colors.textDisabled} value={loanName} onChangeText={setLoanName} />
 
                             {/* Loan type */}
-                            <Text style={labelStyle}>Тип кредита</Text>
+                            <Text style={labelStyle}>{t('analytics.loanType')}</Text>
                             <View style={{ flexDirection: 'row', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
                                 {(['mortgage', 'auto', 'consumer', 'other'] as LoanType[]).map(lt => (
                                     <TouchableOpacity key={lt} onPress={() => setLoanType(lt)} style={{
@@ -4006,18 +3976,18 @@ export default function AnalyticsScreen() {
                                         backgroundColor: loanType === lt ? 'rgba(255,107,107,0.15)' : 'rgba(255,255,255,0.05)',
                                         borderWidth: 1.5, borderColor: loanType === lt ? '#FF6B6B' : 'rgba(255,255,255,0.08)',
                                     }}>
-                                        <Text style={{ fontSize: 13, color: loanType === lt ? '#FF6B6B' : 'rgba(255,255,255,0.5)', fontWeight: '600' }}>{LOAN_TYPE_LABELS[lt]}</Text>
+                                        <Text style={{ fontSize: 13, color: loanType === lt ? '#FF6B6B' : colors.textMuted, fontWeight: '600' }}>{LOAN_TYPE_LABELS[lt]}</Text>
                                     </TouchableOpacity>
                                 ))}
                             </View>
                             {loanType === 'other' && (
-                                <TextInput style={inputStyle} placeholder="Название типа кредита" placeholderTextColor="rgba(255,255,255,0.2)" value={loanCustomType} onChangeText={setLoanCustomType} />
+                                <TextInput style={inputStyle} placeholder={t('analytics.loanTypePlaceholder')} placeholderTextColor={colors.textDisabled} value={loanCustomType} onChangeText={setLoanCustomType} />
                             )}
 
                             {/* Amount + currency */}
-                            <Text style={labelStyle}>Сумма кредита</Text>
+                            <Text style={labelStyle}>{t('analytics.loanAmount')}</Text>
                             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-                                <TextInput style={[inputStyle, { flex: 1, marginBottom: 0 }]} keyboardType="decimal-pad" placeholder="100000" placeholderTextColor="rgba(255,255,255,0.2)" value={loanAmount} onChangeText={v => setLoanAmount(v.replace(/[^0-9.,]/g, ''))} />
+                                <TextInput style={[inputStyle, { flex: 1, marginBottom: 0 }]} keyboardType="decimal-pad" placeholder="100000" placeholderTextColor={colors.textDisabled} value={loanAmount} onChangeText={v => setLoanAmount(v.replace(/[^0-9.,]/g, ''))} />
                                 <TouchableOpacity onPress={() => setShowLoanCurrencyDropdown(true)} style={{
                                     flexDirection: 'row', alignItems: 'center', gap: 6,
                                     paddingHorizontal: 14, borderRadius: 12,
@@ -4025,23 +3995,23 @@ export default function AnalyticsScreen() {
                                     borderWidth: 1.5, borderColor: 'rgba(255,107,107,0.3)', minWidth: 88,
                                 }}>
                                     <Text style={{ fontSize: 18 }}>{CURRENCIES.find(c => c.code === loanCurrency)?.flag}</Text>
-                                    <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>{loanCurrency}</Text>
-                                    <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginLeft: 2 }}>▾</Text>
+                                    <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '700' }}>{loanCurrency}</Text>
+                                    <Text style={{ color: colors.textMuted, fontSize: 11, marginLeft: 2 }}>▾</Text>
                                 </TouchableOpacity>
                             </View>
 
                             {/* Paid amount (edit mode) */}
                             {editingLoan && (
                                 <>
-                                    <Text style={labelStyle}>Уже выплачено</Text>
-                                    <TextInput style={inputStyle} keyboardType="numeric" placeholder="0" placeholderTextColor="rgba(255,255,255,0.2)" value={loanPaidAmount} onChangeText={setLoanPaidAmount} />
+                                    <Text style={labelStyle}>{t('analytics.alreadyPaid')}</Text>
+                                    <TextInput style={inputStyle} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textDisabled} value={loanPaidAmount} onChangeText={setLoanPaidAmount} />
                                 </>
                             )}
 
                             {/* Source account */}
                             {!editingLoan && (
                                 <View style={{ marginBottom: 12 }}>
-                                    <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginBottom: 4 }}>Со счёта (куда пришли деньги, опц.)</Text>
+                                    <Text style={{ fontSize: 11, color: colors.textDisabled, marginBottom: 4 }}>{t('analytics.loanSourceAccount')}</Text>
                                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                                         <View style={{ flexDirection: 'row', gap: 6 }}>
                                             {accounts.map(acc => {
@@ -4054,7 +4024,7 @@ export default function AnalyticsScreen() {
                                                         flexDirection: 'row', alignItems: 'center', gap: 6,
                                                     }}>
                                                         <Text style={{ fontSize: 16 }}>{acc.icon || '💳'}</Text>
-                                                        <Text style={{ fontSize: 13, color: sel ? '#7C6FFF' : 'rgba(255,255,255,0.5)', fontWeight: '600' }}>{acc.name}</Text>
+                                                        <Text style={{ fontSize: 13, color: sel ? '#7C6FFF' : colors.textMuted, fontWeight: '600' }}>{acc.name}</Text>
                                                     </TouchableOpacity>
                                                 );
                                             })}
@@ -4064,15 +4034,15 @@ export default function AnalyticsScreen() {
                             )}
 
                             {/* Payment type */}
-                            <Text style={labelStyle}>Тип платежа</Text>
+                            <Text style={labelStyle}>{t('analytics.paymentType').replace(':', '')}</Text>
                             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-                                {([['annuity', 'Аннуитетный'], ['differentiated', 'Дифференц.']] as [PaymentType, string][]).map(([pt, label]) => (
+                                {([['annuity', t('analytics.annuityShort')], ['differentiated', t('analytics.differentiatedShort')]] as [PaymentType, string][]).map(([pt, label]) => (
                                     <TouchableOpacity key={pt} onPress={() => setLoanPaymentType(pt)} style={{
                                         flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center',
                                         backgroundColor: loanPaymentType === pt ? 'rgba(255,107,107,0.15)' : 'rgba(255,255,255,0.05)',
                                         borderWidth: 1.5, borderColor: loanPaymentType === pt ? '#FF6B6B' : 'rgba(255,255,255,0.08)',
                                     }}>
-                                        <Text style={{ fontSize: 13, color: loanPaymentType === pt ? '#FF6B6B' : 'rgba(255,255,255,0.5)', fontWeight: '600' }}>{label}</Text>
+                                        <Text style={{ fontSize: 13, color: loanPaymentType === pt ? '#FF6B6B' : colors.textMuted, fontWeight: '600' }}>{label}</Text>
                                     </TouchableOpacity>
                                 ))}
                             </View>
@@ -4080,23 +4050,23 @@ export default function AnalyticsScreen() {
                             {/* Dates */}
                             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 8 }}>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={labelStyle}>Дата начала</Text>
+                                    <Text style={labelStyle}>{t('analytics.startDate')}</Text>
                                     <TouchableOpacity onPress={() => setShowLoanStartPicker(!showLoanStartPicker)} style={{
                                         backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12,
                                         paddingHorizontal: 14, paddingVertical: 12,
                                         borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
                                     }}>
-                                        <Text style={{ color: '#fff', fontSize: 14 }}>{format(loanStartDate, 'dd.MM.yyyy')}</Text>
+                                        <Text style={{ color: colors.textPrimary, fontSize: 14 }}>{format(loanStartDate, 'dd.MM.yyyy')}</Text>
                                     </TouchableOpacity>
                                 </View>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={labelStyle}>Дата окончания</Text>
+                                    <Text style={labelStyle}>{t('analytics.endDate')}</Text>
                                     <TouchableOpacity onPress={() => setShowLoanEndPicker(!showLoanEndPicker)} style={{
                                         backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12,
                                         paddingHorizontal: 14, paddingVertical: 12,
                                         borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
                                     }}>
-                                        <Text style={{ color: '#fff', fontSize: 14 }}>{format(loanEndDate, 'dd.MM.yyyy')}</Text>
+                                        <Text style={{ color: colors.textPrimary, fontSize: 14 }}>{format(loanEndDate, 'dd.MM.yyyy')}</Text>
                                     </TouchableOpacity>
                                 </View>
                             </View>
@@ -4113,13 +4083,13 @@ export default function AnalyticsScreen() {
                             {/* Payment day + reminder */}
                             <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 8 }}>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={labelStyle}>День платежа</Text>
+                                    <Text style={labelStyle}>{t('analytics.paymentDay')}</Text>
                                     <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 14, paddingVertical: 10 }}>
                                         <TextInput
-                                            style={{ color: '#fff', fontSize: 14, flex: 1 }}
+                                            style={{ color: colors.textPrimary, fontSize: 14, flex: 1 }}
                                             keyboardType="number-pad"
                                             placeholder="15"
-                                            placeholderTextColor="rgba(255,255,255,0.2)"
+                                            placeholderTextColor={colors.textDisabled}
                                             value={loanPaymentDay}
                                             onChangeText={v => {
                                                 const num = v.replace(/[^0-9]/g, '');
@@ -4128,17 +4098,17 @@ export default function AnalyticsScreen() {
                                             }}
                                             maxLength={2}
                                         />
-                                        <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>число</Text>
+                                        <Text style={{ color: colors.textDisabled, fontSize: 12 }}>{t('analytics.dayNumber')}</Text>
                                     </View>
                                 </View>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={labelStyle}>Напомнить</Text>
+                                    <Text style={labelStyle}>{t('analytics.remind')}</Text>
                                     <TouchableOpacity onPress={() => setShowLoanReminderPicker(!showLoanReminderPicker)} style={{
                                         backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12,
                                         paddingHorizontal: 14, paddingVertical: 12,
                                         borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
                                     }}>
-                                        <Text style={{ color: '#fff', fontSize: 14 }}>{format(loanReminderDate, 'dd.MM.yyyy')}</Text>
+                                        <Text style={{ color: colors.textPrimary, fontSize: 14 }}>{format(loanReminderDate, 'dd.MM.yyyy')}</Text>
                                     </TouchableOpacity>
                                 </View>
                             </View>
@@ -4150,7 +4120,7 @@ export default function AnalyticsScreen() {
                             {/* Rate Periods (compact list) */}
                             <View style={{ marginTop: 16 }}>
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                    <Text style={labelStyle}>Периоды ставок</Text>
+                                    <Text style={labelStyle}>{t('analytics.ratePeriods')}</Text>
                                     {(() => {
                                         const lastP = loanRateDrafts[loanRateDrafts.length - 1];
                                         const canAdd = lastP && lastP.rate.trim() !== '' && !isNaN(parseFloat(lastP.rate)) && parseFloat(lastP.rate) > 0;
@@ -4160,7 +4130,7 @@ export default function AnalyticsScreen() {
                                                 const newFrom = prev.toDate ?? new Date();
                                                 setLoanRateDrafts([...loanRateDrafts, { rate: '', fromDate: newFrom, toDate: null }]);
                                             }}>
-                                                <Text style={{ color: '#FF6B6B', fontSize: 13, fontWeight: '600', opacity: canAdd ? 1 : 0.3 }}>+ Добавить период</Text>
+                                                <Text style={{ color: '#FF6B6B', fontSize: 13, fontWeight: '600', opacity: canAdd ? 1 : 0.3 }}>{t('analytics.addPeriod')}</Text>
                                             </TouchableOpacity>
                                         );
                                     })()}
@@ -4172,27 +4142,27 @@ export default function AnalyticsScreen() {
                                 }}>
                                     {loanRateDrafts.map((period, idx) => {
                                         const fromDate = idx === 0 ? loanStartDate : (loanRateDrafts[idx - 1].toDate ?? period.fromDate);
-                                        const endLabel = period.toDate ? format(period.toDate, 'dd.MM.yyyy') : 'бессрочно';
+                                        const endLabel = period.toDate ? format(period.toDate, 'dd.MM.yyyy') : t('analytics.indefinite');
                                         const showPicker = loanRatePickerIdx === idx;
                                         return (
                                             <View key={idx}>
                                                 {idx > 0 && <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.06)' }} />}
                                                 <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, gap: 8 }}>
                                                     <TouchableOpacity onPress={() => setLoanRatePickerIdx(showPicker ? null : idx)} style={{ flex: 1 }}>
-                                                        <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
-                                                            {format(fromDate, 'dd.MM.yyyy')} — <Text style={{ color: period.toDate ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.3)' }}>{endLabel}</Text>
+                                                        <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                                                            {format(fromDate, 'dd.MM.yyyy')} — <Text style={{ color: period.toDate ? colors.textSecondary : colors.textDisabled }}>{endLabel}</Text>
                                                         </Text>
                                                     </TouchableOpacity>
                                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                                                         <TextInput
                                                             style={{
                                                                 backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 8,
-                                                                color: '#fff', fontSize: 14, fontWeight: '600',
+                                                                color: colors.textPrimary, fontSize: 14, fontWeight: '600',
                                                                 paddingHorizontal: 10, paddingVertical: 6,
                                                                 minWidth: 48, textAlign: 'center',
                                                                 borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
                                                             }}
-                                                            keyboardType="numeric" placeholder="0" placeholderTextColor="rgba(255,255,255,0.2)"
+                                                            keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textDisabled}
                                                             value={period.rate}
                                                             onChangeText={v => {
                                                                 const updated = [...loanRateDrafts];
@@ -4200,7 +4170,7 @@ export default function AnalyticsScreen() {
                                                                 setLoanRateDrafts(updated);
                                                             }}
                                                         />
-                                                        <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13 }}>%</Text>
+                                                        <Text style={{ color: colors.textMuted, fontSize: 13 }}>%</Text>
                                                     </View>
                                                     {loanRateDrafts.length > 1 ? (
                                                         <TouchableOpacity onPress={() => {
@@ -4232,7 +4202,7 @@ export default function AnalyticsScreen() {
                                                                 backgroundColor: !period.toDate ? 'rgba(255,107,107,0.2)' : 'rgba(255,255,255,0.06)',
                                                                 borderWidth: 1, borderColor: !period.toDate ? '#FF6B6B' : 'rgba(255,255,255,0.08)',
                                                             }}>
-                                                                <Text style={{ color: !period.toDate ? '#FF6B6B' : 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: '600' }}>Бессрочно</Text>
+                                                                <Text style={{ color: !period.toDate ? '#FF6B6B' : colors.textMuted, fontSize: 12, fontWeight: '600' }}>{t('analytics.indefiniteCap')}</Text>
                                                             </TouchableOpacity>
                                                         </View>
                                                         {period.toDate && (
@@ -4258,7 +4228,7 @@ export default function AnalyticsScreen() {
 
                             {/* Payment account */}
                             <View style={{ marginTop: 16, marginBottom: 12 }}>
-                                <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginBottom: 4 }}>Счёт для списания (опц.)</Text>
+                                <Text style={{ fontSize: 11, color: colors.textDisabled, marginBottom: 4 }}>{t('analytics.paymentAccount')}</Text>
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                                     <View style={{ flexDirection: 'row', gap: 6 }}>
                                         {accounts.map(acc => {
@@ -4271,7 +4241,7 @@ export default function AnalyticsScreen() {
                                                     flexDirection: 'row', alignItems: 'center', gap: 6,
                                                 }}>
                                                     <Text style={{ fontSize: 16 }}>{acc.icon || '💳'}</Text>
-                                                    <Text style={{ fontSize: 13, color: sel ? '#FF6B6B' : 'rgba(255,255,255,0.5)', fontWeight: '600' }}>{acc.name}</Text>
+                                                    <Text style={{ fontSize: 13, color: sel ? '#FF6B6B' : colors.textMuted, fontWeight: '600' }}>{acc.name}</Text>
                                                 </TouchableOpacity>
                                             );
                                         })}
@@ -4290,9 +4260,9 @@ export default function AnalyticsScreen() {
                                     : calcDifferentiatedPayment(amt, rate, months, 0);
                                 return (
                                     <View style={{ backgroundColor: 'rgba(255,107,107,0.06)', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,107,107,0.15)' }}>
-                                        <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 2 }}>Ежемесячный платёж</Text>
+                                        <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 2 }}>{t('analytics.monthlyPaymentPreview')}</Text>
                                         <Text style={{ fontSize: 18, fontWeight: '800', color: '#FF6B6B' }}>{formatAmount(pmt, loanCurrency)}</Text>
-                                        <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>на {months} мес. · переплата {formatAmount(pmt * months - amt, loanCurrency)}</Text>
+                                        <Text style={{ fontSize: 11, color: colors.textDisabled, marginTop: 2 }}>{t('analytics.loanTermInfo', { months, overpayment: formatAmount(pmt * months - amt, loanCurrency) })}</Text>
                                     </View>
                                 );
                             })()}
@@ -4302,7 +4272,7 @@ export default function AnalyticsScreen() {
                                 onPress={() => householdId && (editingLoan ? updateLoan(householdId) : createLoan(householdId))}
                                 disabled={savingLoan}
                                 style={{ marginTop: 8, marginBottom: 20, paddingVertical: 14, backgroundColor: '#FF6B6B', borderRadius: 14, alignItems: 'center', opacity: savingLoan ? 0.5 : 1 }}>
-                                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{savingLoan ? 'Сохранение…' : 'Сохранить'}</Text>
+                                <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '700' }}>{savingLoan ? `${t('common.save')}…` : t('common.save')}</Text>
                             </TouchableOpacity>
                         </ScrollView>
 
@@ -4310,12 +4280,12 @@ export default function AnalyticsScreen() {
                         <Modal visible={showLoanCurrencyDropdown} transparent animationType="fade">
                             <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' }} activeOpacity={1}
                                 onPress={() => { setShowLoanCurrencyDropdown(false); setLoanCurrencySearch(''); }} />
-                            <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#1a2235', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingBottom: 40, maxHeight: '60%' }}>
+                            <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: colors.bgSecondary, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingBottom: 40, maxHeight: '60%' }}>
                                 <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginBottom: 16 }} />
-                                <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff', paddingHorizontal: 20, marginBottom: 12 }}>Валюта</Text>
+                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, paddingHorizontal: 20, marginBottom: 12 }}>{t('analytics.currency')}</Text>
                                 <View style={{ marginHorizontal: 20, marginBottom: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 }}>
-                                    <Text style={{ fontSize: 15, color: 'rgba(255,255,255,0.3)', marginRight: 8 }}>🔍</Text>
-                                    <TextInput value={loanCurrencySearch} onChangeText={setLoanCurrencySearch} placeholder="Поиск валюты..." placeholderTextColor="rgba(255,255,255,0.25)" style={{ flex: 1, color: '#fff', fontSize: 14 }} autoCorrect={false} autoCapitalize="none" />
+                                    <Text style={{ fontSize: 15, color: colors.textDisabled, marginRight: 8 }}>🔍</Text>
+                                    <TextInput value={loanCurrencySearch} onChangeText={setLoanCurrencySearch} placeholder={t('analytics.searchCurrency')} placeholderTextColor={colors.textDisabled} style={{ flex: 1, color: colors.textPrimary, fontSize: 14 }} autoCorrect={false} autoCapitalize="none" />
                                 </View>
                                 <FlatList
                                     data={CURRENCIES.filter(c => !loanCurrencySearch || c.code.toLowerCase().includes(loanCurrencySearch.toLowerCase()) || c.name.toLowerCase().includes(loanCurrencySearch.toLowerCase()))}
@@ -4324,8 +4294,8 @@ export default function AnalyticsScreen() {
                                         <TouchableOpacity onPress={() => { setLoanCurrency(item.code); setShowLoanCurrencyDropdown(false); setLoanCurrencySearch(''); }}
                                             style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 20, backgroundColor: item.code === loanCurrency ? 'rgba(255,107,107,0.1)' : 'transparent' }}>
                                             <Text style={{ fontSize: 20 }}>{item.flag}</Text>
-                                            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>{item.code}</Text>
-                                            <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, flex: 1 }}>{item.name}</Text>
+                                            <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600' }}>{item.code}</Text>
+                                            <Text style={{ color: colors.textMuted, fontSize: 13, flex: 1 }}>{item.name}</Text>
                                             {item.code === loanCurrency && <Text style={{ color: '#FF6B6B', fontSize: 16 }}>✓</Text>}
                                         </TouchableOpacity>
                                     )}
@@ -4348,11 +4318,11 @@ export default function AnalyticsScreen() {
                                 <Text style={{ fontSize: 24 }}>{goalIcon}</Text>
                             </View>
                             <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 18, fontWeight: '800', color: '#fff' }}>
-                                    {editingGoal ? 'Редактировать цель' : 'Новая цель'}
+                                <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary }}>
+                                    {editingGoal ? t('analytics.editGoal') : t('analytics.newGoal')}
                                 </Text>
-                                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 1 }}>
-                                    {goalName.trim() || 'Введите название ниже'}
+                                <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 1 }}>
+                                    {goalName.trim() || t('analytics.goalFormEnterName')}
                                 </Text>
                             </View>
                         </View>
@@ -4360,19 +4330,19 @@ export default function AnalyticsScreen() {
                         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
                             {/* ── 1. Название ── */}
-                            <Text style={labelStyle}>Название цели</Text>
+                            <Text style={labelStyle}>{t('analytics.goalFormTitle')}</Text>
                             <TextInput
                                 value={goalName}
                                 onChangeText={setGoalName}
-                                placeholder="Например, Отпуск в Испании"
-                                placeholderTextColor="rgba(255,255,255,0.2)"
+                                placeholder={t('analytics.goalFormPlaceholder')}
+                                placeholderTextColor={colors.textDisabled}
                                 style={inputStyle}
                             />
 
                             {/* ── 2. Иконка + Цвет в одну строку ── */}
                             <View style={{ flexDirection: 'row', gap: 16, marginBottom: 20 }}>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={labelStyle}>Иконка</Text>
+                                    <Text style={labelStyle}>{t('common.icon')}</Text>
                                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                                         <View style={{ flexDirection: 'row', gap: 6 }}>
                                             {['🎯','🏖️','💻','🚗','🏠','🎓','✈️','📱','🎮','💪','🛡️','📈','🌍','🎁','💰','🎸','🏋️','🐶'].map(em => (
@@ -4389,7 +4359,7 @@ export default function AnalyticsScreen() {
                                     </ScrollView>
                                 </View>
                                 <View>
-                                    <Text style={labelStyle}>Цвет</Text>
+                                    <Text style={labelStyle}>{t('common.color')}</Text>
                                     <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', maxWidth: 140 }}>
                                         {['#7C6FFF','#4FFFB0','#FFB84F','#FF6B6B','#4FC3FF','#F472B6','#34D399','#FB923C'].map(c => (
                                             <TouchableOpacity key={c} onPress={() => setGoalColor(c)} style={{
@@ -4407,13 +4377,13 @@ export default function AnalyticsScreen() {
                             </View>
 
                             {/* ── 3. Сумма + валюта ── */}
-                            <Text style={labelStyle}>Целевая сумма</Text>
+                            <Text style={labelStyle}>{t('analytics.targetAmount')}</Text>
                             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
                                 <TextInput
                                     value={goalTarget}
                                     onChangeText={setGoalTarget}
                                     placeholder="0"
-                                    placeholderTextColor="rgba(255,255,255,0.2)"
+                                    placeholderTextColor={colors.textDisabled}
                                     keyboardType="decimal-pad"
                                     style={[inputStyle, { flex: 1, marginBottom: 0 }]}
                                 />
@@ -4430,8 +4400,8 @@ export default function AnalyticsScreen() {
                                     }}
                                 >
                                     <Text style={{ fontSize: 18 }}>{CURRENCIES.find(c => c.code === goalCurrency)?.flag}</Text>
-                                    <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{goalCurrency}</Text>
-                                    <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginLeft: 2 }}>▾</Text>
+                                    <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '700' }}>{goalCurrency}</Text>
+                                    <Text style={{ color: colors.textMuted, fontSize: 11, marginLeft: 2 }}>▾</Text>
                                 </TouchableOpacity>
                             </View>
 
@@ -4444,25 +4414,25 @@ export default function AnalyticsScreen() {
                                 />
                                 <View style={{
                                     position: 'absolute', bottom: 0, left: 0, right: 0,
-                                    backgroundColor: '#1a2235', borderTopLeftRadius: 24, borderTopRightRadius: 24,
+                                    backgroundColor: colors.bgSecondary, borderTopLeftRadius: 24, borderTopRightRadius: 24,
                                     paddingTop: 12, paddingBottom: 40, maxHeight: '60%',
                                 }}>
                                     <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginBottom: 16 }} />
-                                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff', paddingHorizontal: 20, marginBottom: 12 }}>Валюта</Text>
+                                    <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, paddingHorizontal: 20, marginBottom: 12 }}>{t('analytics.currency')}</Text>
                                     <View style={{ marginHorizontal: 20, marginBottom: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 }}>
-                                        <Text style={{ fontSize: 15, color: 'rgba(255,255,255,0.3)', marginRight: 8 }}>🔍</Text>
+                                        <Text style={{ fontSize: 15, color: colors.textDisabled, marginRight: 8 }}>🔍</Text>
                                         <TextInput
                                             value={currencySearch}
                                             onChangeText={setCurrencySearch}
-                                            placeholder="Поиск валюты..."
-                                            placeholderTextColor="rgba(255,255,255,0.25)"
-                                            style={{ flex: 1, color: '#fff', fontSize: 14 }}
+                                            placeholder={t('analytics.searchCurrency')}
+                                            placeholderTextColor={colors.textDisabled}
+                                            style={{ flex: 1, color: colors.textPrimary, fontSize: 14 }}
                                             autoCorrect={false}
                                             autoCapitalize="none"
                                         />
                                         {currencySearch.length > 0 && (
                                             <TouchableOpacity onPress={() => setCurrencySearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                                                <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 16 }}>✕</Text>
+                                                <Text style={{ color: colors.textDisabled, fontSize: 16 }}>✕</Text>
                                             </TouchableOpacity>
                                         )}
                                     </View>
@@ -4489,7 +4459,7 @@ export default function AnalyticsScreen() {
                                                         <Text style={{ fontSize: 14, fontWeight: selected ? '700' : '500', color: selected ? '#a78bfa' : '#fff' }}>
                                                             {c.code}
                                                         </Text>
-                                                        <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 1 }}>{c.name}</Text>
+                                                        <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 1 }}>{c.name}</Text>
                                                     </View>
                                                     {selected && <Text style={{ color: '#7C6FFF', fontSize: 16 }}>✓</Text>}
                                                 </TouchableOpacity>
@@ -4500,10 +4470,10 @@ export default function AnalyticsScreen() {
                             </Modal>
 
                             {/* ── 4. Списывать со счёта ── */}
-                            <Text style={labelStyle}>Списывать со счёта</Text>
+                            <Text style={labelStyle}>{t('analytics.debitAccount')}</Text>
                             {accounts.length === 0 ? (
                                 <View style={{ backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: 14, marginBottom: 16 }}>
-                                    <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Нет счетов. Создайте счёт в разделе «Счета».</Text>
+                                    <Text style={{ color: colors.textDisabled, fontSize: 13 }}>{t('analytics.noAccountsHint')}</Text>
                                 </View>
                             ) : (
                                 <View style={{ marginBottom: 20, gap: 8 }}>
@@ -4525,8 +4495,8 @@ export default function AnalyticsScreen() {
                                                     <Text style={{ fontSize: 20 }}>{acc.icon ?? '🏦'}</Text>
                                                 </View>
                                                 <View style={{ flex: 1 }}>
-                                                    <Text style={{ fontSize: 14, fontWeight: '600', color: '#fff' }}>{acc.name}</Text>
-                                                    <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 1 }}>
+                                                    <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textPrimary }}>{acc.name}</Text>
+                                                    <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 1 }}>
                                                         {formatAmount(acc.balance, acc.currency)}
                                                     </Text>
                                                 </View>
@@ -4535,7 +4505,7 @@ export default function AnalyticsScreen() {
                                                     backgroundColor: selected ? '#7C6FFF' : 'rgba(255,255,255,0.08)',
                                                     alignItems: 'center', justifyContent: 'center',
                                                 }}>
-                                                    {selected && <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>✓</Text>}
+                                                    {selected && <Text style={{ color: colors.textPrimary, fontSize: 11, fontWeight: '800' }}>✓</Text>}
                                                 </View>
                                             </TouchableOpacity>
                                         );
@@ -4546,12 +4516,12 @@ export default function AnalyticsScreen() {
                             {/* ── 5. Начальный взнос (только при создании) ── */}
                             {!editingGoal && (
                                 <>
-                                    <Text style={labelStyle}>Начальный взнос <Text style={{ textTransform: 'none', fontWeight: '400', color: 'rgba(255,255,255,0.25)' }}>(необязательно)</Text></Text>
+                                    <Text style={labelStyle}>{t('analytics.initialDeposit')} <Text style={{ textTransform: 'none', fontWeight: '400', color: colors.textDisabled }}>({t('common.optional')})</Text></Text>
                                     <TextInput
                                         value={goalInitialDeposit}
                                         onChangeText={v => setGoalInitialDeposit(v.replace(/[^0-9.,]/g, ''))}
                                         placeholder="0.00"
-                                        placeholderTextColor="rgba(255,255,255,0.2)"
+                                        placeholderTextColor={colors.textDisabled}
                                         keyboardType="decimal-pad"
                                         style={inputStyle}
                                     />
@@ -4559,7 +4529,7 @@ export default function AnalyticsScreen() {
                             )}
 
                             {/* ── 6. Дата достижения ── */}
-                            <Text style={labelStyle}>Дата достижения <Text style={{ textTransform: 'none', fontWeight: '400', color: 'rgba(255,255,255,0.25)' }}>(необязательно)</Text></Text>
+                            <Text style={labelStyle}>{t('analytics.targetDate')} <Text style={{ textTransform: 'none', fontWeight: '400', color: colors.textDisabled }}>({t('common.optional')})</Text></Text>
                             <TouchableOpacity
                                 onPress={() => setShowGoalDatePicker(true)}
                                 style={{
@@ -4579,11 +4549,11 @@ export default function AnalyticsScreen() {
                                             </Text>
                                         </View>
                                         <View style={{ flex: 1, paddingHorizontal: 14, paddingVertical: 12, justifyContent: 'center' }}>
-                                            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', textTransform: 'capitalize' }}>
+                                            <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '700', textTransform: 'capitalize' }}>
                                                 {format(goalDateObj, 'LLLL', { locale: ru })}
                                             </Text>
-                                            <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '600', marginTop: 2 }}>
-                                                {format(goalDateObj, 'yyyy')} г.
+                                            <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: '600', marginTop: 2 }}>
+                                                {format(goalDateObj, 'yyyy')} {t('analytics.yearSuffix')}
                                             </Text>
                                         </View>
                                         <TouchableOpacity
@@ -4591,18 +4561,18 @@ export default function AnalyticsScreen() {
                                             style={{ paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' }}
                                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                         >
-                                            <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 18 }}>✕</Text>
+                                            <Text style={{ color: colors.textDisabled, fontSize: 18 }}>✕</Text>
                                         </TouchableOpacity>
                                     </View>
                                 ) : (
                                     <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10 }}>
                                         <Text style={{ fontSize: 20 }}>📅</Text>
-                                        <Text style={{ color: 'rgba(255,255,255,0.25)', fontSize: 15 }}>Нажмите чтобы выбрать</Text>
+                                        <Text style={{ color: colors.textDisabled, fontSize: 15 }}>{t('analytics.tapToSelect')}</Text>
                                     </View>
                                 )}
                             </TouchableOpacity>
                             {showGoalDatePicker && (
-                                <View style={{ borderRadius: 14, overflow: 'hidden', marginBottom: 12, backgroundColor: '#1c2438' }}>
+                                <View style={{ borderRadius: 14, overflow: 'hidden', marginBottom: 12, backgroundColor: colors.bgSecondary }}>
                                     <DateTimePicker
                                         mode="date"
                                         display="inline"
@@ -4624,7 +4594,7 @@ export default function AnalyticsScreen() {
                                     flex: 1, paddingVertical: 14, borderRadius: 14,
                                     backgroundColor: 'rgba(255,255,255,0.06)', alignItems: 'center',
                                 }}>
-                                    <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 15, fontWeight: '600' }}>Отмена</Text>
+                                    <Text style={{ color: colors.textMuted, fontSize: 15, fontWeight: '600' }}>{t('common.cancel')}</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     onPress={editingGoal ? updateGoal : createGoal}
@@ -4637,7 +4607,7 @@ export default function AnalyticsScreen() {
                                     {savingGoal
                                         ? <ActivityIndicator color="#000" />
                                         : <Text style={{ color: '#000', fontSize: 15, fontWeight: '700' }}>
-                                            {editingGoal ? 'Сохранить' : 'Создать цель'}
+                                            {editingGoal ? t('common.save') : t('analytics.createGoal')}
                                         </Text>
                                     }
                                 </TouchableOpacity>
@@ -4653,11 +4623,11 @@ export default function AnalyticsScreen() {
                         const pctG = Math.round(ratio * 100);
 
                         return (
-                            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                            <ScrollView ref={goalDetailScrollRef} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                                 {/* Header */}
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 }}>
                                     <Text style={{ fontSize: 28 }}>{g.icon}</Text>
-                                    <Text style={{ fontSize: 20, fontWeight: '800', color: '#fff', flex: 1 }} numberOfLines={1}>{g.name}</Text>
+                                    <Text style={{ fontSize: 20, fontWeight: '800', color: colors.textPrimary, flex: 1 }} numberOfLines={1}>{g.name}</Text>
                                     <TouchableOpacity onPress={() => { closeGoalDetail(); openEditGoal(g); }} hitSlop={10} style={{
                                         width: 36, height: 36, borderRadius: 12,
                                         backgroundColor: 'rgba(124,111,255,0.12)',
@@ -4670,12 +4640,12 @@ export default function AnalyticsScreen() {
                                 {/* Progress */}
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
                                     <View>
-                                        <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 3 }}>Накоплено</Text>
+                                        <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 3 }}>{t('analytics.goalSaved')}</Text>
                                         <Text style={{ fontSize: 20, fontWeight: '800', color: '#4FFFB0' }}>{formatAmount(g.saved, g.currency)}</Text>
                                     </View>
                                     <View style={{ alignItems: 'flex-end' }}>
-                                        <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 3 }}>Цель</Text>
-                                        <Text style={{ fontSize: 20, fontWeight: '800', color: '#fff' }}>{formatAmount(g.target, g.currency)}</Text>
+                                        <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 3 }}>{t('analytics.goalTargetLabel')}</Text>
+                                        <Text style={{ fontSize: 20, fontWeight: '800', color: colors.textPrimary }}>{formatAmount(g.target, g.currency)}</Text>
                                     </View>
                                 </View>
                                 <View style={{ height: 4, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 2, marginBottom: 20, overflow: 'hidden' }}>
@@ -4684,11 +4654,11 @@ export default function AnalyticsScreen() {
 
                                 {/* Calculator */}
                                 <View style={{ backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' }}>
-                                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 14 }}>Калькулятор роста</Text>
+                                    <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 14 }}>{t('analytics.growthCalc')}</Text>
 
                                     {/* Rate */}
                                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                                        <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>Ставка</Text>
+                                        <Text style={{ fontSize: 13, color: colors.textSecondary }}>{t('analytics.rate')}</Text>
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                                             <TextInput
                                                 value={goalRateInput}
@@ -4702,18 +4672,18 @@ export default function AnalyticsScreen() {
                                                 style={{
                                                     backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 10,
                                                     borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
-                                                    color: '#fff', fontSize: 15, fontWeight: '700',
+                                                    color: colors.textPrimary, fontSize: 15, fontWeight: '700',
                                                     paddingHorizontal: 12, paddingVertical: 8,
                                                     minWidth: 60, textAlign: 'center',
                                                 }}
                                             />
-                                            <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>% год.</Text>
+                                            <Text style={{ color: colors.textMuted, fontSize: 13 }}>{t('analytics.annualPercent')}</Text>
                                         </View>
                                     </View>
 
                                     {/* Compounding */}
                                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                                        <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>Капитализация</Text>
+                                        <Text style={{ fontSize: 13, color: colors.textSecondary }}>{t('analytics.compounding')}</Text>
                                         <View style={{ flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 10, padding: 3, gap: 2 }}>
                                             {(['monthly', 'yearly'] as const).map(c => (
                                                 <TouchableOpacity key={c} onPress={() => setGoalCompounding(c)} style={{
@@ -4722,9 +4692,9 @@ export default function AnalyticsScreen() {
                                                 }}>
                                                     <Text style={{
                                                         fontSize: 12,
-                                                        color: goalCompounding === c ? '#fff' : 'rgba(255,255,255,0.38)',
+                                                        color: goalCompounding === c ? '#fff' : colors.textMuted,
                                                         fontWeight: goalCompounding === c ? '600' : '400',
-                                                    }}>{c === 'monthly' ? 'Ежемесячно' : 'Ежегодно'}</Text>
+                                                    }}>{c === 'monthly' ? t('analytics.monthly') : t('analytics.yearly')}</Text>
                                                 </TouchableOpacity>
                                             ))}
                                         </View>
@@ -4734,17 +4704,17 @@ export default function AnalyticsScreen() {
 
                                     {/* Results */}
                                     {[
-                                        { label: 'Текущий баланс', value: formatAmount(g.saved, g.currency), color: '#fff' },
-                                        { label: `Прогноз к ${format(goalCalc.endDate, 'd MMM yyyy', { locale: ru })}`, value: formatAmount(goalCalc.forecast, g.currency), color: '#4FFFB0' },
-                                        { label: '   из них % доход', value: `+${formatAmount(goalCalc.interest, g.currency)}`, color: '#4E9F3D', indent: true },
-                                        { label: 'Нужно довнести', value: goalCalc.needToAdd > 0 ? formatAmount(goalCalc.needToAdd, g.currency) : '✓ Цель достигнута', color: goalCalc.needToAdd > 0 ? '#f9a825' : '#4FFFB0' },
+                                        { label: t('analytics.currentBalance'), value: formatAmount(g.saved, g.currency), color: colors.textPrimary },
+                                        { label: t('analytics.forecastTo', { date: format(goalCalc.endDate, 'd MMM yyyy', { locale: ru }) }), value: formatAmount(goalCalc.forecast, g.currency), color: '#4FFFB0' },
+                                        { label: `   ${t('analytics.ofWhichInterest')}`, value: `+${formatAmount(goalCalc.interest, g.currency)}`, color: '#4E9F3D', indent: true },
+                                        { label: t('analytics.needToAdd'), value: goalCalc.needToAdd > 0 ? formatAmount(goalCalc.needToAdd, g.currency) : t('analytics.goalReached'), color: goalCalc.needToAdd > 0 ? '#f9a825' : '#4FFFB0' },
                                     ].map((row, i) => (
                                         <View key={i} style={{
                                             flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
                                             paddingVertical: 7,
                                             borderTopWidth: i > 0 ? 1 : 0, borderTopColor: 'rgba(255,255,255,0.04)',
                                         }}>
-                                            <Text style={{ fontSize: (row as any).indent ? 12 : 13, color: (row as any).indent ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.55)', flex: 1 }}>{row.label}</Text>
+                                            <Text style={{ fontSize: (row as any).indent ? 12 : 13, color: (row as any).indent ? colors.textMuted : colors.textSecondary, flex: 1 }}>{row.label}</Text>
                                             <Text style={{ fontSize: 14, fontWeight: '700', color: row.color }}>{row.value}</Text>
                                         </View>
                                     ))}
@@ -4758,23 +4728,23 @@ export default function AnalyticsScreen() {
                                         borderWidth: 1.5, borderColor: 'rgba(79,255,176,0.25)',
                                         marginBottom: 10,
                                     }}>
-                                        <Text style={{ color: '#4FFFB0', fontSize: 14, fontWeight: '600' }}>Пополнить</Text>
+                                        <Text style={{ color: '#4FFFB0', fontSize: 14, fontWeight: '600' }}>{t('analytics.topUpGoal')}</Text>
                                     </TouchableOpacity>
                                 ) : (
                                     <View style={{ backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 16, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(79,255,176,0.15)' }}>
-                                        <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 12 }}>Пополнить цель</Text>
+                                        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 12 }}>{t('analytics.topUpGoal')}</Text>
 
-                                        <Text style={labelStyle}>Сумма</Text>
+                                        <Text style={labelStyle}>{t('analytics.sum')}</Text>
                                         <TextInput
                                             value={goalTopUpAmount}
                                             onChangeText={setGoalTopUpAmount}
                                             placeholder="0"
-                                            placeholderTextColor="rgba(255,255,255,0.2)"
+                                            placeholderTextColor={colors.textDisabled}
                                             keyboardType="decimal-pad"
                                             style={inputStyle}
                                         />
 
-                                        <Text style={labelStyle}>Со счёта (опц.)</Text>
+                                        <Text style={labelStyle}>{t('analytics.fromAccount')}</Text>
                                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
                                             <View style={{ flexDirection: 'row', gap: 8 }}>
                                                 {accounts.map(acc => {
@@ -4788,7 +4758,7 @@ export default function AnalyticsScreen() {
                                                         }}>
                                                             <Text style={{ fontSize: 14 }}>{acc.icon || '💳'}</Text>
                                                             <Text style={{ color: sel ? '#a78bfa' : '#fff', fontSize: 13, fontWeight: '500' }}>{acc.name}</Text>
-                                                            <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>{formatAmount(acc.balance, acc.currency)}</Text>
+                                                            <Text style={{ color: colors.textMuted, fontSize: 11 }}>{formatAmount(acc.balance, acc.currency)}</Text>
                                                         </TouchableOpacity>
                                                     );
                                                 })}
@@ -4799,18 +4769,18 @@ export default function AnalyticsScreen() {
                                             const srcAcc = accounts.find(a => a.id === goalTopUpAccountId);
                                             const amt = parseFloat(goalTopUpAmount.replace(',', '.')) || 0;
                                             if (srcAcc && amt > srcAcc.balance) {
-                                                return <Text style={{ fontSize: 11, color: '#FFB84F', marginBottom: 4 }}>Недостаточно средств ({formatAmount(srcAcc.balance, srcAcc.currency)})</Text>;
+                                                return <Text style={{ fontSize: 11, color: '#FFB84F', marginBottom: 4 }}>{t('analytics.insufficientFunds', { amount: formatAmount(srcAcc.balance, srcAcc.currency) })}</Text>;
                                             }
                                             return null;
                                         })()}
 
-                                        <Text style={labelStyle}>Дата</Text>
+                                        <Text style={labelStyle}>{t('common.date')}</Text>
                                         <TouchableOpacity onPress={() => setShowGoalTopUpDatePicker(!showGoalTopUpDatePicker)} style={{
                                             backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12,
                                             paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8,
                                             borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
                                         }}>
-                                            <Text style={{ color: '#fff', fontSize: 14 }}>{format(goalTopUpDate, 'dd.MM.yyyy')}</Text>
+                                            <Text style={{ color: colors.textPrimary, fontSize: 14 }}>{format(goalTopUpDate, 'dd.MM.yyyy')}</Text>
                                         </TouchableOpacity>
                                         {showGoalTopUpDatePicker && (
                                             <DateTimePicker value={goalTopUpDate} mode="date" display="inline" themeVariant="dark"
@@ -4822,7 +4792,7 @@ export default function AnalyticsScreen() {
                                                 flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center',
                                                 backgroundColor: 'rgba(255,255,255,0.06)',
                                             }}>
-                                                <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, fontWeight: '600' }}>Отмена</Text>
+                                                <Text style={{ color: colors.textMuted, fontSize: 14, fontWeight: '600' }}>{t('common.cancel')}</Text>
                                             </TouchableOpacity>
                                             <TouchableOpacity onPress={confirmGoalTopUp} disabled={savingGoalTopUp || !goalTopUpAmount.trim()} style={{
                                                 flex: 2, paddingVertical: 12, borderRadius: 12, alignItems: 'center',
@@ -4830,7 +4800,7 @@ export default function AnalyticsScreen() {
                                             }}>
                                                 {savingGoalTopUp
                                                     ? <ActivityIndicator color="#000" />
-                                                    : <Text style={{ color: '#000', fontSize: 14, fontWeight: '700' }}>Пополнить</Text>
+                                                    : <Text style={{ color: '#000', fontSize: 14, fontWeight: '700' }}>{t('analytics.topUpGoal')}</Text>
                                                 }
                                             </TouchableOpacity>
                                         </View>
@@ -4844,23 +4814,23 @@ export default function AnalyticsScreen() {
                                         backgroundColor: 'rgba(239,68,68,0.07)',
                                         borderWidth: 1, borderColor: 'rgba(239,68,68,0.18)',
                                     }}>
-                                        <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '600' }}>Удалить цель</Text>
+                                        <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '600' }}>{t('analytics.deleteGoal')}</Text>
                                     </TouchableOpacity>
                                 ) : (
                                     <View style={{ backgroundColor: 'rgba(239,68,68,0.05)', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(239,68,68,0.15)' }}>
-                                        <Text style={{ fontSize: 15, fontWeight: '700', color: '#fff', textAlign: 'center', marginBottom: 4 }}>
-                                            Удалить цель «{g.name}»?
+                                        <Text style={{ fontSize: 15, fontWeight: '700', color: colors.textPrimary, textAlign: 'center', marginBottom: 4 }}>
+                                            {t('analytics.deleteGoalMsg', { name: g.name })}
                                         </Text>
                                         {g.saved > 0 && (
-                                            <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginBottom: 12 }}>
-                                                На счету цели: {formatAmount(g.saved, g.currency)}
+                                            <Text style={{ fontSize: 13, color: colors.textMuted, textAlign: 'center', marginBottom: 12 }}>
+                                                {t('analytics.goalBalance', { amount: formatAmount(g.saved, g.currency) })}
                                             </Text>
                                         )}
 
                                         {g.saved > 0 && (
                                             <>
-                                                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', fontWeight: '600', marginBottom: 10 }}>
-                                                    Куда перевести средства?
+                                                <Text style={{ fontSize: 12, color: colors.textMuted, fontWeight: '600', marginBottom: 10 }}>
+                                                    {t('analytics.whereToTransfer')}
                                                 </Text>
 
                                                 {/* Option: to account */}
@@ -4874,7 +4844,7 @@ export default function AnalyticsScreen() {
                                                     <View style={{ width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: deleteTransferMode === 'account' ? '#7C6FFF' : 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
                                                         {deleteTransferMode === 'account' && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#7C6FFF' }} />}
                                                     </View>
-                                                    <Text style={{ color: '#fff', fontSize: 14, flex: 1 }}>На счёт</Text>
+                                                    <Text style={{ color: colors.textPrimary, fontSize: 14, flex: 1 }}>{t('analytics.toAccount')}</Text>
                                                 </TouchableOpacity>
                                                 {deleteTransferMode === 'account' && (
                                                     <View style={{ marginLeft: 28, marginBottom: 8, gap: 4 }}>
@@ -4885,7 +4855,7 @@ export default function AnalyticsScreen() {
                                                                 backgroundColor: deleteTransferAccountId === acc.id ? 'rgba(124,111,255,0.1)' : 'transparent',
                                                             }}>
                                                                 <Text style={{ fontSize: 16 }}>{acc.icon ?? '🏦'}</Text>
-                                                                <Text style={{ color: deleteTransferAccountId === acc.id ? '#a78bfa' : 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: deleteTransferAccountId === acc.id ? '600' : '400' }}>
+                                                                <Text style={{ color: deleteTransferAccountId === acc.id ? '#a78bfa' : colors.textSecondary, fontSize: 13, fontWeight: deleteTransferAccountId === acc.id ? '600' : '400' }}>
                                                                     {acc.name}
                                                                 </Text>
                                                                 {deleteTransferAccountId === acc.id && <Text style={{ color: '#7C6FFF', fontSize: 12, marginLeft: 'auto' }}>✓</Text>}
@@ -4907,7 +4877,7 @@ export default function AnalyticsScreen() {
                                                             <View style={{ width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: deleteTransferMode === 'goal' ? '#7C6FFF' : 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
                                                                 {deleteTransferMode === 'goal' && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#7C6FFF' }} />}
                                                             </View>
-                                                            <Text style={{ color: '#fff', fontSize: 14, flex: 1 }}>На другую цель</Text>
+                                                            <Text style={{ color: colors.textPrimary, fontSize: 14, flex: 1 }}>{t('analytics.toGoal')}</Text>
                                                         </TouchableOpacity>
                                                         {deleteTransferMode === 'goal' && (
                                                             <View style={{ marginLeft: 28, marginBottom: 8, gap: 4 }}>
@@ -4918,7 +4888,7 @@ export default function AnalyticsScreen() {
                                                                         backgroundColor: deleteTransferGoalId === og.id ? 'rgba(124,111,255,0.1)' : 'transparent',
                                                                     }}>
                                                                         <Text style={{ fontSize: 16 }}>{og.icon}</Text>
-                                                                        <Text style={{ color: deleteTransferGoalId === og.id ? '#a78bfa' : 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: deleteTransferGoalId === og.id ? '600' : '400' }}>
+                                                                        <Text style={{ color: deleteTransferGoalId === og.id ? '#a78bfa' : colors.textSecondary, fontSize: 13, fontWeight: deleteTransferGoalId === og.id ? '600' : '400' }}>
                                                                             {og.name}
                                                                         </Text>
                                                                         {deleteTransferGoalId === og.id && <Text style={{ color: '#7C6FFF', fontSize: 12, marginLeft: 'auto' }}>✓</Text>}
@@ -4940,7 +4910,7 @@ export default function AnalyticsScreen() {
                                                     <View style={{ width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: deleteTransferMode === 'none' ? '#ef4444' : 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
                                                         {deleteTransferMode === 'none' && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#ef4444' }} />}
                                                     </View>
-                                                    <Text style={{ color: deleteTransferMode === 'none' ? '#ef4444' : 'rgba(255,255,255,0.5)', fontSize: 14, flex: 1 }}>Не переводить (просто удалить)</Text>
+                                                    <Text style={{ color: deleteTransferMode === 'none' ? '#ef4444' : colors.textMuted, fontSize: 14, flex: 1 }}>{t('analytics.dontTransfer')}</Text>
                                                 </TouchableOpacity>
                                             </>
                                         )}
@@ -4950,7 +4920,7 @@ export default function AnalyticsScreen() {
                                                 flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center',
                                                 backgroundColor: 'rgba(255,255,255,0.06)',
                                             }}>
-                                                <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, fontWeight: '600' }}>Отмена</Text>
+                                                <Text style={{ color: colors.textMuted, fontSize: 14, fontWeight: '600' }}>{t('common.cancel')}</Text>
                                             </TouchableOpacity>
                                             <TouchableOpacity onPress={confirmDeleteGoal} disabled={deletingGoal} style={{
                                                 flex: 2, paddingVertical: 12, borderRadius: 12, alignItems: 'center',
@@ -4958,8 +4928,8 @@ export default function AnalyticsScreen() {
                                             }}>
                                                 {deletingGoal
                                                     ? <ActivityIndicator color="#fff" />
-                                                    : <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>
-                                                        {g.saved > 0 && deleteTransferMode !== 'none' ? 'Удалить и перевести' : 'Удалить'}
+                                                    : <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '700' }}>
+                                                        {g.saved > 0 && deleteTransferMode !== 'none' ? t('analytics.deleteAndTransfer') : t('common.delete')}
                                                     </Text>
                                                 }
                                             </TouchableOpacity>
@@ -4987,9 +4957,9 @@ export default function AnalyticsScreen() {
                                 <CategoryIcon iconName={depositIcon} color={depositColor} size={24} />
                             </View>
                             <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 18, fontWeight: '800', color: '#fff' }}>{editingDeposit ? 'Редактировать депозит' : 'Новый депозит'}</Text>
-                                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 1 }}>
-                                    {depositName.trim() || 'Введите название ниже'}
+                                <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary }}>{editingDeposit ? t('analytics.editDeposit') : t('analytics.newDeposit')}</Text>
+                                <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 1 }}>
+                                    {depositName.trim() || t('analytics.goalFormEnterName')}
                                 </Text>
                             </View>
                         </View>
@@ -4997,7 +4967,7 @@ export default function AnalyticsScreen() {
                         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
                             {/* ── Иконка ── */}
-                            <Text style={labelStyle}>Иконка</Text>
+                            <Text style={labelStyle}>{t('common.icon')}</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
                                 <View style={{ flexDirection: 'row', gap: 6 }}>
                                     {['Landmark', 'Banknote', 'Wallet', 'CreditCard', 'Coins', 'CircleDollarSign', 'TrendingUp', 'Building2', 'Briefcase', 'Bitcoin'].map(ic => (
@@ -5007,14 +4977,14 @@ export default function AnalyticsScreen() {
                                             borderWidth: 1.5,
                                             borderColor: depositIcon === ic ? '#7C6FFF' : 'transparent',
                                         }}>
-                                            <CategoryIcon iconName={ic} color={depositIcon === ic ? '#7C6FFF' : 'rgba(255,255,255,0.5)'} size={20} />
+                                            <CategoryIcon iconName={ic} color={depositIcon === ic ? '#7C6FFF' : colors.textMuted} size={20} />
                                         </TouchableOpacity>
                                     ))}
                                 </View>
                             </ScrollView>
 
                             {/* ── Цвет ── */}
-                            <Text style={labelStyle}>Цвет</Text>
+                            <Text style={labelStyle}>{t('common.color')}</Text>
                             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
                                 {['#7C6FFF', '#4FFFB0', '#FFB84F', '#FF6B6B', '#4FC3FF', '#F472B6', '#34D399', '#FB923C'].map(c => (
                                     <TouchableOpacity key={c} onPress={() => setDepositColor(c)} style={{
@@ -5030,23 +5000,23 @@ export default function AnalyticsScreen() {
                             </View>
 
                             {/* Name */}
-                            <Text style={labelStyle}>Название</Text>
+                            <Text style={labelStyle}>{t('common.name')}</Text>
                             <TextInput
                                 style={inputStyle}
-                                placeholder="Пенсионный счёт"
-                                placeholderTextColor="rgba(255,255,255,0.2)"
+                                placeholder={t('analytics.depositNamePlaceholder')}
+                                placeholderTextColor={colors.textDisabled}
                                 value={depositName}
                                 onChangeText={setDepositName}
                             />
 
                             {/* Amount + Currency */}
-                            <Text style={labelStyle}>Сумма вклада</Text>
+                            <Text style={labelStyle}>{t('analytics.depositAmount')}</Text>
                             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
                                 <TextInput
                                     style={[inputStyle, { flex: 1, marginBottom: 0 }]}
                                     keyboardType="numeric"
                                     placeholder="25000"
-                                    placeholderTextColor="rgba(255,255,255,0.2)"
+                                    placeholderTextColor={colors.textDisabled}
                                     value={depositAmount}
                                     onChangeText={setDepositAmount}
                                 />
@@ -5061,15 +5031,15 @@ export default function AnalyticsScreen() {
                                     }}
                                 >
                                     <Text style={{ fontSize: 18 }}>{CURRENCIES.find(c => c.code === depositCurrency)?.flag}</Text>
-                                    <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>{depositCurrency}</Text>
-                                    <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginLeft: 2 }}>▾</Text>
+                                    <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '700' }}>{depositCurrency}</Text>
+                                    <Text style={{ color: colors.textMuted, fontSize: 11, marginLeft: 2 }}>▾</Text>
                                 </TouchableOpacity>
                             </View>
 
                             {/* From account (create mode only) */}
                             {!editingDeposit && (
                                 <View style={{ marginBottom: 12 }}>
-                                    <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginBottom: 4 }}>Со счёта (опц.)</Text>
+                                    <Text style={{ fontSize: 11, color: colors.textDisabled, marginBottom: 4 }}>{t('analytics.fromAccountOpt')}</Text>
                                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                                         <View style={{ flexDirection: 'row', gap: 6 }}>
                                             {accounts.map(acc => {
@@ -5084,7 +5054,7 @@ export default function AnalyticsScreen() {
                                                             flexDirection: 'row', alignItems: 'center', gap: 6,
                                                         }}>
                                                         <Text style={{ fontSize: 16 }}>{acc.icon || '💳'}</Text>
-                                                        <Text style={{ fontSize: 13, color: sel ? '#7C6FFF' : 'rgba(255,255,255,0.5)', fontWeight: '600' }}>{acc.name}</Text>
+                                                        <Text style={{ fontSize: 13, color: sel ? '#7C6FFF' : colors.textMuted, fontWeight: '600' }}>{acc.name}</Text>
                                                     </TouchableOpacity>
                                                 );
                                             })}
@@ -5094,7 +5064,7 @@ export default function AnalyticsScreen() {
                                         const srcAcc = accounts.find(a => a.id === topUpAccountId);
                                         const transferAmt = parseFloat(depositAmount || '0');
                                         if (srcAcc && transferAmt > srcAcc.balance) {
-                                            return <Text style={{ fontSize: 11, color: '#FFB84F', marginTop: 4 }}>На счёте недостаточно средств ({formatAmount(srcAcc.balance, srcAcc.currency)})</Text>;
+                                            return <Text style={{ fontSize: 11, color: '#FFB84F', marginTop: 4 }}>{t('analytics.insufficientOnAccount', { amount: formatAmount(srcAcc.balance, srcAcc.currency) })}</Text>;
                                         }
                                         return null;
                                     })()}
@@ -5110,23 +5080,23 @@ export default function AnalyticsScreen() {
                                         borderWidth: 1.5, borderColor: 'rgba(79,255,176,0.25)',
                                         marginBottom: 12,
                                     }}>
-                                        <Text style={{ color: '#4FFFB0', fontSize: 14, fontWeight: '600' }}>Пополнить</Text>
+                                        <Text style={{ color: '#4FFFB0', fontSize: 14, fontWeight: '600' }}>{t('analytics.topUpGoal')}</Text>
                                     </TouchableOpacity>
                                 ) : (
                                     <View style={{ backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(79,255,176,0.15)' }}>
-                                        <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 12 }}>Пополнить депозит</Text>
+                                        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 12 }}>{t('analytics.topUpDeposit')}</Text>
 
-                                        <Text style={labelStyle}>Сумма</Text>
+                                        <Text style={labelStyle}>{t('analytics.sum')}</Text>
                                         <TextInput
                                             value={depositTopUpAmount}
                                             onChangeText={setDepositTopUpAmount}
                                             placeholder="0"
-                                            placeholderTextColor="rgba(255,255,255,0.2)"
+                                            placeholderTextColor={colors.textDisabled}
                                             keyboardType="decimal-pad"
                                             style={inputStyle}
                                         />
 
-                                        <Text style={labelStyle}>Со счёта (опц.)</Text>
+                                        <Text style={labelStyle}>{t('analytics.fromAccount')}</Text>
                                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
                                             <View style={{ flexDirection: 'row', gap: 8 }}>
                                                 {accounts.map(acc => {
@@ -5140,7 +5110,7 @@ export default function AnalyticsScreen() {
                                                         }}>
                                                             <Text style={{ fontSize: 14 }}>{acc.icon || '💳'}</Text>
                                                             <Text style={{ color: sel ? '#a78bfa' : '#fff', fontSize: 13, fontWeight: '500' }}>{acc.name}</Text>
-                                                            <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>{formatAmount(acc.balance, acc.currency)}</Text>
+                                                            <Text style={{ color: colors.textMuted, fontSize: 11 }}>{formatAmount(acc.balance, acc.currency)}</Text>
                                                         </TouchableOpacity>
                                                     );
                                                 })}
@@ -5151,18 +5121,18 @@ export default function AnalyticsScreen() {
                                             const srcAcc = accounts.find(a => a.id === depositTopUpAccountId);
                                             const amt = parseFloat(depositTopUpAmount.replace(',', '.')) || 0;
                                             if (srcAcc && amt > srcAcc.balance) {
-                                                return <Text style={{ fontSize: 11, color: '#FFB84F', marginBottom: 4 }}>Недостаточно средств ({formatAmount(srcAcc.balance, srcAcc.currency)})</Text>;
+                                                return <Text style={{ fontSize: 11, color: '#FFB84F', marginBottom: 4 }}>{t('analytics.insufficientFunds', { amount: formatAmount(srcAcc.balance, srcAcc.currency) })}</Text>;
                                             }
                                             return null;
                                         })()}
 
-                                        <Text style={labelStyle}>Дата</Text>
+                                        <Text style={labelStyle}>{t('common.date')}</Text>
                                         <TouchableOpacity onPress={() => setShowDepositTopUpDatePicker(!showDepositTopUpDatePicker)} style={{
                                             backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12,
                                             paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8,
                                             borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
                                         }}>
-                                            <Text style={{ color: '#fff', fontSize: 14 }}>{format(depositTopUpDate, 'dd.MM.yyyy')}</Text>
+                                            <Text style={{ color: colors.textPrimary, fontSize: 14 }}>{format(depositTopUpDate, 'dd.MM.yyyy')}</Text>
                                         </TouchableOpacity>
                                         {showDepositTopUpDatePicker && (
                                             <DateTimePicker value={depositTopUpDate} mode="date" display="inline" themeVariant="dark"
@@ -5174,7 +5144,7 @@ export default function AnalyticsScreen() {
                                                 flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center',
                                                 backgroundColor: 'rgba(255,255,255,0.06)',
                                             }}>
-                                                <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, fontWeight: '600' }}>Отмена</Text>
+                                                <Text style={{ color: colors.textMuted, fontSize: 14, fontWeight: '600' }}>{t('common.cancel')}</Text>
                                             </TouchableOpacity>
                                             <TouchableOpacity onPress={confirmDepositTopUp} disabled={savingDepositTopUp || !depositTopUpAmount.trim()} style={{
                                                 flex: 2, paddingVertical: 12, borderRadius: 12, alignItems: 'center',
@@ -5182,7 +5152,7 @@ export default function AnalyticsScreen() {
                                             }}>
                                                 {savingDepositTopUp
                                                     ? <ActivityIndicator color="#000" />
-                                                    : <Text style={{ color: '#000', fontSize: 14, fontWeight: '700' }}>Пополнить</Text>
+                                                    : <Text style={{ color: '#000', fontSize: 14, fontWeight: '700' }}>{t('analytics.topUpGoal')}</Text>
                                                 }
                                             </TouchableOpacity>
                                         </View>
@@ -5194,22 +5164,22 @@ export default function AnalyticsScreen() {
                             <Modal visible={showDepositCurrencyDropdown} transparent animationType="fade">
                                 <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' }} activeOpacity={1}
                                     onPress={() => { setShowDepositCurrencyDropdown(false); setDepositCurrencySearch(''); }} />
-                                <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#1a2235', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingBottom: 40, maxHeight: '60%' }}>
+                                <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: colors.bgSecondary, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingBottom: 40, maxHeight: '60%' }}>
                                     <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginBottom: 16 }} />
-                                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff', paddingHorizontal: 20, marginBottom: 12 }}>Валюта</Text>
+                                    <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, paddingHorizontal: 20, marginBottom: 12 }}>{t('analytics.currency')}</Text>
                                     <View style={{ marginHorizontal: 20, marginBottom: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 }}>
-                                        <Text style={{ fontSize: 15, color: 'rgba(255,255,255,0.3)', marginRight: 8 }}>🔍</Text>
+                                        <Text style={{ fontSize: 15, color: colors.textDisabled, marginRight: 8 }}>🔍</Text>
                                         <TextInput
                                             value={depositCurrencySearch}
                                             onChangeText={setDepositCurrencySearch}
-                                            placeholder="Поиск валюты..."
-                                            placeholderTextColor="rgba(255,255,255,0.25)"
-                                            style={{ flex: 1, color: '#fff', fontSize: 14 }}
+                                            placeholder={t('analytics.searchCurrency')}
+                                            placeholderTextColor={colors.textDisabled}
+                                            style={{ flex: 1, color: colors.textPrimary, fontSize: 14 }}
                                             autoCorrect={false} autoCapitalize="none"
                                         />
                                         {depositCurrencySearch.length > 0 && (
                                             <TouchableOpacity onPress={() => setDepositCurrencySearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                                                <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 16 }}>✕</Text>
+                                                <Text style={{ color: colors.textDisabled, fontSize: 16 }}>✕</Text>
                                             </TouchableOpacity>
                                         )}
                                     </View>
@@ -5229,7 +5199,7 @@ export default function AnalyticsScreen() {
                                                     <Text style={{ fontSize: 22 }}>{c.flag}</Text>
                                                     <View style={{ flex: 1 }}>
                                                         <Text style={{ fontSize: 14, fontWeight: selected ? '700' : '500', color: selected ? '#a78bfa' : '#fff' }}>{c.code}</Text>
-                                                        <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 1 }}>{c.name}</Text>
+                                                        <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 1 }}>{c.name}</Text>
                                                     </View>
                                                     {selected && <Text style={{ color: '#7C6FFF', fontSize: 16 }}>✓</Text>}
                                                 </TouchableOpacity>
@@ -5240,23 +5210,23 @@ export default function AnalyticsScreen() {
                             </Modal>
 
                             {/* Compounding */}
-                            <Text style={labelStyle}>Капитализация</Text>
+                            <Text style={labelStyle}>{t('analytics.compounding')}</Text>
                             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
                                 {(['monthly', 'yearly'] as const).map(c => (
                                     <TouchableOpacity key={c} onPress={() => setDepositCompounding(c)}
                                         style={{ flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: 'center', backgroundColor: depositCompounding === c ? 'rgba(124,111,255,0.2)' : 'rgba(255,255,255,0.06)', borderWidth: 1.5, borderColor: depositCompounding === c ? 'rgba(124,111,255,0.4)' : 'rgba(255,255,255,0.08)' }}>
-                                        <Text style={{ fontSize: 13, color: depositCompounding === c ? '#7C6FFF' : 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
-                                            {c === 'monthly' ? 'Ежемесячно' : 'Ежегодно'}
+                                        <Text style={{ fontSize: 13, color: depositCompounding === c ? '#7C6FFF' : colors.textMuted, fontWeight: '600' }}>
+                                            {c === 'monthly' ? t('analytics.monthly') : t('analytics.yearly')}
                                         </Text>
                                     </TouchableOpacity>
                                 ))}
                             </View>
 
                             {/* Start date */}
-                            <Text style={labelStyle}>Дата начала</Text>
+                            <Text style={labelStyle}>{t('analytics.startDate')}</Text>
                             <TouchableOpacity onPress={() => setShowDepositStartPicker(true)}
                                 style={{ backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 4, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)' }}>
-                                <Text style={{ color: '#fff', fontSize: 14 }}>{format(depositStartDate, 'dd.MM.yyyy')}</Text>
+                                <Text style={{ color: colors.textPrimary, fontSize: 14 }}>{format(depositStartDate, 'dd.MM.yyyy')}</Text>
                             </TouchableOpacity>
                             {showDepositStartPicker && (
                                 <DateTimePicker value={depositStartDate} mode="date" display="inline" themeVariant="dark"
@@ -5264,11 +5234,11 @@ export default function AnalyticsScreen() {
                             )}
 
                             {/* End date (optional) */}
-                            <Text style={[labelStyle, { marginTop: 12 }]}>Дата окончания (опц.)</Text>
+                            <Text style={[labelStyle, { marginTop: 12 }]}>{t('analytics.endDate')}</Text>
                             <TouchableOpacity onPress={() => { if (depositEndDate) { setDepositEndDate(null); } else { setDepositEndDate(addMonths(new Date(), 12)); setShowDepositEndPicker(true); } }}
                                 style={{ backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 4, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)' }}>
-                                <Text style={{ color: depositEndDate ? '#fff' : 'rgba(255,255,255,0.2)', fontSize: 14 }}>
-                                    {depositEndDate ? format(depositEndDate, 'dd.MM.yyyy') : 'Без срока'}
+                                <Text style={{ color: depositEndDate ? '#fff' : colors.textDisabled, fontSize: 14 }}>
+                                    {depositEndDate ? format(depositEndDate, 'dd.MM.yyyy') : t('analytics.noTerm')}
                                 </Text>
                             </TouchableOpacity>
                             {showDepositEndPicker && depositEndDate && (
@@ -5279,7 +5249,7 @@ export default function AnalyticsScreen() {
                             {/* ── Rate Periods (compact list) ── */}
                             <View style={{ marginTop: 16 }}>
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                    <Text style={labelStyle}>Периоды ставок</Text>
+                                    <Text style={labelStyle}>{t('analytics.ratePeriods')}</Text>
                                     {(() => {
                                         const lastPeriod = ratePeriodDrafts[ratePeriodDrafts.length - 1];
                                         const canAdd = lastPeriod && lastPeriod.rate.trim() !== '' && !isNaN(parseFloat(lastPeriod.rate)) && parseFloat(lastPeriod.rate) > 0;
@@ -5292,7 +5262,7 @@ export default function AnalyticsScreen() {
                                                     setRatePeriodDrafts([...ratePeriodDrafts, { rate: '', fromDate: newFrom, toDate: null }]);
                                                 }}
                                             >
-                                                <Text style={{ color: '#7C6FFF', fontSize: 13, fontWeight: '600', opacity: canAdd ? 1 : 0.3 }}>+ Добавить период</Text>
+                                                <Text style={{ color: '#7C6FFF', fontSize: 13, fontWeight: '600', opacity: canAdd ? 1 : 0.3 }}>{t('analytics.addPeriod')}</Text>
                                             </TouchableOpacity>
                                         );
                                     })()}
@@ -5306,7 +5276,7 @@ export default function AnalyticsScreen() {
                                     {ratePeriodDrafts.map((period, idx) => {
                                         const fromDate = idx === 0 ? depositStartDate : (ratePeriodDrafts[idx - 1].toDate ?? period.fromDate);
                                         const isLast = idx === ratePeriodDrafts.length - 1;
-                                        const endLabel = period.toDate ? format(period.toDate, 'dd.MM.yyyy') : 'бессрочно';
+                                        const endLabel = period.toDate ? format(period.toDate, 'dd.MM.yyyy') : t('analytics.indefinite');
                                         const showPicker = periodEndPickerIdx === idx;
 
                                         return (
@@ -5318,8 +5288,8 @@ export default function AnalyticsScreen() {
                                                         onPress={() => setPeriodEndPickerIdx(showPicker ? null : idx)}
                                                         style={{ flex: 1 }}
                                                     >
-                                                        <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
-                                                            {format(fromDate, 'dd.MM.yyyy')} — <Text style={{ color: period.toDate ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.3)' }}>{endLabel}</Text>
+                                                        <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                                                            {format(fromDate, 'dd.MM.yyyy')} — <Text style={{ color: period.toDate ? colors.textSecondary : colors.textDisabled }}>{endLabel}</Text>
                                                         </Text>
                                                     </TouchableOpacity>
 
@@ -5328,14 +5298,14 @@ export default function AnalyticsScreen() {
                                                         <TextInput
                                                             style={{
                                                                 backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 8,
-                                                                color: '#fff', fontSize: 14, fontWeight: '600',
+                                                                color: colors.textPrimary, fontSize: 14, fontWeight: '600',
                                                                 paddingHorizontal: 10, paddingVertical: 6,
                                                                 minWidth: 48, textAlign: 'center',
                                                                 borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
                                                             }}
                                                             keyboardType="numeric"
                                                             placeholder="0"
-                                                            placeholderTextColor="rgba(255,255,255,0.2)"
+                                                            placeholderTextColor={colors.textDisabled}
                                                             value={period.rate}
                                                             onChangeText={v => {
                                                                 const updated = [...ratePeriodDrafts];
@@ -5343,7 +5313,7 @@ export default function AnalyticsScreen() {
                                                                 setRatePeriodDrafts(updated);
                                                             }}
                                                         />
-                                                        <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13 }}>%</Text>
+                                                        <Text style={{ color: colors.textMuted, fontSize: 13 }}>%</Text>
                                                     </View>
 
                                                     {/* Delete button */}
@@ -5385,7 +5355,7 @@ export default function AnalyticsScreen() {
                                                                 backgroundColor: !period.toDate ? 'rgba(124,111,255,0.2)' : 'rgba(255,255,255,0.06)',
                                                                 borderWidth: 1, borderColor: !period.toDate ? '#7C6FFF' : 'rgba(255,255,255,0.08)',
                                                             }}>
-                                                                <Text style={{ color: !period.toDate ? '#7C6FFF' : 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: '600' }}>Бессрочно</Text>
+                                                                <Text style={{ color: !period.toDate ? '#7C6FFF' : colors.textMuted, fontSize: 12, fontWeight: '600' }}>{t('analytics.indefiniteCap')}</Text>
                                                             </TouchableOpacity>
                                                         </View>
                                                         {period.toDate && (
@@ -5416,7 +5386,7 @@ export default function AnalyticsScreen() {
                                 onPress={() => householdId && (editingDeposit ? updateDeposit(householdId) : createDeposit(householdId))}
                                 disabled={savingDeposit}
                                 style={{ marginTop: 16, marginBottom: 20, paddingVertical: 14, backgroundColor: '#7C6FFF', borderRadius: 14, alignItems: 'center', opacity: savingDeposit ? 0.5 : 1 }}>
-                                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{savingDeposit ? 'Сохранение…' : 'Сохранить'}</Text>
+                                <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '700' }}>{savingDeposit ? `${t('common.save')}…` : t('common.save')}</Text>
                             </TouchableOpacity>
                         </ScrollView>
             </BaseBottomSheet>
@@ -5424,9 +5394,9 @@ export default function AnalyticsScreen() {
 
             {/* ══ EXTRAS CONFIG MODAL ═════════════════════════════════════ */}
             <BaseBottomSheet visible={showExtrasModal} onClose={() => setShowExtrasModal(false)} maxHeight="80%" scrollable={false}>
-                        <Text style={{ fontSize: 18, fontWeight: '700', color: '#fff', marginBottom: 6 }}>Экстра-категории</Text>
-                        <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 16 }}>
-                            Отметь категории где есть{'\n'}пространство для экономии
+                        <Text style={{ fontSize: 18, fontWeight: '700', color: colors.textPrimary, marginBottom: 6 }}>{t('analytics.extrasTitle')}</Text>
+                        <Text style={{ fontSize: 13, color: colors.textMuted, marginBottom: 16 }}>
+                            {t('analytics.extrasHint')}
                         </Text>
 
                         <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
@@ -5445,7 +5415,7 @@ export default function AnalyticsScreen() {
                                                 if (hasTags) {
                                                     setExpandedCats(prev => {
                                                         const next = new Set(prev);
-                                                        next.has(cat.id) ? next.delete(cat.id) : next.add(cat.id);
+                                                        if (next.has(cat.id)) { next.delete(cat.id); } else { next.add(cat.id); }
                                                         return next;
                                                     });
                                                 }
@@ -5456,10 +5426,10 @@ export default function AnalyticsScreen() {
                                                 <CategoryIcon iconName={cat.icon} color={cat.color} size={16} />
                                             </View>
                                             <View style={{ flex: 1 }}>
-                                                <Text style={{ fontSize: 14, color: '#fff' }}>{cat.name}</Text>
+                                                <Text style={{ fontSize: 14, color: colors.textPrimary }}>{cat.name}</Text>
                                                 {hasTags && (
-                                                    <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 1 }}>
-                                                        {isExpanded ? '▼' : '▶'} {cat.tags.length} подкатегори{cat.tags.length === 1 ? 'я' : cat.tags.length < 5 ? 'и' : 'й'}
+                                                    <Text style={{ fontSize: 10, color: colors.textDisabled, marginTop: 1 }}>
+                                                        {isExpanded ? '▼' : '▶'} {t('analytics.subcategories', { count: cat.tags.length })}
                                                     </Text>
                                                 )}
                                             </View>
@@ -5469,14 +5439,14 @@ export default function AnalyticsScreen() {
                                                     {catDraft.active && (
                                                         <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
                                                             <TextInput
-                                                                style={{ width: 70, height: 32, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 8, color: '#fff', fontSize: 13, textAlign: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}
+                                                                style={{ width: 70, height: 32, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 8, color: colors.textPrimary, fontSize: 13, textAlign: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}
                                                                 keyboardType="numeric"
                                                                 placeholder="0"
-                                                                placeholderTextColor="rgba(255,255,255,0.2)"
+                                                                placeholderTextColor={colors.textDisabled}
                                                                 value={catDraft.amount}
                                                                 onChangeText={v => setExtraDraft(prev => ({ ...prev, [`cat:${cat.id}`]: { ...prev[`cat:${cat.id}`], amount: v } }))}
                                                             />
-                                                            <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginLeft: 4 }}>/мес</Text>
+                                                            <Text style={{ fontSize: 10, color: colors.textDisabled, marginLeft: 4 }}>{t('analytics.perMonth')}</Text>
                                                         </View>
                                                     )}
                                                     <Switch
@@ -5498,19 +5468,19 @@ export default function AnalyticsScreen() {
                                                 {/* Whole-category toggle */}
                                                 {catDraft && (
                                                     <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8 }}>
-                                                        <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginRight: 4 }}>└</Text>
-                                                        <Text style={{ flex: 1, fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>Вся категория</Text>
+                                                        <Text style={{ fontSize: 11, color: colors.textDisabled, marginRight: 4 }}>└</Text>
+                                                        <Text style={{ flex: 1, fontSize: 13, color: colors.textSecondary }}>{t('analytics.wholeCategory')}</Text>
                                                         {catDraft.active && (
                                                             <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
                                                                 <TextInput
-                                                                    style={{ width: 60, height: 28, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 6, color: '#fff', fontSize: 12, textAlign: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}
+                                                                    style={{ width: 60, height: 28, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 6, color: colors.textPrimary, fontSize: 12, textAlign: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}
                                                                     keyboardType="numeric"
                                                                     placeholder="0"
-                                                                    placeholderTextColor="rgba(255,255,255,0.2)"
+                                                                    placeholderTextColor={colors.textDisabled}
                                                                     value={catDraft.amount}
                                                                     onChangeText={v => setExtraDraft(prev => ({ ...prev, [`cat:${cat.id}`]: { ...prev[`cat:${cat.id}`], amount: v } }))}
                                                                 />
-                                                                <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)', marginLeft: 3 }}>/мес</Text>
+                                                                <Text style={{ fontSize: 9, color: colors.textDisabled, marginLeft: 3 }}>{t('analytics.perMonth')}</Text>
                                                             </View>
                                                         )}
                                                         <Switch
@@ -5528,19 +5498,19 @@ export default function AnalyticsScreen() {
                                                     if (!tagDraft) return null;
                                                     return (
                                                         <View key={tag.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8 }}>
-                                                            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginRight: 4 }}>└</Text>
-                                                            <Text style={{ flex: 1, fontSize: 13, color: '#fff' }}>{tag.name}</Text>
+                                                            <Text style={{ fontSize: 11, color: colors.textDisabled, marginRight: 4 }}>└</Text>
+                                                            <Text style={{ flex: 1, fontSize: 13, color: colors.textPrimary }}>{tag.name}</Text>
                                                             {tagDraft.active && (
                                                                 <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
                                                                     <TextInput
-                                                                        style={{ width: 60, height: 28, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 6, color: '#fff', fontSize: 12, textAlign: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}
+                                                                        style={{ width: 60, height: 28, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 6, color: colors.textPrimary, fontSize: 12, textAlign: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}
                                                                         keyboardType="numeric"
                                                                         placeholder="0"
-                                                                        placeholderTextColor="rgba(255,255,255,0.2)"
+                                                                        placeholderTextColor={colors.textDisabled}
                                                                         value={tagDraft.amount}
                                                                         onChangeText={v => setExtraDraft(prev => ({ ...prev, [`tag:${tag.id}`]: { ...prev[`tag:${tag.id}`], amount: v } }))}
                                                                     />
-                                                                    <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)', marginLeft: 3 }}>/мес</Text>
+                                                                    <Text style={{ fontSize: 9, color: colors.textDisabled, marginLeft: 3 }}>{t('analytics.perMonth')}</Text>
                                                                 </View>
                                                             )}
                                                             <Switch
@@ -5568,8 +5538,8 @@ export default function AnalyticsScreen() {
                                 backgroundColor: '#7C6FFF', borderRadius: 14,
                                 alignItems: 'center', opacity: savingExtras ? 0.5 : 1,
                             }}>
-                            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
-                                {savingExtras ? 'Сохранение…' : 'Сохранить'}
+                            <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '700' }}>
+                                {savingExtras ? `${t('common.save')}…` : t('common.save')}
                             </Text>
                         </TouchableOpacity>
             </BaseBottomSheet>

@@ -1,10 +1,13 @@
 import { CurrencyPicker } from '@/components/ui/CurrencyPicker';
+import TransactionForm, { EditingTx } from '@/components/TransactionForm';
 import { CURRENCY_MAP, formatAmount } from '@/constants/currencies';
+import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
-import { Account, Transaction } from '@/types';
+import { Account, Transaction, Frequency } from '@/types';
+import { useTranslation } from 'react-i18next';
+import i18n from '@/lib/i18n';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { Frequency } from '@/types';
 import { router, useLocalSearchParams } from 'expo-router';
 import {
     ArrowDownToLine,
@@ -59,10 +62,10 @@ const COLOR_PRESETS = [
 ];
 
 const PERIOD_PICKER_LABELS: Record<Frequency, string> = {
-    daily: 'День',
-    weekly: 'Неделя',
-    monthly: 'Месяц',
-    yearly: 'Год',
+    daily: i18n.t('accounts.periodDay'),
+    weekly: i18n.t('accounts.periodWeek'),
+    monthly: i18n.t('accounts.periodMonth'),
+    yearly: i18n.t('accounts.periodYear'),
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -71,10 +74,15 @@ type TxWithCategory = Transaction & {
     category: { name: string; icon: string | null; color: string | null } | null;
 };
 
+type AccountLight  = { id: string; name: string; color: string | null; currency: string; balance: number }; // eslint-disable-line @typescript-eslint/no-unused-vars
+type CategoryLight = { id: string; name: string; icon: string | null; color: string | null; type: 'income' | 'expense'; expense_type: string | null; is_system: boolean };
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function AccountDetailScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
+    const { colors } = useTheme();
+    const { t } = useTranslation();
 
     const [account, setAccount] = useState<Account | null>(null);
     const [allAccounts, setAllAccounts] = useState<Account[]>([]);
@@ -93,6 +101,14 @@ export default function AccountDetailScreen() {
     const [editCurrency, setEditCurrency] = useState('EUR');
     const [editSaving, setEditSaving] = useState(false);
 
+    // Transaction form
+    const [formVisible, setFormVisible] = useState(false);
+    const [editingTx, setEditingTx] = useState<EditingTx | null>(null);
+    const [categories, setCategories] = useState<CategoryLight[]>([]);
+    const [householdId, setHouseholdId] = useState('');
+    const [userId, setUserId] = useState('');
+    const [baseCurrency, setBaseCurrency] = useState('EUR');
+
     // Transfer-on-delete sheet
     const [showTransferDeleteSheet, setShowTransferDeleteSheet] = useState(false);
     const [pendingDeleteAccount, setPendingDeleteAccount] = useState<Account | null>(null);
@@ -106,6 +122,7 @@ export default function AccountDetailScreen() {
 
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
+        setUserId(user.id);
 
         const { data: member } = await supabase
             .from('household_members')
@@ -113,6 +130,7 @@ export default function AccountDetailScreen() {
             .eq('user_id', user.id)
             .single();
         if (!member) return;
+        setHouseholdId(member.household_id);
 
         // Fetch the account
         const { data: acc } = await supabase
@@ -138,6 +156,19 @@ export default function AccountDetailScreen() {
             .eq('household_id', member.household_id)
             .eq('is_deleted', false);
         setAllAccounts(allAcc ?? []);
+
+        // Fetch categories
+        const { data: cats } = await supabase
+            .from('categories')
+            .select('id, name, icon, color, type, expense_type, is_system')
+            .or(`household_id.eq.${member.household_id},is_system.eq.true`)
+            .eq('is_deleted', false)
+            .order('sort_order');
+        setCategories((cats as CategoryLight[]) ?? []);
+
+        // Base currency from first non-excluded account
+        const primary = (allAcc ?? []).find(a => !a.exclude_from_dashboard);
+        if (primary) setBaseCurrency(primary.currency);
 
         // Fetch transactions for this account
         setTxLoading(true);
@@ -206,11 +237,11 @@ export default function AccountDetailScreen() {
     function confirmDelete() {
         if (!account) return;
         Alert.alert(
-            `Удалить счёт «${account.name}»?`,
-            'Это действие нельзя отменить.',
+            t('accounts.deleteAccountTitle', { name: account.name }),
+            t('accounts.deleteIrreversible'),
             [
-                { text: 'Отмена', style: 'cancel' },
-                { text: 'Удалить', style: 'destructive', onPress: checkAndDelete },
+                { text: t('common.cancel'), style: 'cancel' },
+                { text: t('common.delete'), style: 'destructive', onPress: checkAndDelete },
             ],
         );
     }
@@ -232,11 +263,11 @@ export default function AccountDetailScreen() {
         } else if (others.length === 0) {
             // Has transactions, no other accounts to transfer to
             Alert.alert(
-                'Что сделать с историей?',
-                `На счёте ${count} транзакций — они будут удалены.`,
+                t('accounts.whatToDoWithHistory'),
+                t('accounts.accountHasNTransactions', { count }),
                 [
-                    { text: 'Назад', style: 'cancel' },
-                    { text: 'Удалить всё', style: 'destructive', onPress: () => performDelete(account, 'delete') },
+                    { text: t('common.back'), style: 'cancel' },
+                    { text: t('accounts.deleteAll'), style: 'destructive', onPress: () => performDelete(account, 'delete') },
                 ],
             );
         } else {
@@ -274,6 +305,30 @@ export default function AccountDetailScreen() {
         router.back();
     }
 
+    // ─── Transaction form ─────────────────────────────────────────────────────
+
+    function openForm(txn?: TxWithCategory) {
+        if (txn) {
+            setEditingTx({
+                id: txn.id,
+                type: txn.type,
+                amount: txn.amount,
+                currency: txn.currency,
+                exchange_rate: txn.exchange_rate,
+                date: txn.date,
+                note: txn.note,
+                receipt_url: txn.receipt_url,
+                recurring_id: txn.recurring_id,
+                account_id: txn.account_id,
+                category_id: txn.category_id,
+                tag_id: (txn as any).tag_id ?? null,
+            });
+        } else {
+            setEditingTx(null);
+        }
+        setFormVisible(true);
+    }
+
     // ─── Transaction row ──────────────────────────────────────────────────────
 
     function TransactionRow({ txn }: { txn: TxWithCategory }) {
@@ -283,7 +338,7 @@ export default function AccountDetailScreen() {
         const sign = isIncome ? '+' : '−';
 
         const label = txn.category?.name
-            ?? (isTransfer ? 'Перевод' : isIncome ? 'Пополнение' : 'Расход');
+            ?? (isTransfer ? t('accounts.transferType') : isIncome ? t('accounts.topUpType') : t('accounts.expenseType'));
 
         let dateStr = '';
         try {
@@ -291,14 +346,18 @@ export default function AccountDetailScreen() {
         } catch { /* ignore */ }
 
         return (
-            <View style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                paddingVertical: 13,
-                paddingHorizontal: 20,
-                borderBottomWidth: 1,
-                borderBottomColor: '#111827',
-            }}>
+            <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => openForm(txn)}
+                style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 13,
+                    paddingHorizontal: 20,
+                    borderBottomWidth: 1,
+                    borderBottomColor: colors.bgSecondary,
+                }}
+            >
                 <View style={{
                     width: 38, height: 38, borderRadius: 11,
                     backgroundColor: amountColor + '1a',
@@ -314,17 +373,17 @@ export default function AccountDetailScreen() {
                 </View>
 
                 <View style={{ flex: 1 }}>
-                    <Text style={{ color: '#e5e7eb', fontSize: 14, fontWeight: '500' }}>{label}</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '500' }}>{label}</Text>
                     {txn.note ? (
-                        <Text style={{ color: '#6b7280', fontSize: 12, marginTop: 2 }} numberOfLines={1}>{txn.note}</Text>
+                        <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>{txn.note}</Text>
                     ) : null}
-                    <Text style={{ color: '#4b5563', fontSize: 12, marginTop: 2 }}>{dateStr}</Text>
+                    <Text style={{ color: colors.textDisabled, fontSize: 12, marginTop: 2 }}>{dateStr}</Text>
                 </View>
 
                 <Text style={{ color: amountColor, fontWeight: '600', fontSize: 15 }}>
                     {sign}{formatAmount(txn.amount, txn.currency)}
                 </Text>
-            </View>
+            </TouchableOpacity>
         );
     }
 
@@ -332,8 +391,8 @@ export default function AccountDetailScreen() {
 
     if (loading || !account) {
         return (
-            <View style={{ flex: 1, backgroundColor: '#030712', justifyContent: 'center', alignItems: 'center' }}>
-                <ActivityIndicator color="#fff" size="large" />
+            <View style={{ flex: 1, backgroundColor: colors.bgPrimary, justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator color={colors.textPrimary} size="large" />
             </View>
         );
     }
@@ -344,7 +403,7 @@ export default function AccountDetailScreen() {
     // ─── Render ───────────────────────────────────────────────────────────────
 
     return (
-        <View style={{ flex: 1, backgroundColor: '#030712' }}>
+        <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
 
             {/* ── Top bar ── */}
             <View style={{
@@ -352,20 +411,20 @@ export default function AccountDetailScreen() {
                 paddingTop: 60, paddingHorizontal: 20, paddingBottom: 12,
             }}>
                 <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={{ marginRight: 10 }}>
-                    <ChevronLeft color="#fff" size={26} />
+                    <ChevronLeft color={colors.textPrimary} size={26} />
                 </TouchableOpacity>
-                <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700', flex: 1 }} numberOfLines={1}>
+                <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: '700', flex: 1 }} numberOfLines={1}>
                     {account.name}
                 </Text>
                 <TouchableOpacity onPress={openEdit} hitSlop={12}>
-                    <Pencil color="#6b7280" size={20} />
+                    <Pencil color={colors.textMuted} size={20} />
                 </TouchableOpacity>
             </View>
 
             {/* ── Account card ── */}
             <View style={{
                 marginHorizontal: 20,
-                backgroundColor: '#111827',
+                backgroundColor: colors.bgSecondary,
                 borderRadius: 20,
                 padding: 20,
                 marginBottom: 8,
@@ -382,11 +441,11 @@ export default function AccountDetailScreen() {
                         <IC color={col} size={24} />
                     </View>
                     <View style={{ flex: 1 }}>
-                        <Text style={{ color: '#9ca3af', fontSize: 13 }}>
+                        <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
                             {CURRENCY_MAP[account.currency]?.flag ?? ''} {account.currency}
                         </Text>
                         {account.exclude_from_dashboard && (
-                            <Text style={{ color: '#4b5563', fontSize: 11, marginTop: 3 }}>Скрыт из расчётов</Text>
+                            <Text style={{ color: colors.textDisabled, fontSize: 11, marginTop: 3 }}>{t('accounts.hiddenFromCalc')}</Text>
                         )}
                     </View>
 
@@ -394,17 +453,17 @@ export default function AccountDetailScreen() {
                     <Switch
                         value={!account.exclude_from_dashboard}
                         onValueChange={v => toggleExclude(!v)}
-                        trackColor={{ false: '#374151', true: col + 'aa' }}
-                        thumbColor="#fff"
+                        trackColor={{ false: colors.borderLight, true: col + 'aa' }}
+                        thumbColor={colors.textPrimary}
                     />
                 </View>
 
-                <Text style={{ color: '#fff', fontSize: 34, fontWeight: '800', letterSpacing: -0.5 }}>
+                <Text style={{ color: colors.textPrimary, fontSize: 34, fontWeight: '800', letterSpacing: -0.5 }}>
                     {formatAmount(account.balance, account.currency)}
                 </Text>
                 {account.exclude_from_dashboard && (
-                    <Text style={{ color: '#4b5563', fontSize: 12, marginTop: 6 }}>
-                        Не учитывается в общем балансе
+                    <Text style={{ color: colors.textDisabled, fontSize: 12, marginTop: 6 }}>
+                        {t('accounts.notCountedInBalance')}
                     </Text>
                 )}
             </View>
@@ -416,18 +475,18 @@ export default function AccountDetailScreen() {
                 paddingHorizontal: 20,
                 paddingVertical: 12,
             }}>
-                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', flex: 1 }}>
-                    История транзакций
+                <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '700', flex: 1 }}>
+                    {t('accounts.transactionHistory')}
                 </Text>
-                {txLoading && <ActivityIndicator size="small" color="#6b7280" />}
+                {txLoading && <ActivityIndicator size="small" color={colors.textMuted} />}
             </View>
 
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 60 }}>
                 {!txLoading && transactions.length === 0 ? (
                     <View style={{ alignItems: 'center', marginTop: 48 }}>
-                        <Text style={{ color: '#374151', fontSize: 15 }}>Нет транзакций</Text>
-                        <Text style={{ color: '#1f2937', fontSize: 13, marginTop: 6 }}>
-                            Пополните счёт или добавьте расход
+                        <Text style={{ color: colors.borderLight, fontSize: 15 }}>{t('accounts.noTransactions')}</Text>
+                        <Text style={{ color: colors.bgTertiary, fontSize: 13, marginTop: 6 }}>
+                            {t('accounts.addOrTopUp')}
                         </Text>
                     </View>
                 ) : (
@@ -441,22 +500,22 @@ export default function AccountDetailScreen() {
             <BaseBottomSheet visible={showEditSheet} onClose={() => setShowEditSheet(false)} maxHeight="92%">
                         <SheetHandle />
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-                            <Text style={titleStyle}>Редактировать счёт</Text>
+                            <Text style={[titleStyle, { color: colors.textPrimary }]}>{t('accounts.editAccount')}</Text>
                             <TouchableOpacity onPress={() => setShowEditSheet(false)}>
-                                <X color="#6b7280" size={22} />
+                                <X color={colors.textMuted} size={22} />
                             </TouchableOpacity>
                         </View>
 
-                            <Label>Название</Label>
+                            <Label>{t('accounts.accountName')}</Label>
                             <TextInput
-                                style={inputStyle}
-                                placeholder="Основная карта"
-                                placeholderTextColor="#4b5563"
+                                style={[inputStyle, { backgroundColor: colors.bgTertiary, borderColor: colors.borderLight, color: colors.textPrimary }]}
+                                placeholder={t('accounts.placeholder')}
+                                placeholderTextColor={colors.textDisabled}
                                 value={editName}
                                 onChangeText={setEditName}
                             />
 
-                            <Label>Иконка</Label>
+                            <Label>{t('common.icon')}</Label>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
                                 {ICON_NAMES.map(iconName => {
                                     const IC2 = ICON_MAP[iconName]!;
@@ -465,60 +524,60 @@ export default function AccountDetailScreen() {
                                         <TouchableOpacity key={iconName} onPress={() => setEditIcon(iconName)} style={{
                                             width: 48, height: 48, borderRadius: 14, marginRight: 8,
                                             borderWidth: 1.5, alignItems: 'center', justifyContent: 'center',
-                                            backgroundColor: sel ? editColor + '33' : '#1f2937',
-                                            borderColor: sel ? editColor : '#374151',
+                                            backgroundColor: sel ? editColor + '33' : colors.bgTertiary,
+                                            borderColor: sel ? editColor : colors.borderLight,
                                         }}>
-                                            <IC2 color={sel ? editColor : '#6b7280'} size={22} />
+                                            <IC2 color={sel ? editColor : colors.textMuted} size={22} />
                                         </TouchableOpacity>
                                     );
                                 })}
                             </ScrollView>
 
-                            <Label>Цвет</Label>
+                            <Label>{t('common.color')}</Label>
                             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
                                 {COLOR_PRESETS.map(c => (
                                     <TouchableOpacity key={c} onPress={() => setEditColor(c)} style={{
                                         width: 36, height: 36, borderRadius: 18, backgroundColor: c,
                                         alignItems: 'center', justifyContent: 'center',
-                                        borderWidth: editColor === c ? 2 : 0, borderColor: '#fff',
+                                        borderWidth: editColor === c ? 2 : 0, borderColor: colors.textPrimary,
                                     }}>
-                                        {editColor === c && <Check color="#fff" size={16} />}
+                                        {editColor === c && <Check color={colors.textPrimary} size={16} />}
                                     </TouchableOpacity>
                                 ))}
                             </View>
 
-                            <Label>Валюта</Label>
+                            <Label>{t('common.currency')}</Label>
                             <CurrencyPicker value={editCurrency} onSelect={setEditCurrency} />
 
                             <View style={{
                                 flexDirection: 'row', alignItems: 'center',
-                                backgroundColor: '#1f2937', borderRadius: 14,
+                                backgroundColor: colors.bgTertiary, borderRadius: 14,
                                 padding: 16, marginBottom: 24,
                             }}>
                                 <View style={{ flex: 1, marginRight: 12 }}>
-                                    <Text style={{ color: '#fff', fontSize: 15 }}>Скрыть из активного баланса</Text>
-                                    <Text style={{ color: '#6b7280', fontSize: 12, marginTop: 2 }}>Счёт виден, но не учитывается в лимитах</Text>
+                                    <Text style={{ color: colors.textPrimary, fontSize: 15 }}>{t('accounts.hideFromBalance')}</Text>
+                                    <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>{t('accounts.hideHint')}</Text>
                                 </View>
                                 <Switch
                                     value={editExclude}
                                     onValueChange={setEditExclude}
-                                    trackColor={{ false: '#374151', true: '#2563eb' }}
-                                    thumbColor="#fff"
+                                    trackColor={{ false: colors.borderLight, true: '#2563eb' }}
+                                    thumbColor={colors.textPrimary}
                                 />
                             </View>
 
-                            <Label>Лимит расходов ({editCurrency})</Label>
+                            <Label>{t('accounts.spendingLimit', { currency: editCurrency })}</Label>
                             <TextInput
-                                style={inputStyle}
-                                placeholder="0 — без лимита"
-                                placeholderTextColor="#4b5563"
+                                style={[inputStyle, { backgroundColor: colors.bgTertiary, borderColor: colors.borderLight, color: colors.textPrimary }]}
+                                placeholder={t('accounts.noLimit')}
+                                placeholderTextColor={colors.textDisabled}
                                 value={editLimit}
                                 onChangeText={t => setEditLimit(t.replace(/[^0-9.]/g, ''))}
                                 keyboardType="decimal-pad"
                             />
                             {!!editLimit && parseFloat(editLimit) > 0 && (
                                 <>
-                                    <Label>Период лимита</Label>
+                                    <Label>{t('accounts.limitPeriod')}</Label>
                                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
                                         {(['daily', 'weekly', 'monthly', 'yearly'] as Frequency[]).map(f => (
                                             <TouchableOpacity
@@ -526,11 +585,11 @@ export default function AccountDetailScreen() {
                                                 onPress={() => setEditLimitPeriod(f)}
                                                 style={{
                                                     paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10,
-                                                    backgroundColor: editLimitPeriod === f ? '#2563eb' : '#1f2937',
-                                                    borderWidth: 1, borderColor: editLimitPeriod === f ? '#3b82f6' : '#374151',
+                                                    backgroundColor: editLimitPeriod === f ? '#2563eb' : colors.bgTertiary,
+                                                    borderWidth: 1, borderColor: editLimitPeriod === f ? '#3b82f6' : colors.borderLight,
                                                 }}
                                             >
-                                                <Text style={{ color: editLimitPeriod === f ? '#fff' : '#9ca3af', fontSize: 13 }}>
+                                                <Text style={{ color: editLimitPeriod === f ? colors.textPrimary : colors.textSecondary, fontSize: 13 }}>
                                                     {PERIOD_PICKER_LABELS[f]}
                                                 </Text>
                                             </TouchableOpacity>
@@ -538,16 +597,16 @@ export default function AccountDetailScreen() {
                                     </View>
                                 </>
                             )}
-                            <Text style={{ color: '#4b5563', fontSize: 12, marginTop: -12, marginBottom: 20, marginLeft: 4 }}>
-                                Прогресс-бар появится на карточке счёта
+                            <Text style={{ color: colors.textDisabled, fontSize: 12, marginTop: -12, marginBottom: 20, marginLeft: 4 }}>
+                                {t('accounts.progressBarHint')}
                             </Text>
 
                             <PrimaryButton
-                                label={editSaving ? 'Сохранение…' : 'Сохранить'}
+                                label={editSaving ? t('common.saving') : t('common.save')}
                                 onPress={saveEdit}
                                 disabled={editSaving || !editName.trim()}
                             />
-                            <DangerButton label="Удалить счёт" onPress={confirmDelete} />
+                            <DangerButton label={t('accounts.deleteAccount')} onPress={confirmDelete} />
             </BaseBottomSheet>
 
             {/* ════════════════════════════════════════
@@ -555,9 +614,9 @@ export default function AccountDetailScreen() {
             ════════════════════════════════════════ */}
             <BaseBottomSheet visible={showTransferDeleteSheet} onClose={() => setShowTransferDeleteSheet(false)} scrollable={false}>
                     <SheetHandle />
-                    <Text style={[titleStyle, { marginBottom: 6 }]}>Что сделать с историей?</Text>
-                    <Text style={{ color: '#6b7280', fontSize: 14, marginBottom: 20 }}>
-                        Перенести транзакции на другой счёт или удалить?
+                    <Text style={[titleStyle, { color: colors.textPrimary, marginBottom: 6 }]}>{t('accounts.whatToDoWithHistory')}</Text>
+                    <Text style={{ color: colors.textMuted, fontSize: 14, marginBottom: 20 }}>
+                        {t('accounts.moveTransactions')}
                     </Text>
 
                     {allAccounts
@@ -571,7 +630,7 @@ export default function AccountDetailScreen() {
                                     onPress={() => pendingDeleteAccount && performDelete(pendingDeleteAccount, 'transfer', acc.id)}
                                     style={{
                                         flexDirection: 'row', alignItems: 'center',
-                                        backgroundColor: '#1f2937', borderRadius: 14,
+                                        backgroundColor: colors.bgTertiary, borderRadius: 14,
                                         padding: 14, marginBottom: 8,
                                     }}
                                 >
@@ -582,8 +641,8 @@ export default function AccountDetailScreen() {
                                     }}>
                                         <IC2 color={c} size={18} />
                                     </View>
-                                    <Text style={{ color: '#fff', fontSize: 15, flex: 1 }}>{acc.name}</Text>
-                                    <Text style={{ color: '#6b7280', fontSize: 13 }}>
+                                    <Text style={{ color: colors.textPrimary, fontSize: 15, flex: 1 }}>{acc.name}</Text>
+                                    <Text style={{ color: colors.textMuted, fontSize: 13 }}>
                                         {formatAmount(acc.balance, acc.currency)}
                                     </Text>
                                 </TouchableOpacity>
@@ -591,16 +650,29 @@ export default function AccountDetailScreen() {
                         })}
 
                     <DangerButton
-                        label="Удалить все транзакции"
+                        label={t('accounts.deleteAllTransactions')}
                         onPress={() => pendingDeleteAccount && performDelete(pendingDeleteAccount, 'delete')}
                     />
                     <TouchableOpacity
                         onPress={() => setShowTransferDeleteSheet(false)}
                         style={{ paddingVertical: 14, alignItems: 'center' }}
                     >
-                        <Text style={{ color: '#6b7280' }}>Назад</Text>
+                        <Text style={{ color: colors.textMuted }}>{t('common.back')}</Text>
                     </TouchableOpacity>
             </BaseBottomSheet>
+
+            <TransactionForm
+                visible={formVisible}
+                onClose={() => { setFormVisible(false); setEditingTx(null); }}
+                onSaved={() => { setFormVisible(false); setEditingTx(null); if (id) loadData(id); }}
+                accounts={allAccounts.map(a => ({ id: a.id, name: a.name, color: a.color, currency: a.currency, balance: a.balance }))}
+                categories={categories}
+                householdId={householdId}
+                userId={userId}
+                baseCurrency={baseCurrency}
+                editingTx={editingTx}
+                initialAccountId={id}
+            />
         </View>
     );
 }
@@ -608,22 +680,25 @@ export default function AccountDetailScreen() {
 // ─── Small pieces ─────────────────────────────────────────────────────────────
 
 function SheetHandle() {
-    return <View style={{ width: 40, height: 4, backgroundColor: '#374151', borderRadius: 2, alignSelf: 'center', marginBottom: 20 }} />;
+    const { colors } = useTheme();
+    return <View style={{ width: 40, height: 4, backgroundColor: colors.borderLight, borderRadius: 2, alignSelf: 'center', marginBottom: 20 }} />;
 }
 
 function Label({ children }: { children: React.ReactNode }) {
-    return <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8 }}>{children}</Text>;
+    const { colors } = useTheme();
+    return <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 8 }}>{children}</Text>;
 }
 
 function PrimaryButton({ label, onPress, disabled, color = '#2563eb' }: {
     label: string; onPress: () => void; disabled?: boolean; color?: string;
 }) {
+    const { colors } = useTheme();
     return (
         <TouchableOpacity onPress={onPress} disabled={disabled} style={{
             backgroundColor: color, borderRadius: 14, paddingVertical: 16,
             alignItems: 'center', marginBottom: 12, opacity: disabled ? 0.5 : 1,
         }}>
-            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>{label}</Text>
+            <Text style={{ color: colors.textPrimary, fontWeight: '700', fontSize: 16 }}>{label}</Text>
         </TouchableOpacity>
     );
 }
@@ -642,19 +717,15 @@ function DangerButton({ label, onPress }: { label: string; onPress: () => void }
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const titleStyle = {
-    color: '#fff',
     fontSize: 20,
     fontWeight: '700',
 } as const;
 
 const inputStyle = {
-    backgroundColor: '#1f2937',
     borderWidth: 1,
-    borderColor: '#374151',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    color: '#fff',
     fontSize: 16,
     marginBottom: 20,
 } as const;

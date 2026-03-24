@@ -21,6 +21,9 @@ import { ru } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
 import { formatAmount } from '@/constants/currencies';
 import { Account, Category, Frequency, ExpenseType } from '@/types';
+import { useTheme } from '@/context/ThemeContext';
+import { useTranslation } from 'react-i18next';
+import i18n from '@/lib/i18n';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -36,27 +39,27 @@ const ACCOUNT_ICON_MAP: Record<string, React.ComponentType<{ color: string; size
     Briefcase, Home, Car, Smartphone, Globe, Bitcoin,
 };
 
-const FREQ_LABELS: Record<Frequency, string> = {
-    daily:   'Ежедневно',
-    weekly:  'Еженедельно',
-    monthly: 'Ежемесячно',
-    yearly:  'Ежегодно',
+const FREQ_KEYS: Record<Frequency, string> = {
+    daily:   'recurring.daily',
+    weekly:  'recurring.weekly',
+    monthly: 'recurring.monthlyFreq',
+    yearly:  'recurring.yearly',
 };
 
-const FREQ_SHORT: Record<Frequency, string> = {
-    daily:   '/день',
-    weekly:  '/нед',
-    monthly: '/мес',
-    yearly:  '/год',
+const FREQ_SHORT_KEYS: Record<Frequency, string> = {
+    daily:   'recurring.perDay',
+    weekly:  'recurring.perWeek',
+    monthly: 'recurring.perMonth',
+    yearly:  'recurring.perYear',
 };
 
-const EXPENSE_TYPE_LABELS: Record<ExpenseType, string> = {
-    base:        'Базовый',
-    everyday:    'Повседневный',
-    development: 'Развитие',
-    forself:     'Для себя',
-    work:        'Рабочий',
-    other:       'Прочее',
+const _EXPENSE_TYPE_KEYS: Record<ExpenseType, string> = { // eslint-disable-line @typescript-eslint/no-unused-vars
+    base:        'recurring.baseType',
+    everyday:    'recurring.everydayType',
+    development: 'recurring.developmentType',
+    forself:     'recurring.forSelfType',
+    work:        'recurring.workType',
+    other:       'recurring.otherType',
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -106,15 +109,17 @@ function getDueBadge(nextDate: string): { label: string; color: string } {
     const d = parseISO(nextDate);
     const diffDays = Math.round((d.getTime() - today.getTime()) / 86400000);
 
-    if (diffDays < 0)   return { label: `Просрочен на ${Math.abs(diffDays)} д`,  color: '#ef4444' };
-    if (diffDays === 0) return { label: 'Сегодня',                                color: '#f97316' };
-    if (diffDays <= 7)  return { label: `Через ${diffDays} д`,                   color: '#f59e0b' };
+    if (diffDays < 0)   return { label: i18n.t('recurring.overdueByDays', { days: Math.abs(diffDays) }),  color: '#ef4444' };
+    if (diffDays === 0) return { label: i18n.t('recurring.dueToday'),                                color: '#f97316' };
+    if (diffDays <= 7)  return { label: i18n.t('recurring.dueInDays', { days: diffDays }),                   color: '#f59e0b' };
     return { label: format(d, 'd MMM', { locale: ru }), color: '#6b7280' };
 }
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function RecurringScreen() {
+    const { colors } = useTheme();
+    const { t } = useTranslation();
     const [items,       setItems]       = useState<RecurringRow[]>([]);
     const [accounts,    setAccounts]    = useState<Account[]>([]);
     const [categories,  setCategories]  = useState<Category[]>([]);
@@ -230,7 +235,7 @@ export default function RecurringScreen() {
         const amount = parseFloat(fAmount);
         if (isNaN(amount) || amount <= 0) return;
         if (!/^\d{4}-\d{2}-\d{2}$/.test(fNextDate)) {
-            Alert.alert('Неверная дата', 'Формат: ГГГГ-ММ-ДД');
+            Alert.alert(t('recurring.invalidDate'), t('recurring.invalidDateFmt'));
             return;
         }
 
@@ -252,10 +257,10 @@ export default function RecurringScreen() {
         setSaving(true);
         if (editing) {
             const { error } = await supabase.from('recurring_payments').update(payload).eq('id', editing.id);
-            if (error) { Alert.alert('Ошибка', error.message); setSaving(false); return; }
+            if (error) { Alert.alert(t('common.error'), error.message); setSaving(false); return; }
         } else {
             const { error } = await supabase.from('recurring_payments').insert({ ...payload, is_active: true });
-            if (error) { Alert.alert('Ошибка', error.message); setSaving(false); return; }
+            if (error) { Alert.alert(t('common.error'), error.message); setSaving(false); return; }
         }
         setSaving(false);
         setShowForm(false);
@@ -266,12 +271,12 @@ export default function RecurringScreen() {
 
     async function markAsPaid(item: RecurringRow) {
         Alert.alert(
-            'Подтвердить оплату?',
+            t('recurring.confirmPayment'),
             `${item.name} · ${formatAmount(item.amount, item.currency)}`,
             [
-                { text: 'Отмена', style: 'cancel' },
+                { text: t('common.cancel'), style: 'cancel' },
                 {
-                    text: 'Оплачено',
+                    text: t('recurring.paid'),
                     onPress: async () => {
                         const nextDate    = nextDateAfterPay(item.next_date, item.frequency);
                         const balanceDiff = item.type === 'expense' ? -item.amount : item.amount;
@@ -316,10 +321,10 @@ export default function RecurringScreen() {
     // ── Delete ────────────────────────────────────────────────────────────────
 
     async function deleteItem(id: string) {
-        Alert.alert('Удалить регулярный платёж?', 'Это действие нельзя отменить.', [
-            { text: 'Отмена', style: 'cancel' },
+        Alert.alert(t('recurring.deletePayment'), t('recurring.deleteIrreversible'), [
+            { text: t('common.cancel'), style: 'cancel' },
             {
-                text: 'Удалить', style: 'destructive',
+                text: t('common.delete'), style: 'destructive',
                 onPress: async () => {
                     await supabase.from('recurring_payments').delete().eq('id', id);
                     setItems(prev => prev.filter(r => r.id !== id));
@@ -355,15 +360,15 @@ export default function RecurringScreen() {
             <View style={{ flexDirection: 'row' }}>
                 <TouchableOpacity
                     onPress={() => { openEdit(item); }}
-                    style={{ width: 60, backgroundColor: '#374151', justifyContent: 'center', alignItems: 'center' }}
+                    style={{ width: 60, backgroundColor: colors.borderLight, justifyContent: 'center', alignItems: 'center' }}
                 >
-                    <Pencil color="#9ca3af" size={18} />
+                    <Pencil color={colors.textSecondary} size={18} />
                 </TouchableOpacity>
                 <TouchableOpacity
                     onPress={() => deleteItem(item.id)}
                     style={{ width: 60, backgroundColor: '#ef4444', justifyContent: 'center', alignItems: 'center' }}
                 >
-                    <Trash2 color="#fff" size={18} />
+                    <Trash2 color={colors.textPrimary} size={18} />
                 </TouchableOpacity>
             </View>
         );
@@ -371,7 +376,7 @@ export default function RecurringScreen() {
 
     function renderItem(item: RecurringRow) {
         const CategoryIcon = item.category_icon ? CATEGORY_ICON_MAP[item.category_icon] : null;
-        const iconColor    = item.category_color ?? (item.type === 'income' ? '#22c55e' : '#6b7280');
+        const iconColor    = item.category_color ?? (item.type === 'income' ? '#22c55e' : colors.textMuted);
         const due          = getDueBadge(item.next_date);
         const amountColor  = item.type === 'income' ? '#22c55e' : '#ef4444';
 
@@ -380,8 +385,8 @@ export default function RecurringScreen() {
                 <View style={{
                     flexDirection: 'row', alignItems: 'center',
                     paddingHorizontal: 20, paddingVertical: 14,
-                    backgroundColor: '#030712',
-                    borderBottomWidth: 1, borderBottomColor: '#111827',
+                    backgroundColor: colors.bgPrimary,
+                    borderBottomWidth: 1, borderBottomColor: colors.bgSecondary,
                     opacity: item.is_active ? 1 : 0.45,
                 }}>
                     {/* Category icon */}
@@ -399,14 +404,14 @@ export default function RecurringScreen() {
 
                     {/* Info */}
                     <View style={{ flex: 1 }}>
-                        <Text style={{ color: '#f9fafb', fontSize: 15, fontWeight: '600' }}>{item.name}</Text>
+                        <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '600' }}>{item.name}</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3, gap: 8, flexWrap: 'wrap' }}>
-                            <Text style={{ color: '#6b7280', fontSize: 12 }}>
-                                {FREQ_LABELS[item.frequency]} · {item.account_name}
+                            <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+                                {t(FREQ_KEYS[item.frequency])} · {item.account_name}
                             </Text>
                             {item.expense_type === 'base' && (
                                 <View style={{ backgroundColor: '#1e3a5f', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 }}>
-                                    <Text style={{ color: '#60a5fa', fontSize: 10, fontWeight: '600' }}>Базовый</Text>
+                                    <Text style={{ color: '#60a5fa', fontSize: 10, fontWeight: '600' }}>{t('recurring.baseType')}</Text>
                                 </View>
                             )}
                         </View>
@@ -420,16 +425,16 @@ export default function RecurringScreen() {
                     <View style={{ alignItems: 'flex-end', gap: 6 }}>
                         <Text style={{ color: amountColor, fontSize: 14, fontWeight: '700' }}>
                             {item.type === 'income' ? '+' : '−'}{formatAmount(item.amount, item.currency)}
-                            <Text style={{ color: '#4b5563', fontSize: 10, fontWeight: '400' }}>
-                                {FREQ_SHORT[item.frequency]}
+                            <Text style={{ color: colors.textDisabled, fontSize: 10, fontWeight: '400' }}>
+                                {t(FREQ_SHORT_KEYS[item.frequency])}
                             </Text>
                         </Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                             <Switch
                                 value={item.is_active}
                                 onValueChange={() => toggleActive(item)}
-                                trackColor={{ false: '#374151', true: '#166534' }}
-                                thumbColor={item.is_active ? '#22c55e' : '#6b7280'}
+                                trackColor={{ false: colors.borderLight, true: '#166534' }}
+                                thumbColor={item.is_active ? '#22c55e' : colors.textMuted}
                                 style={{ transform: [{ scaleX: 0.75 }, { scaleY: 0.75 }] }}
                             />
                             {item.is_active && (
@@ -455,7 +460,7 @@ export default function RecurringScreen() {
         return (
             <View>
                 <View style={{ paddingHorizontal: 20, paddingVertical: 8, backgroundColor: '#0a0f1e' }}>
-                    <Text style={{ color: '#9ca3af', fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 }}>
                         {title}
                     </Text>
                 </View>
@@ -471,14 +476,14 @@ export default function RecurringScreen() {
     // ─── Render ───────────────────────────────────────────────────────────────
 
     return (
-        <View style={{ flex: 1, backgroundColor: '#030712' }}>
+        <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
 
             {/* Header */}
             <View style={{ paddingTop: 60, paddingBottom: 12, paddingHorizontal: 20 }}>
-                <Text style={{ color: '#f9fafb', fontSize: 24, fontWeight: '700' }}>Регулярные платежи</Text>
+                <Text style={{ color: colors.textPrimary, fontSize: 24, fontWeight: '700' }}>{t('recurring.title')}</Text>
                 {monthlyInfra > 0 && (
-                    <Text style={{ color: '#4b5563', fontSize: 13, marginTop: 4 }}>
-                        Инфраструктура: {formatAmount(monthlyInfra, infraCurrency)}/мес → амортизируется в дневной лимит
+                    <Text style={{ color: colors.textDisabled, fontSize: 13, marginTop: 4 }}>
+                        {t('recurring.infraSummary', { amount: formatAmount(monthlyInfra, infraCurrency) })}
                     </Text>
                 )}
             </View>
@@ -489,9 +494,9 @@ export default function RecurringScreen() {
                 </View>
             ) : items.length === 0 ? (
                 <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    <Repeat2 color="#374151" size={48} />
-                    <Text style={{ color: '#6b7280', fontSize: 16, marginTop: 8 }}>Нет регулярных платежей</Text>
-                    <Text style={{ color: '#4b5563', fontSize: 14 }}>Аренда, подписки, кредиты…</Text>
+                    <Repeat2 color={colors.borderLight} size={48} />
+                    <Text style={{ color: colors.textMuted, fontSize: 16, marginTop: 8 }}>{t('recurring.noPayments')}</Text>
+                    <Text style={{ color: colors.textDisabled, fontSize: 14 }}>{t('recurring.noPaymentsHint')}</Text>
                 </View>
             ) : (
                 <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
@@ -499,14 +504,14 @@ export default function RecurringScreen() {
                         <View>
                             <View style={{ paddingHorizontal: 20, paddingVertical: 10, backgroundColor: 'rgba(239,68,68,0.08)', borderBottomWidth: 1, borderBottomColor: 'rgba(239,68,68,0.15)' }}>
                                 <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 }}>
-                                    ⚠ Требуют внимания ({overdueItems.length})
+                                    {t('recurring.attentionNeeded', { count: overdueItems.length })}
                                 </Text>
                             </View>
                             {overdueItems.map(item => renderItem(item))}
                         </View>
                     )}
-                    {renderSection('Расходы', expenseItems)}
-                    {renderSection('Доходы', incomeItems)}
+                    {renderSection(t('recurring.expenses'), expenseItems)}
+                    {renderSection(t('recurring.income'), incomeItems)}
                 </ScrollView>
             )}
 
@@ -522,70 +527,70 @@ export default function RecurringScreen() {
                     shadowColor: '#2563eb', shadowOpacity: 0.4, shadowRadius: 12,
                 }}
             >
-                <Plus color="#fff" size={26} />
+                <Plus color={colors.textPrimary} size={26} />
             </TouchableOpacity>
 
             {/* ══════════════ Add / Edit Modal ══════════════ */}
             <BaseBottomSheet visible={showForm} onClose={() => setShowForm(false)} maxHeight="92%">
-                        <View style={{ width: 40, height: 4, backgroundColor: '#374151', borderRadius: 2, alignSelf: 'center', marginBottom: 20 }} />
+                        <View style={{ width: 40, height: 4, backgroundColor: colors.borderLight, borderRadius: 2, alignSelf: 'center', marginBottom: 20 }} />
 
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-                            <Text style={titleStyle}>{editing ? 'Редактировать' : 'Новый платёж'}</Text>
-                            <TouchableOpacity onPress={() => setShowForm(false)}><X color="#6b7280" size={22} /></TouchableOpacity>
+                            <Text style={[titleStyle, { color: colors.textPrimary }]}>{editing ? t('recurring.editTitle') : t('recurring.newTitle')}</Text>
+                            <TouchableOpacity onPress={() => setShowForm(false)}><X color={colors.textMuted} size={22} /></TouchableOpacity>
                         </View>
 
                             {/* Name */}
-                            <FieldLabel>Название</FieldLabel>
+                            <FieldLabel>{t('common.name')}</FieldLabel>
                             <TextInput
-                                style={inputStyle}
-                                placeholder="Аренда, Netflix, кредит…"
-                                placeholderTextColor="#4b5563"
+                                style={[inputStyle, { backgroundColor: colors.bgTertiary, borderColor: colors.borderLight, color: colors.textPrimary }]}
+                                placeholder={t('recurring.namePlaceholder')}
+                                placeholderTextColor={colors.textDisabled}
                                 value={fName}
                                 onChangeText={setFName}
                                 autoFocus={!editing}
                             />
 
                             {/* Type */}
-                            <FieldLabel>Тип</FieldLabel>
+                            <FieldLabel>{t('recurring.type')}</FieldLabel>
                             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
-                                {(['expense', 'income'] as const).map(t => (
+                                {(['expense', 'income'] as const).map(tp => (
                                     <TouchableOpacity
-                                        key={t}
-                                        onPress={() => { setFType(t); setFCategoryId(''); }}
+                                        key={tp}
+                                        onPress={() => { setFType(tp); setFCategoryId(''); }}
                                         style={{
                                             flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: 'center',
-                                            backgroundColor: fType === t
-                                                ? (t === 'expense' ? '#7f1d1d' : '#14532d')
-                                                : '#1f2937',
+                                            backgroundColor: fType === tp
+                                                ? (tp === 'expense' ? '#7f1d1d' : '#14532d')
+                                                : colors.bgTertiary,
                                             borderWidth: 1.5,
-                                            borderColor: fType === t
-                                                ? (t === 'expense' ? '#ef4444' : '#22c55e')
-                                                : '#374151',
+                                            borderColor: fType === tp
+                                                ? (tp === 'expense' ? '#ef4444' : '#22c55e')
+                                                : colors.borderLight,
                                         }}
                                     >
                                         <Text style={{
-                                            color: fType === t ? (t === 'expense' ? '#ef4444' : '#22c55e') : '#6b7280',
+                                            color: fType === tp ? (tp === 'expense' ? '#ef4444' : '#22c55e') : colors.textMuted,
                                             fontWeight: '600', fontSize: 14,
                                         }}>
-                                            {t === 'expense' ? 'Расход' : 'Доход'}
+                                            {tp === 'expense' ? t('recurring.typeExpense') : t('recurring.typeIncome')}
                                         </Text>
                                     </TouchableOpacity>
                                 ))}
                             </View>
 
                             {/* Amount */}
-                            <FieldLabel>Сумма</FieldLabel>
+                            <FieldLabel>{t('common.amount')}</FieldLabel>
                             <TextInput
-                                style={[inputStyle, { fontSize: 26, fontWeight: '700', textAlign: 'center', paddingVertical: 18 }]}
+                                style={[inputStyle, { backgroundColor: colors.bgTertiary, borderColor: colors.borderLight, color: colors.textPrimary, fontSize: 26, fontWeight: '700', textAlign: 'center', paddingVertical: 18 }]}
                                 placeholder="0"
-                                placeholderTextColor="#4b5563"
+                                placeholderTextColor={colors.textDisabled}
                                 value={fAmount}
                                 onChangeText={setFAmount}
                                 keyboardType="decimal-pad"
                             />
 
                             {/* Frequency */}
-                            <FieldLabel>Частота</FieldLabel>
+                            <FieldLabel>{t('recurring.frequency')}</FieldLabel>
                             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
                                 {(['daily', 'weekly', 'monthly', 'yearly'] as Frequency[]).map(f => (
                                     <TouchableOpacity
@@ -593,23 +598,23 @@ export default function RecurringScreen() {
                                         onPress={() => setFFreq(f)}
                                         style={{
                                             paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10,
-                                            backgroundColor: fFreq === f ? '#2563eb' : '#1f2937',
-                                            borderWidth: 1, borderColor: fFreq === f ? '#3b82f6' : '#374151',
+                                            backgroundColor: fFreq === f ? '#2563eb' : colors.bgTertiary,
+                                            borderWidth: 1, borderColor: fFreq === f ? '#3b82f6' : colors.borderLight,
                                         }}
                                     >
-                                        <Text style={{ color: fFreq === f ? '#fff' : '#9ca3af', fontSize: 13, fontWeight: '500' }}>
-                                            {FREQ_LABELS[f]}
+                                        <Text style={{ color: fFreq === f ? colors.textPrimary : colors.textSecondary, fontSize: 13, fontWeight: '500' }}>
+                                            {t(FREQ_KEYS[f])}
                                         </Text>
                                     </TouchableOpacity>
                                 ))}
                             </View>
 
                             {/* Next date */}
-                            <FieldLabel>Следующая дата (ГГГГ-ММ-ДД)</FieldLabel>
+                            <FieldLabel>{t('recurring.nextDate')}</FieldLabel>
                             <TextInput
-                                style={inputStyle}
+                                style={[inputStyle, { backgroundColor: colors.bgTertiary, borderColor: colors.borderLight, color: colors.textPrimary }]}
                                 placeholder="2026-04-01"
-                                placeholderTextColor="#4b5563"
+                                placeholderTextColor={colors.textDisabled}
                                 value={fNextDate}
                                 onChangeText={v => setFNextDate(formatDateInput(v))}
                                 keyboardType="numeric"
@@ -617,7 +622,7 @@ export default function RecurringScreen() {
                             />
 
                             {/* Account */}
-                            <FieldLabel>Счёт</FieldLabel>
+                            <FieldLabel>{t('recurring.account')}</FieldLabel>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
                                 {accounts.map(acc => {
                                     const IC  = ACCOUNT_ICON_MAP[acc.icon ?? 'CreditCard'] ?? CreditCard;
@@ -631,15 +636,15 @@ export default function RecurringScreen() {
                                                 flexDirection: 'row', alignItems: 'center',
                                                 paddingHorizontal: 14, paddingVertical: 10,
                                                 borderRadius: 12, marginRight: 8,
-                                                backgroundColor: sel ? col + '22' : '#1f2937',
-                                                borderWidth: 1.5, borderColor: sel ? col : '#374151',
+                                                backgroundColor: sel ? col + '22' : colors.bgTertiary,
+                                                borderWidth: 1.5, borderColor: sel ? col : colors.borderLight,
                                                 gap: 8,
                                             }}
                                         >
-                                            <IC color={sel ? col : '#6b7280'} size={16} />
+                                            <IC color={sel ? col : colors.textMuted} size={16} />
                                             <View>
-                                                <Text style={{ color: sel ? '#fff' : '#9ca3af', fontSize: 13, fontWeight: '600' }}>{acc.name}</Text>
-                                                <Text style={{ color: '#6b7280', fontSize: 11 }}>{formatAmount(acc.balance, acc.currency)}</Text>
+                                                <Text style={{ color: sel ? colors.textPrimary : colors.textSecondary, fontSize: 13, fontWeight: '600' }}>{acc.name}</Text>
+                                                <Text style={{ color: colors.textMuted, fontSize: 11 }}>{formatAmount(acc.balance, acc.currency)}</Text>
                                             </View>
                                         </TouchableOpacity>
                                     );
@@ -647,17 +652,17 @@ export default function RecurringScreen() {
                             </ScrollView>
 
                             {/* Category */}
-                            <FieldLabel>Категория (необязательно)</FieldLabel>
+                            <FieldLabel>{t('recurring.categoryOpt')}</FieldLabel>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 24 }}>
                                 <TouchableOpacity
                                     onPress={() => setFCategoryId('')}
                                     style={{
                                         paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, marginRight: 8,
-                                        backgroundColor: fCategoryId === '' ? '#374151' : '#1f2937',
-                                        borderWidth: 1, borderColor: fCategoryId === '' ? '#6b7280' : '#374151',
+                                        backgroundColor: fCategoryId === '' ? colors.borderLight : colors.bgTertiary,
+                                        borderWidth: 1, borderColor: fCategoryId === '' ? colors.textMuted : colors.borderLight,
                                     }}
                                 >
-                                    <Text style={{ color: fCategoryId === '' ? '#fff' : '#6b7280', fontSize: 13 }}>Без категории</Text>
+                                    <Text style={{ color: fCategoryId === '' ? colors.textPrimary : colors.textMuted, fontSize: 13 }}>{t('recurring.noCategory')}</Text>
                                 </TouchableOpacity>
                                 {filteredCategories.map(cat => {
                                     const col = cat.color ?? '#6b7280';
@@ -668,11 +673,11 @@ export default function RecurringScreen() {
                                             onPress={() => setFCategoryId(cat.id)}
                                             style={{
                                                 paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, marginRight: 8,
-                                                backgroundColor: sel ? col + '22' : '#1f2937',
-                                                borderWidth: 1, borderColor: sel ? col : '#374151',
+                                                backgroundColor: sel ? col + '22' : colors.bgTertiary,
+                                                borderWidth: 1, borderColor: sel ? col : colors.borderLight,
                                             }}
                                         >
-                                            <Text style={{ color: sel ? col : '#9ca3af', fontSize: 13, fontWeight: sel ? '600' : '400' }}>
+                                            <Text style={{ color: sel ? col : colors.textSecondary, fontSize: 13, fontWeight: sel ? '600' : '400' }}>
                                                 {cat.name}
                                             </Text>
                                         </TouchableOpacity>
@@ -681,7 +686,7 @@ export default function RecurringScreen() {
                             </ScrollView>
 
                             {/* Notify */}
-                            <FieldLabel>Уведомить за</FieldLabel>
+                            <FieldLabel>{t('recurring.notifyBefore')}</FieldLabel>
                             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 28 }}>
                                 {[1, 3, 7].map(n => (
                                     <TouchableOpacity
@@ -689,12 +694,12 @@ export default function RecurringScreen() {
                                         onPress={() => setFNotify(n)}
                                         style={{
                                             flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center',
-                                            backgroundColor: fNotify === n ? '#2563eb' : '#1f2937',
-                                            borderWidth: 1, borderColor: fNotify === n ? '#3b82f6' : '#374151',
+                                            backgroundColor: fNotify === n ? '#2563eb' : colors.bgTertiary,
+                                            borderWidth: 1, borderColor: fNotify === n ? '#3b82f6' : colors.borderLight,
                                         }}
                                     >
-                                        <Text style={{ color: fNotify === n ? '#fff' : '#9ca3af', fontWeight: '600', fontSize: 14 }}>
-                                            {n} {n === 1 ? 'день' : n === 3 ? 'дня' : 'дней'}
+                                        <Text style={{ color: fNotify === n ? colors.textPrimary : colors.textSecondary, fontWeight: '600', fontSize: 14 }}>
+                                            {t('recurring.dayN', { count: n })}
                                         </Text>
                                     </TouchableOpacity>
                                 ))}
@@ -710,8 +715,8 @@ export default function RecurringScreen() {
                                     opacity: saving || !fName.trim() || !fAmount || !fAccountId ? 0.5 : 1,
                                 }}
                             >
-                                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>
-                                    {saving ? 'Сохранение…' : editing ? 'Сохранить' : 'Создать'}
+                                <Text style={{ color: colors.textPrimary, fontWeight: '700', fontSize: 16 }}>
+                                    {saving ? t('common.saving') : editing ? t('common.save') : t('common.create')}
                                 </Text>
                             </TouchableOpacity>
             </BaseBottomSheet>
@@ -722,25 +727,22 @@ export default function RecurringScreen() {
 // ─── Small components ─────────────────────────────────────────────────────────
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-    return <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8 }}>{children}</Text>;
+    const { colors } = useTheme();
+    return <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 8 }}>{children}</Text>;
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const titleStyle = {
-    color: '#fff',
     fontSize: 20,
     fontWeight: '700' as const,
 } as const;
 
 const inputStyle = {
-    backgroundColor: '#1f2937',
     borderWidth: 1,
-    borderColor: '#374151',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    color: '#fff',
     fontSize: 16,
     marginBottom: 20,
 } as const;

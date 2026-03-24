@@ -18,6 +18,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { differenceInDays, format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { ChevronLeft, Pencil } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
+import { useTheme } from '@/context/ThemeContext';
 import { IconArray, DotData } from '@/components/icon-array/IconArray';
 import { supabase } from '@/lib/supabase';
 import { formatAmount, CURRENCIES } from '@/constants/currencies';
@@ -53,6 +55,8 @@ function Legend({ color, label, outline }: { color: string; label: string; outli
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function GoalScreen() {
+    const { colors } = useTheme();
+    const { t } = useTranslation();
     const router = useRouter();
     const params = useLocalSearchParams<{
         id: string;
@@ -74,7 +78,7 @@ export default function GoalScreen() {
     const saved       = parseFloat(params.saved  ?? '0') || 0;
     const currency    = params.currency ?? 'EUR';
     const targetDate  = params.targetDate && params.targetDate !== 'null' ? params.targetDate : null;
-    const accountId   = params.accountId ?? '';
+    const _accountId  = params.accountId ?? ''; // eslint-disable-line @typescript-eslint/no-unused-vars
 
     // ── Calculator state ─────────────────────────────────────────────────────
     const [rate, setRate]               = useState(5.0);
@@ -82,6 +86,10 @@ export default function GoalScreen() {
     const [compounding, setCompounding] = useState<Compounding>('monthly');
     const [archiving, setArchiving]     = useState(false);
     const [showArchiveSheet, setShowArchiveSheet] = useState(false);
+    const [deleteDestType, setDeleteDestType] = useState<'account' | 'goal' | 'none'>('account');
+    const [deleteDestId, setDeleteDestId] = useState<string | null>(null);
+    const [otherGoals, setOtherGoals] = useState<{ id: string; name: string }[]>([]);
+    const [householdId, setHouseholdId] = useState('');
 
     // ── Edit state ───────────────────────────────────────────────────────────
     const [showEditModal, setShowEditModal] = useState(false);
@@ -112,6 +120,7 @@ export default function GoalScreen() {
             if (!uid) return;
             const { data: hm } = await supabase.from('household_members').select('household_id').eq('user_id', uid).single();
             if (!hm) return;
+            setHouseholdId(hm.household_id);
             const { data } = await supabase.from('accounts').select('*').eq('household_id', hm.household_id).eq('is_deleted', false).order('sort_order');
             setAccounts((data ?? []) as Account[]);
         })();
@@ -181,12 +190,63 @@ export default function GoalScreen() {
 
     // ── Actions ──────────────────────────────────────────────────────────────
 
+    async function openArchiveSheet() {
+        const { data } = await supabase
+            .from('savings_goals')
+            .select('id, name')
+            .eq('household_id', householdId)
+            .eq('is_active', true)
+            .neq('id', id);
+        setOtherGoals(data ?? []);
+        setDeleteDestType('account');
+        setDeleteDestId(accounts[0]?.id ?? null);
+        setShowArchiveSheet(true);
+    }
+
     async function confirmArchive() {
         setArchiving(true);
+
+        // Transfer funds if needed
+        if (saved > 0 && deleteDestType !== 'none' && deleteDestId) {
+            if (deleteDestType === 'account') {
+                const uid = (await supabase.auth.getUser()).data.user?.id;
+                await supabase.from('transactions').insert({
+                    household_id: householdId,
+                    account_id: deleteDestId,
+                    type: 'income',
+                    amount: saved,
+                    currency,
+                    date: new Date().toISOString().slice(0, 10),
+                    note: t('analytics.transferFromGoal', { name }),
+                    created_by: uid,
+                });
+                const destAcc = accounts.find(a => a.id === deleteDestId);
+                if (destAcc) {
+                    await supabase.from('accounts').update({
+                        balance: destAcc.balance + saved,
+                    }).eq('id', deleteDestId);
+                }
+            } else if (deleteDestType === 'goal') {
+                // Get current amount of target goal, then add
+                const { data: targetGoal } = await supabase
+                    .from('savings_goals')
+                    .select('current_amount')
+                    .eq('id', deleteDestId)
+                    .single();
+                if (targetGoal) {
+                    await supabase.from('savings_goals').update({
+                        current_amount: (targetGoal.current_amount ?? 0) + saved,
+                    }).eq('id', deleteDestId);
+                }
+            }
+        }
+
+        // Archive goal
         await supabase
             .from('savings_goals')
-            .update({ is_archived: true, is_active: false })
+            .update({ is_archived: true, is_active: false, current_amount: 0 })
             .eq('id', id);
+
         setArchiving(false);
         setShowArchiveSheet(false);
         router.back();
@@ -252,7 +312,7 @@ export default function GoalScreen() {
                                 amount: amt,
                                 currency,
                                 date: format(topUpDate, 'yyyy-MM-dd'),
-                                description: `Пополнение цели «${name}»`,
+                                description: t('analytics.topUpGoal') + ` «${name}»`,
                                 created_by: uid,
                             });
                         }
@@ -266,7 +326,7 @@ export default function GoalScreen() {
             setTopUpDate(new Date());
             router.back();
         } catch (e: any) {
-            Alert.alert('Ошибка', e.message);
+            Alert.alert(t('common.error'), e.message);
         } finally {
             setSavingTopUp(false);
         }
@@ -286,10 +346,10 @@ export default function GoalScreen() {
                 flexDirection: 'row', alignItems: 'center', gap: 12,
             }}>
                 <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
-                    <ChevronLeft color="#9ca3af" size={24} />
+                    <ChevronLeft color={colors.textSecondary} size={24} />
                 </TouchableOpacity>
                 <Text style={{ fontSize: 26, marginRight: 2 }}>{icon}</Text>
-                <Text style={{ fontSize: 20, fontWeight: '800', color: '#fff', flex: 1 }} numberOfLines={1}>
+                <Text style={{ fontSize: 20, fontWeight: '800', color: colors.textPrimary, flex: 1 }} numberOfLines={1}>
                     {name}
                 </Text>
                 <TouchableOpacity onPress={openEdit} hitSlop={10} style={{
@@ -315,9 +375,9 @@ export default function GoalScreen() {
 
                     {/* Legend */}
                     <View style={{ flexDirection: 'row', gap: 18, marginTop: 18 }}>
-                        <Legend color="#1E5128" label={`Взносы ${pct}%`} />
-                        <Legend color="#4E9F3D" label="Проценты" />
-                        <Legend color="#2d3748" label="Остаток" outline />
+                        <Legend color="#1E5128" label={`${t('analytics.goalSaved')} ${pct}%`} />
+                        <Legend color="#4E9F3D" label={t('analytics.percentIncome')} />
+                        <Legend color="#2d3748" label={t('analytics.remaining2')} outline />
                     </View>
 
                     {/* Amounts row */}
@@ -326,14 +386,14 @@ export default function GoalScreen() {
                         width: '100%', marginTop: 18,
                     }}>
                         <View>
-                            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 3 }}>Накоплено</Text>
+                            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 3 }}>{t('analytics.goalSaved')}</Text>
                             <Text style={{ fontSize: 20, fontWeight: '800', color: '#4FFFB0' }}>
                                 {formatAmount(saved, currency)}
                             </Text>
                         </View>
                         <View style={{ alignItems: 'flex-end' }}>
-                            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 3 }}>Цель</Text>
-                            <Text style={{ fontSize: 20, fontWeight: '800', color: '#fff' }}>
+                            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 3 }}>{t('analytics.goalTargetLabel')}</Text>
+                            <Text style={{ fontSize: 20, fontWeight: '800', color: colors.textPrimary }}>
                                 {formatAmount(target, currency)}
                             </Text>
                         </View>
@@ -359,8 +419,8 @@ export default function GoalScreen() {
                     borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
                     borderRadius: 20, padding: 20, marginBottom: 12,
                 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 18 }}>
-                        Калькулятор роста
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 18 }}>
+                        {t('analytics.growthCalc')}
                     </Text>
 
                     {/* Rate row */}
@@ -368,7 +428,7 @@ export default function GoalScreen() {
                         flexDirection: 'row', alignItems: 'center',
                         justifyContent: 'space-between', marginBottom: 14,
                     }}>
-                        <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>Ставка</Text>
+                        <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{t('analytics.rate')}</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                             <TextInput
                                 value={rateInput}
@@ -383,12 +443,12 @@ export default function GoalScreen() {
                                     backgroundColor: 'rgba(255,255,255,0.06)',
                                     borderRadius: 10, borderWidth: 1.5,
                                     borderColor: 'rgba(255,255,255,0.08)',
-                                    color: '#fff', fontSize: 15, fontWeight: '700',
+                                    color: colors.textPrimary, fontSize: 15, fontWeight: '700',
                                     paddingHorizontal: 12, paddingVertical: 8,
                                     minWidth: 60, textAlign: 'center',
                                 }}
                             />
-                            <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>% год.</Text>
+                            <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>{t('analytics.annualPercent')}</Text>
                         </View>
                     </View>
 
@@ -397,7 +457,7 @@ export default function GoalScreen() {
                         flexDirection: 'row', alignItems: 'center',
                         justifyContent: 'space-between', marginBottom: 18,
                     }}>
-                        <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>Капитализация</Text>
+                        <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{t('analytics.compounding')}</Text>
                         <View style={{
                             flexDirection: 'row',
                             backgroundColor: 'rgba(255,255,255,0.06)',
@@ -414,10 +474,10 @@ export default function GoalScreen() {
                                 >
                                     <Text style={{
                                         fontSize: 12,
-                                        color: compounding === c ? '#fff' : 'rgba(255,255,255,0.38)',
+                                        color: compounding === c ? colors.textPrimary : 'rgba(255,255,255,0.38)',
                                         fontWeight: compounding === c ? '600' : '400',
                                     }}>
-                                        {c === 'monthly' ? 'Ежемесячно' : 'Ежегодно'}
+                                        {c === 'monthly' ? t('analytics.monthly') : t('analytics.yearly')}
                                     </Text>
                                 </TouchableOpacity>
                             ))}
@@ -430,28 +490,28 @@ export default function GoalScreen() {
                     {/* Result rows */}
                     {[
                         {
-                            label: 'Текущий баланс',
+                            label: t('analytics.currentBalance'),
                             value: formatAmount(saved, currency),
-                            color: '#fff',
+                            color: colors.textPrimary,
                             indent: false,
                         },
                         {
-                            label: `Прогноз к ${format(calc.endDate, 'd MMM yyyy', { locale: ru })}`,
+                            label: t('analytics.forecastTo', { date: format(calc.endDate, 'd MMM yyyy', { locale: ru }) }),
                             value: formatAmount(calc.forecast, currency),
                             color: '#4FFFB0',
                             indent: false,
                         },
                         {
-                            label: '   из них % доход',
+                            label: `   ${t('analytics.ofWhichInterest')}`,
                             value: `+${formatAmount(calc.interest, currency)}`,
                             color: '#4E9F3D',
                             indent: true,
                         },
                         {
-                            label: 'Нужно довнести',
+                            label: t('analytics.needToAdd'),
                             value: calc.needToAdd > 0
                                 ? formatAmount(calc.needToAdd, currency)
-                                : '✓ Цель достигнута',
+                                : t('analytics.goalReached'),
                             color: calc.needToAdd > 0 ? '#f9a825' : '#4FFFB0',
                             indent: false,
                         },
@@ -487,13 +547,13 @@ export default function GoalScreen() {
                     }}
                 >
                     <Text style={{ color: '#4FFFB0', fontSize: 14, fontWeight: '600' }}>
-                        Пополнить
+                        {t('analytics.topUpGoal')}
                     </Text>
                 </TouchableOpacity>
 
                 {/* ── Finish goal button ──────────────────────────────────── */}
                 <TouchableOpacity
-                    onPress={() => setShowArchiveSheet(true)}
+                    onPress={openArchiveSheet}
                     style={{
                         paddingVertical: 14, borderRadius: 14, alignItems: 'center',
                         backgroundColor: 'rgba(239,68,68,0.07)',
@@ -501,7 +561,7 @@ export default function GoalScreen() {
                     }}
                 >
                     <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '600' }}>
-                        Завершить цель
+                        {t('analytics.deleteGoal')}
                     </Text>
                 </TouchableOpacity>
             </ScrollView>
@@ -519,9 +579,10 @@ export default function GoalScreen() {
                     onPress={() => setShowArchiveSheet(false)}
                 />
                 <View style={{
-                    backgroundColor: '#111827',
+                    backgroundColor: colors.bgSecondary,
                     borderTopLeftRadius: 24, borderTopRightRadius: 24,
                     paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40,
+                    maxHeight: '80%',
                 }}>
                     <View style={{
                         width: 36, height: 4, borderRadius: 2,
@@ -529,27 +590,131 @@ export default function GoalScreen() {
                         alignSelf: 'center', marginBottom: 24,
                     }} />
 
-                    <View style={{
-                        width: 56, height: 56, borderRadius: 28, alignSelf: 'center',
-                        backgroundColor: 'rgba(239,68,68,0.1)',
-                        borderWidth: 1.5, borderColor: 'rgba(239,68,68,0.25)',
-                        alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+                    <Text style={{
+                        fontSize: 18, fontWeight: '800', color: colors.textPrimary,
+                        marginBottom: 8,
                     }}>
-                        <Text style={{ fontSize: 26 }}>{icon}</Text>
-                    </View>
+                        {t('analytics.deleteGoalMsg', { name })}
+                    </Text>
+                    <Text style={{
+                        fontSize: 13, color: colors.textMuted,
+                        marginBottom: 20,
+                    }}>
+                        {t('analytics.goalBalance', { amount: formatAmount(saved, currency) })}
+                    </Text>
 
-                    <Text style={{
-                        fontSize: 18, fontWeight: '800', color: '#fff',
-                        textAlign: 'center', marginBottom: 8,
-                    }}>
-                        Завершить цель «{name}»?
-                    </Text>
-                    <Text style={{
-                        fontSize: 13, color: 'rgba(255,255,255,0.45)',
-                        textAlign: 'center', lineHeight: 20, marginBottom: 28,
-                    }}>
-                        Накопленные средства останутся на счету.
-                    </Text>
+                    {saved > 0 && (
+                        <>
+                            <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textSecondary, marginBottom: 14 }}>
+                                {t('analytics.whereToTransfer')}
+                            </Text>
+
+                            {/* ── To account ── */}
+                            <TouchableOpacity
+                                onPress={() => { setDeleteDestType('account'); setDeleteDestId(accounts[0]?.id ?? null); }}
+                                style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}
+                            >
+                                <View style={{
+                                    width: 20, height: 20, borderRadius: 10, borderWidth: 2,
+                                    borderColor: deleteDestType === 'account' ? '#7C6FFF' : colors.textMuted,
+                                    alignItems: 'center', justifyContent: 'center', marginRight: 10,
+                                }}>
+                                    {deleteDestType === 'account' && (
+                                        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#7C6FFF' }} />
+                                    )}
+                                </View>
+                                <Text style={{ color: colors.textPrimary, fontSize: 14 }}>{t('analytics.toAccount')}</Text>
+                            </TouchableOpacity>
+                            {deleteDestType === 'account' && (
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginLeft: 30, marginBottom: 14 }}>
+                                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                                        {accounts.map(acc => {
+                                            const sel = deleteDestId === acc.id;
+                                            return (
+                                                <TouchableOpacity
+                                                    key={acc.id}
+                                                    onPress={() => setDeleteDestId(acc.id)}
+                                                    style={{
+                                                        paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+                                                        backgroundColor: sel ? 'rgba(124,111,255,0.15)' : 'rgba(255,255,255,0.05)',
+                                                        borderWidth: 1.5,
+                                                        borderColor: sel ? '#7C6FFF' : 'rgba(255,255,255,0.08)',
+                                                    }}
+                                                >
+                                                    <Text style={{ color: sel ? '#a78bfa' : colors.textPrimary, fontSize: 13 }}>
+                                                        {acc.name}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </View>
+                                </ScrollView>
+                            )}
+
+                            {/* ── To another goal ── */}
+                            {otherGoals.length > 0 && (
+                                <>
+                                    <TouchableOpacity
+                                        onPress={() => { setDeleteDestType('goal'); setDeleteDestId(otherGoals[0]?.id ?? null); }}
+                                        style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}
+                                    >
+                                        <View style={{
+                                            width: 20, height: 20, borderRadius: 10, borderWidth: 2,
+                                            borderColor: deleteDestType === 'goal' ? '#7C6FFF' : colors.textMuted,
+                                            alignItems: 'center', justifyContent: 'center', marginRight: 10,
+                                        }}>
+                                            {deleteDestType === 'goal' && (
+                                                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#7C6FFF' }} />
+                                            )}
+                                        </View>
+                                        <Text style={{ color: colors.textPrimary, fontSize: 14 }}>{t('analytics.toGoal')}</Text>
+                                    </TouchableOpacity>
+                                    {deleteDestType === 'goal' && (
+                                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginLeft: 30, marginBottom: 14 }}>
+                                            <View style={{ flexDirection: 'row', gap: 8 }}>
+                                                {otherGoals.map(g => {
+                                                    const sel = deleteDestId === g.id;
+                                                    return (
+                                                        <TouchableOpacity
+                                                            key={g.id}
+                                                            onPress={() => setDeleteDestId(g.id)}
+                                                            style={{
+                                                                paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+                                                                backgroundColor: sel ? 'rgba(124,111,255,0.15)' : 'rgba(255,255,255,0.05)',
+                                                                borderWidth: 1.5,
+                                                                borderColor: sel ? '#7C6FFF' : 'rgba(255,255,255,0.08)',
+                                                            }}
+                                                        >
+                                                            <Text style={{ color: sel ? '#a78bfa' : colors.textPrimary, fontSize: 13 }}>
+                                                                {g.name}
+                                                            </Text>
+                                                        </TouchableOpacity>
+                                                    );
+                                                })}
+                                            </View>
+                                        </ScrollView>
+                                    )}
+                                </>
+                            )}
+
+                            {/* ── Don't transfer ── */}
+                            <TouchableOpacity
+                                onPress={() => { setDeleteDestType('none'); setDeleteDestId(null); }}
+                                style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}
+                            >
+                                <View style={{
+                                    width: 20, height: 20, borderRadius: 10, borderWidth: 2,
+                                    borderColor: deleteDestType === 'none' ? '#7C6FFF' : colors.textMuted,
+                                    alignItems: 'center', justifyContent: 'center', marginRight: 10,
+                                }}>
+                                    {deleteDestType === 'none' && (
+                                        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#7C6FFF' }} />
+                                    )}
+                                </View>
+                                <Text style={{ color: colors.textPrimary, fontSize: 14 }}>{t('analytics.dontTransfer')}</Text>
+                            </TouchableOpacity>
+                        </>
+                    )}
 
                     <TouchableOpacity
                         onPress={confirmArchive}
@@ -562,7 +727,7 @@ export default function GoalScreen() {
                         {archiving
                             ? <ActivityIndicator color="#fff" />
                             : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
-                                Завершить
+                                {t('common.delete')}
                             </Text>
                         }
                     </TouchableOpacity>
@@ -574,8 +739,8 @@ export default function GoalScreen() {
                             backgroundColor: 'rgba(255,255,255,0.06)',
                         }}
                     >
-                        <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 15, fontWeight: '600' }}>
-                            Отмена
+                        <Text style={{ color: colors.textSecondary, fontSize: 15, fontWeight: '600' }}>
+                            {t('common.cancel')}
                         </Text>
                     </TouchableOpacity>
                 </View>
@@ -586,17 +751,17 @@ export default function GoalScreen() {
                 <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
                     <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' }} activeOpacity={1} onPress={() => setShowTopUp(false)} />
                     <View style={{
-                        backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24,
+                        backgroundColor: colors.bgSecondary, borderTopLeftRadius: 24, borderTopRightRadius: 24,
                         paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36,
                     }}>
                         <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginBottom: 20 }} />
 
-                        <Text style={{ fontSize: 18, fontWeight: '800', color: '#fff', marginBottom: 20 }}>
-                            Пополнить цель
+                        <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary, marginBottom: 20 }}>
+                            {t('analytics.topUpGoal')}
                         </Text>
 
                         {/* Amount */}
-                        <Text style={labelStyle}>Сумма</Text>
+                        <Text style={labelStyle}>{t('common.amount')}</Text>
                         <TextInput
                             value={topUpAmount}
                             onChangeText={setTopUpAmount}
@@ -607,7 +772,7 @@ export default function GoalScreen() {
                         />
 
                         {/* From account */}
-                        <Text style={labelStyle}>Со счёта (опц.)</Text>
+                        <Text style={labelStyle}>{t('analytics.fromAccount')}</Text>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
                             <View style={{ flexDirection: 'row', gap: 8 }}>
                                 {accounts.map(acc => {
@@ -625,7 +790,7 @@ export default function GoalScreen() {
                                             }}
                                         >
                                             <Text style={{ fontSize: 14 }}>{acc.icon || '💳'}</Text>
-                                            <Text style={{ color: sel ? '#a78bfa' : '#fff', fontSize: 13, fontWeight: '500' }}>
+                                            <Text style={{ color: sel ? '#a78bfa' : colors.textPrimary, fontSize: 13, fontWeight: '500' }}>
                                                 {acc.name}
                                             </Text>
                                             <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>
@@ -644,7 +809,7 @@ export default function GoalScreen() {
                             if (srcAcc && amt > srcAcc.balance) {
                                 return (
                                     <Text style={{ fontSize: 11, color: '#FFB84F', marginBottom: 4 }}>
-                                        Недостаточно средств на счёте ({formatAmount(srcAcc.balance, srcAcc.currency)})
+                                        {t('analytics.insufficientOnAccount', { amount: formatAmount(srcAcc.balance, srcAcc.currency) })}
                                     </Text>
                                 );
                             }
@@ -654,7 +819,7 @@ export default function GoalScreen() {
                         <View style={{ height: 12 }} />
 
                         {/* Date */}
-                        <Text style={labelStyle}>Дата</Text>
+                        <Text style={labelStyle}>{t('common.date')}</Text>
                         <TouchableOpacity
                             onPress={() => setShowTopUpDatePicker(!showTopUpDatePicker)}
                             style={{
@@ -663,7 +828,7 @@ export default function GoalScreen() {
                                 borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
                             }}
                         >
-                            <Text style={{ color: '#fff', fontSize: 14 }}>
+                            <Text style={{ color: colors.textPrimary, fontSize: 14 }}>
                                 {format(topUpDate, 'dd.MM.yyyy')}
                             </Text>
                         </TouchableOpacity>
@@ -689,7 +854,7 @@ export default function GoalScreen() {
                         >
                             {savingTopUp
                                 ? <ActivityIndicator color="#000" />
-                                : <Text style={{ color: '#000', fontSize: 15, fontWeight: '700' }}>Пополнить</Text>
+                                : <Text style={{ color: '#000', fontSize: 15, fontWeight: '700' }}>{t('analytics.topUpGoal')}</Text>
                             }
                         </TouchableOpacity>
                     </View>
@@ -700,7 +865,7 @@ export default function GoalScreen() {
             <Modal visible={showEditModal} animationType="slide" transparent onRequestClose={() => setShowEditModal(false)}>
                 <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
                     <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowEditModal(false)} />
-                    <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, maxHeight: '92%' }}>
+                    <View style={{ backgroundColor: colors.bgSecondary, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, maxHeight: '92%' }}>
                         <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginBottom: 16 }} />
 
                         {/* Header */}
@@ -714,7 +879,7 @@ export default function GoalScreen() {
                                 <Text style={{ fontSize: 24 }}>{editIcon}</Text>
                             </View>
                             <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 18, fontWeight: '800', color: '#fff' }}>Редактировать цель</Text>
+                                <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary }}>{t('common.edit')}</Text>
                                 <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 1 }}>
                                     {editName.trim() || name}
                                 </Text>
@@ -724,7 +889,7 @@ export default function GoalScreen() {
                         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
                             {/* Icon picker */}
-                            <Text style={labelStyle}>Иконка</Text>
+                            <Text style={labelStyle}>{t('common.icon')}</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
                                 <View style={{ flexDirection: 'row', gap: 6 }}>
                                     {['🎯','🏖️','💻','🚗','🏠','🎓','✈️','📱','🎮','💪','🛡️','📈','🌍','🎁','💰','🎸','🏋️','🐶'].map(em => (
@@ -741,14 +906,14 @@ export default function GoalScreen() {
                             </ScrollView>
 
                             {/* Color picker */}
-                            <Text style={labelStyle}>Цвет</Text>
+                            <Text style={labelStyle}>{t('common.color')}</Text>
                             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
                                 {['#7C6FFF', '#4FFFB0', '#FFB84F', '#FF6B6B', '#4FC3FF', '#F472B6', '#34D399', '#FB923C'].map(c => (
                                     <TouchableOpacity key={c} onPress={() => setEditColor(c)} style={{
                                         width: 32, height: 32, borderRadius: 16,
                                         backgroundColor: c,
                                         borderWidth: editColor === c ? 3 : 1.5,
-                                        borderColor: editColor === c ? '#fff' : 'transparent',
+                                        borderColor: editColor === c ? colors.textPrimary : 'transparent',
                                         alignItems: 'center', justifyContent: 'center',
                                     }}>
                                         {editColor === c && <Text style={{ fontSize: 14 }}>✓</Text>}
@@ -757,17 +922,17 @@ export default function GoalScreen() {
                             </View>
 
                             {/* Name */}
-                            <Text style={labelStyle}>Название</Text>
+                            <Text style={labelStyle}>{t('common.name')}</Text>
                             <TextInput
                                 value={editName}
                                 onChangeText={setEditName}
-                                placeholder="Название цели"
+                                placeholder={t('analytics.goalFormTitle')}
                                 placeholderTextColor="rgba(255,255,255,0.2)"
                                 style={inputStyle}
                             />
 
                             {/* Target + Currency */}
-                            <Text style={labelStyle}>Целевая сумма</Text>
+                            <Text style={labelStyle}>{t('analytics.targetAmount')}</Text>
                             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
                                 <TextInput
                                     value={editTarget}
@@ -788,7 +953,7 @@ export default function GoalScreen() {
                                     }}
                                 >
                                     <Text style={{ fontSize: 18 }}>{CURRENCIES.find(c => c.code === editCurrency)?.flag}</Text>
-                                    <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{editCurrency}</Text>
+                                    <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '700' }}>{editCurrency}</Text>
                                     <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginLeft: 2 }}>▾</Text>
                                 </TouchableOpacity>
                             </View>
@@ -796,7 +961,7 @@ export default function GoalScreen() {
                             {/* Warning: target below saved */}
                             {targetBelowSaved && (
                                 <Text style={{ fontSize: 11, color: '#FFB84F', marginBottom: 12 }}>
-                                    Сумма меньше уже накопленного ({formatAmount(saved, currency)})
+                                    {t('analytics.insufficientFunds', { amount: formatAmount(saved, currency) })}
                                 </Text>
                             )}
                             {!targetBelowSaved && <View style={{ height: 12 }} />}
@@ -807,14 +972,14 @@ export default function GoalScreen() {
                                     onPress={() => { setShowCurrencyDropdown(false); setCurrencySearch(''); }} />
                                 <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#1a2235', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingBottom: 40, maxHeight: '60%' }}>
                                     <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginBottom: 16 }} />
-                                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff', paddingHorizontal: 20, marginBottom: 12 }}>Валюта</Text>
+                                    <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, paddingHorizontal: 20, marginBottom: 12 }}>{t('common.currency')}</Text>
                                     <View style={{ marginHorizontal: 20, marginBottom: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 }}>
                                         <TextInput
                                             value={currencySearch}
                                             onChangeText={setCurrencySearch}
-                                            placeholder="Поиск..."
+                                            placeholder={t('common.search')}
                                             placeholderTextColor="rgba(255,255,255,0.25)"
-                                            style={{ flex: 1, color: '#fff', fontSize: 14 }}
+                                            style={{ flex: 1, color: colors.textPrimary, fontSize: 14 }}
                                             autoCorrect={false} autoCapitalize="none"
                                         />
                                     </View>
@@ -832,7 +997,7 @@ export default function GoalScreen() {
                                                     style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingVertical: 13, backgroundColor: sel ? 'rgba(124,111,255,0.12)' : 'transparent' }}>
                                                     <Text style={{ fontSize: 22 }}>{c.flag}</Text>
                                                     <View style={{ flex: 1 }}>
-                                                        <Text style={{ fontSize: 14, fontWeight: sel ? '700' : '500', color: sel ? '#a78bfa' : '#fff' }}>{c.code}</Text>
+                                                        <Text style={{ fontSize: 14, fontWeight: sel ? '700' : '500', color: sel ? '#a78bfa' : colors.textPrimary }}>{c.code}</Text>
                                                         <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{c.name}</Text>
                                                     </View>
                                                     {sel && <Text style={{ color: '#7C6FFF', fontSize: 16 }}>✓</Text>}
@@ -844,7 +1009,7 @@ export default function GoalScreen() {
                             </Modal>
 
                             {/* Target date */}
-                            <Text style={labelStyle}>Дата достижения (опц.)</Text>
+                            <Text style={labelStyle}>{t('analytics.targetDate')}</Text>
                             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 4 }}>
                                 <TouchableOpacity
                                     onPress={() => {
@@ -852,8 +1017,8 @@ export default function GoalScreen() {
                                         setShowDatePicker(true);
                                     }}
                                     style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)' }}>
-                                    <Text style={{ color: editDate ? '#fff' : 'rgba(255,255,255,0.2)', fontSize: 14 }}>
-                                        {editDate ? format(editDate, 'dd.MM.yyyy') : 'Без даты'}
+                                    <Text style={{ color: editDate ? colors.textPrimary : 'rgba(255,255,255,0.2)', fontSize: 14 }}>
+                                        {editDate ? format(editDate, 'dd.MM.yyyy') : t('analytics.noTerm')}
                                     </Text>
                                 </TouchableOpacity>
                                 {editDate && (
@@ -873,7 +1038,7 @@ export default function GoalScreen() {
                                 onPress={saveEdit}
                                 disabled={savingEdit}
                                 style={{ marginTop: 20, marginBottom: 20, paddingVertical: 14, backgroundColor: '#7C6FFF', borderRadius: 14, alignItems: 'center', opacity: savingEdit ? 0.5 : 1 }}>
-                                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{savingEdit ? 'Сохранение...' : 'Сохранить'}</Text>
+                                <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '700' }}>{savingEdit ? t('common.saving') : t('common.save')}</Text>
                             </TouchableOpacity>
                         </ScrollView>
                     </View>

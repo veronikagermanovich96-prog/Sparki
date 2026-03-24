@@ -8,6 +8,8 @@ import Barcode from 'react-native-barcode-svg';
 import QRCode from 'react-native-qrcode-svg';
 import { supabase } from '@/lib/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '@/context/ThemeContext';
+import { useTranslation } from 'react-i18next';
 
 interface LoyaltyCard {
     id: string;
@@ -25,6 +27,8 @@ export default function CardDetailScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const { colors } = useTheme();
+    const { t } = useTranslation();
     const [card, setCard] = useState<LoyaltyCard | null>(null);
     const [loading, setLoading] = useState(true);
     const [prevBrightness, setPrevBrightness] = useState<number | null>(null);
@@ -49,6 +53,7 @@ export default function CardDetailScreen() {
                 Brightness.setBrightnessAsync(prevBrightness).catch(() => {});
             }
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
 
     async function loadCard() {
@@ -58,10 +63,10 @@ export default function CardDetailScreen() {
     }
 
     const handleDelete = () => {
-        Alert.alert('Удалить карту?', card?.name ?? '', [
-            { text: 'Отмена', style: 'cancel' },
+        Alert.alert(t('cards.deleteCard'), card?.name ?? '', [
+            { text: t('common.cancel'), style: 'cancel' },
             {
-                text: 'Удалить', style: 'destructive',
+                text: t('common.delete'), style: 'destructive',
                 onPress: async () => {
                     await supabase.from('loyalty_cards').delete().eq('id', id);
                     router.back();
@@ -72,16 +77,16 @@ export default function CardDetailScreen() {
 
     if (loading) {
         return (
-            <View style={[styles.container, { paddingTop: insets.top }]}>
-                <ActivityIndicator color="#fff" style={{ marginTop: 40 }} />
+            <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.bgPrimary }]}>
+                <ActivityIndicator color={colors.textPrimary} style={{ marginTop: 40 }} />
             </View>
         );
     }
 
     if (!card) {
         return (
-            <View style={[styles.container, { paddingTop: insets.top }]}>
-                <Text style={{ color: '#fff', textAlign: 'center', marginTop: 40 }}>Карта не найдена</Text>
+            <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.bgPrimary }]}>
+                <Text style={{ color: colors.textPrimary, textAlign: 'center', marginTop: 40 }}>{t('cards.cardNotFound')}</Text>
             </View>
         );
     }
@@ -110,8 +115,6 @@ export default function CardDetailScreen() {
                         <Barcode
                             value={card.barcode}
                             format={format}
-                            width={1.8}
-                            height={80}
                         />
                     </View>
                 </View>
@@ -122,26 +125,26 @@ export default function CardDetailScreen() {
         return (
             <View style={styles.barcodeContainer}>
                 <View style={styles.manualCode}>
-                    <Text style={styles.manualCodeTxt}>{card.barcode}</Text>
+                    <Text style={[styles.manualCodeTxt, { color: colors.bgSecondary }]}>{card.barcode}</Text>
                 </View>
             </View>
         );
     };
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.bgPrimary }]}>
             {/* Header */}
-            <View style={styles.header}>
+            <View style={[styles.header, { borderBottomColor: colors.bgTertiary }]}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
-                    <ArrowLeft color="#fff" size={22} />
+                    <ArrowLeft color={colors.textPrimary} size={22} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle} numberOfLines={1}>{card.name}</Text>
+                <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>{card.name}</Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                     <TouchableOpacity
                         style={styles.iconBtn}
                         onPress={() => router.push(`/cards/edit/${id}` as any)}
                     >
-                        <Edit2 color="#fff" size={20} />
+                        <Edit2 color={colors.textPrimary} size={20} />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.iconBtn} onPress={handleDelete}>
                         <Trash2 color="#ef4444" size={20} />
@@ -162,12 +165,12 @@ export default function CardDetailScreen() {
 
             {!card.barcode && (
                 <View style={styles.noBarcode}>
-                    <Text style={styles.noBarcodeTitle}>Штрих-код не добавлен</Text>
+                    <Text style={[styles.noBarcodeTitle, { color: colors.textMuted }]}>{t('cards.noBarcode')}</Text>
                     <TouchableOpacity
-                        style={styles.addBarcodeBtn}
+                        style={[styles.addBarcodeBtn, { backgroundColor: colors.bgTertiary }]}
                         onPress={() => router.push(`/cards/edit/${id}` as any)}
                     >
-                        <Text style={styles.addBarcodeTxt}>Добавить штрих-код</Text>
+                        <Text style={styles.addBarcodeTxt}>{t('cards.addBarcode')}</Text>
                     </TouchableOpacity>
                 </View>
             )}
@@ -176,7 +179,7 @@ export default function CardDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#030712' },
+    container: { flex: 1 },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -184,13 +187,12 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingVertical: 14,
         borderBottomWidth: 1,
-        borderBottomColor: '#1f2937',
     },
     iconBtn: {
         padding: 6,
         borderRadius: 8,
     },
-    headerTitle: { flex: 1, fontSize: 17, fontWeight: '600', color: '#fff', textAlign: 'center', marginHorizontal: 8 },
+    headerTitle: { flex: 1, fontSize: 17, fontWeight: '600', textAlign: 'center', marginHorizontal: 8 },
     cardVisual: {
         margin: 20,
         borderRadius: 20,
@@ -211,11 +213,10 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
         paddingVertical: 20,
     },
-    manualCodeTxt: { fontSize: 28, fontWeight: '700', color: '#111827', letterSpacing: 3 },
+    manualCodeTxt: { fontSize: 28, fontWeight: '700', letterSpacing: 3 },
     noBarcode: { alignItems: 'center', marginTop: 40, gap: 16 },
-    noBarcodeTitle: { fontSize: 16, color: '#6b7280' },
+    noBarcodeTitle: { fontSize: 16 },
     addBarcodeBtn: {
-        backgroundColor: '#1f2937',
         paddingHorizontal: 20,
         paddingVertical: 10,
         borderRadius: 10,

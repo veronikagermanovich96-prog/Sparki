@@ -25,6 +25,12 @@ export interface NotifSettings {
         hour: number;
         minute: number;
     };
+    loanPayment: {
+        enabled: boolean;
+        daysBefore: 1 | 3 | 7;
+        onDueDay: boolean;
+        onOverdue: boolean;
+    };
 }
 
 export const DEFAULT_NOTIF_SETTINGS: NotifSettings = {
@@ -32,6 +38,7 @@ export const DEFAULT_NOTIF_SETTINGS: NotifSettings = {
     recurringPayment: { enabled: true,  daysBefore: 3 },
     budget:           { enabled: true,  at80: true, at100: true },
     dailySummary:     { enabled: false, hour: 21, minute: 0 },
+    loanPayment:      { enabled: true,  daysBefore: 3, onDueDay: true, onOverdue: true },
 };
 
 const STORAGE_KEY = 'notif_settings_v1';
@@ -162,6 +169,64 @@ export async function checkAndNotify(householdId: string, settings: NotifSetting
                 },
                 trigger: null,
             });
+        }
+    }
+
+    // ── Loan payments
+    if (settings.loanPayment.enabled) {
+        const todayStr = now.toISOString().slice(0, 10);
+        const futureDate = new Date(now);
+        futureDate.setDate(futureDate.getDate() + settings.loanPayment.daysBefore);
+        const futureStr = futureDate.toISOString().slice(0, 10);
+
+        const { data: loans } = await supabase
+            .from('loan_accounts')
+            .select('id, name, monthly_payment, currency, next_payment_date')
+            .eq('household_id', householdId)
+            .eq('is_active', true);
+
+        for (const loan of loans ?? []) {
+            const nextDate = loan.next_payment_date;
+            if (!nextDate) continue;
+
+            // Reminder N days before
+            if (nextDate === futureStr) {
+                await Notifications.scheduleNotificationAsync({
+                    identifier: `loan_before_${loan.id}_${futureStr}`,
+                    content: {
+                        title: 'Предстоящий платёж по кредиту',
+                        body: `Платёж по кредиту «${loan.name}» через ${settings.loanPayment.daysBefore} дн. — ${loan.monthly_payment} ${loan.currency}`,
+                        data: { type: 'loan_payment', loanId: loan.id },
+                    },
+                    trigger: null,
+                });
+            }
+
+            // On due day
+            if (settings.loanPayment.onDueDay && nextDate === todayStr) {
+                await Notifications.scheduleNotificationAsync({
+                    identifier: `loan_due_${loan.id}_${todayStr}`,
+                    content: {
+                        title: 'Платёж по кредиту сегодня',
+                        body: `Сегодня платёж по кредиту «${loan.name}» — ${loan.monthly_payment} ${loan.currency}`,
+                        data: { type: 'loan_payment', loanId: loan.id },
+                    },
+                    trigger: null,
+                });
+            }
+
+            // Overdue
+            if (settings.loanPayment.onOverdue && nextDate < todayStr) {
+                await Notifications.scheduleNotificationAsync({
+                    identifier: `loan_overdue_${loan.id}_${nextDate}`,
+                    content: {
+                        title: 'Просроченный платёж по кредиту',
+                        body: `Просроченный платёж по кредиту «${loan.name}» — ${loan.monthly_payment} ${loan.currency}`,
+                        data: { type: 'loan_payment', loanId: loan.id },
+                    },
+                    trigger: null,
+                });
+            }
         }
     }
 

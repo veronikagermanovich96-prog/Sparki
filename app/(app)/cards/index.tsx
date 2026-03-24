@@ -4,6 +4,8 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Plus, Tag } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '@/context/ThemeContext';
+import { useTranslation } from 'react-i18next';
 
 interface LoyaltyCard {
     id: string;
@@ -20,6 +22,8 @@ interface LoyaltyCard {
 export default function CardsScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const { colors } = useTheme();
+    const { t } = useTranslation();
     const [cards, setCards] = useState<LoyaltyCard[]>([]);
     const [loading, setLoading] = useState(true);
     const [householdId, setHouseholdId] = useState<string | null>(null);
@@ -74,34 +78,37 @@ export default function CardsScreen() {
 
     if (loading) {
         return (
-            <View style={[styles.container, { paddingTop: insets.top }]}>
+            <View style={{ flex: 1, backgroundColor: colors.bgPrimary, paddingTop: insets.top }}>
                 <View style={styles.header}>
-                    <Text style={styles.title}>Карты</Text>
+                    <Text style={{ fontSize: 28, fontWeight: '700', color: colors.textPrimary }}>{t('cards.title')}</Text>
                 </View>
-                <ActivityIndicator color="#fff" style={{ marginTop: 40 }} />
+                <ActivityIndicator color={colors.textPrimary} style={{ marginTop: 40 }} />
             </View>
         );
     }
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={{ flex: 1, backgroundColor: colors.bgPrimary, paddingTop: insets.top }}>
             <View style={styles.header}>
-                <Text style={styles.title}>Карты</Text>
-                <TouchableOpacity onPress={() => router.push('/cards/add' as any)} style={styles.addButton}>
-                    <Plus color="#fff" size={22} />
+                <Text style={{ fontSize: 28, fontWeight: '700', color: colors.textPrimary }}>{t('cards.title')}</Text>
+                <TouchableOpacity
+                    onPress={() => router.push('/cards/add' as any)}
+                    style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgTertiary, alignItems: 'center', justifyContent: 'center' }}
+                >
+                    <Plus color={colors.textPrimary} size={22} />
                 </TouchableOpacity>
             </View>
 
             {cards.length === 0 ? (
                 <View style={styles.empty}>
-                    <Tag color="#374151" size={56} />
-                    <Text style={styles.emptyTitle}>Нет карт</Text>
-                    <Text style={styles.emptySubtitle}>Добавьте скидочную карту,{'\n'}чтобы быстро показывать штрих-код</Text>
+                    <Tag color={colors.borderLight} size={56} />
+                    <Text style={{ fontSize: 20, fontWeight: '700', color: colors.textPrimary, marginTop: 8 }}>{t('cards.noCards')}</Text>
+                    <Text style={{ fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20 }}>{t('cards.noCardsHint')}</Text>
                     <TouchableOpacity
                         style={styles.emptyButton}
                         onPress={() => router.push('/cards/add' as any)}
                     >
-                        <Text style={styles.emptyButtonText}>Добавить карту</Text>
+                        <Text style={styles.emptyButtonText}>{t('cards.addCard')}</Text>
                     </TouchableOpacity>
                 </View>
             ) : (
@@ -120,22 +127,12 @@ export default function CardsScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#030712' },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 20,
         paddingVertical: 16,
-    },
-    title: { fontSize: 28, fontWeight: '700', color: '#fff' },
-    addButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: '#1f2937',
-        alignItems: 'center',
-        justifyContent: 'center',
     },
     list: { paddingHorizontal: 16, paddingBottom: 32 },
     row: { gap: 12, marginBottom: 12 },
@@ -167,8 +164,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 40,
         gap: 12,
     },
-    emptyTitle: { fontSize: 20, fontWeight: '700', color: '#fff', marginTop: 8 },
-    emptySubtitle: { fontSize: 14, color: '#6b7280', textAlign: 'center', lineHeight: 20 },
     emptyButton: {
         marginTop: 16,
         backgroundColor: '#3b82f6',

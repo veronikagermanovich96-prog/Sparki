@@ -1,6 +1,8 @@
 import { CURRENCIES, CurrencyInfo } from '@/constants/currencies';
+import { useTheme } from '@/context/ThemeContext';
 import { Check, ChevronRight, Search, X } from 'lucide-react-native';
 import React, { useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
     FlatList,
     Modal,
@@ -19,6 +21,8 @@ interface CurrencyPickerProps {
 }
 
 export function CurrencyPicker({ value, onSelect, renderTrigger }: CurrencyPickerProps) {
+    const { colors } = useTheme();
+    const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const searchRef = useRef<TextInput>(null);
@@ -57,9 +61,9 @@ export function CurrencyPicker({ value, onSelect, renderTrigger }: CurrencyPicke
                 style={{
                     flexDirection: 'row',
                     alignItems: 'center',
-                    backgroundColor: '#1f2937',
+                    backgroundColor: colors.bgTertiary,
                     borderWidth: 1,
-                    borderColor: '#374151',
+                    borderColor: colors.borderLight,
                     borderRadius: 12,
                     paddingHorizontal: 16,
                     paddingVertical: 14,
@@ -68,16 +72,16 @@ export function CurrencyPicker({ value, onSelect, renderTrigger }: CurrencyPicke
             >
                 <Text style={{ fontSize: 20, marginRight: 10 }}>{selected?.flag ?? '🌐'}</Text>
                 <View style={{ flex: 1 }}>
-                    <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>
+                    <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '600' }}>
                         {selected?.code ?? value}
                     </Text>
                     {selected && (
-                        <Text style={{ color: '#6b7280', fontSize: 12, marginTop: 1 }}>
+                        <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 1 }}>
                             {selected.name}
                         </Text>
                     )}
                 </View>
-                <ChevronRight color="#6b7280" size={18} />
+                <ChevronRight color={colors.textMuted} size={18} />
             </TouchableOpacity>
         );
 
@@ -97,7 +101,7 @@ export function CurrencyPicker({ value, onSelect, renderTrigger }: CurrencyPicke
                 />
 
                 <View style={{
-                    backgroundColor: '#111827',
+                    backgroundColor: colors.bgSecondary,
                     borderTopLeftRadius: 28,
                     borderTopRightRadius: 28,
                     paddingTop: 16,
@@ -106,7 +110,7 @@ export function CurrencyPicker({ value, onSelect, renderTrigger }: CurrencyPicke
                 }}>
                     {/* Handle */}
                     <View style={{
-                        width: 40, height: 4, backgroundColor: '#374151',
+                        width: 40, height: 4, backgroundColor: colors.borderLight,
                         borderRadius: 2, alignSelf: 'center', marginBottom: 16,
                     }} />
 
@@ -117,11 +121,11 @@ export function CurrencyPicker({ value, onSelect, renderTrigger }: CurrencyPicke
                         paddingHorizontal: 20,
                         marginBottom: 16,
                     }}>
-                        <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700', flex: 1 }}>
-                            Выбрать валюту
+                        <Text style={{ color: colors.textPrimary, fontSize: 20, fontWeight: '700', flex: 1 }}>
+                            {t('currencyPicker.title')}
                         </Text>
                         <TouchableOpacity onPress={() => setOpen(false)}>
-                            <X color="#6b7280" size={22} />
+                            <X color={colors.textMuted} size={22} />
                         </TouchableOpacity>
                     </View>
 
@@ -129,22 +133,22 @@ export function CurrencyPicker({ value, onSelect, renderTrigger }: CurrencyPicke
                     <View style={{
                         flexDirection: 'row',
                         alignItems: 'center',
-                        backgroundColor: '#1f2937',
+                        backgroundColor: colors.bgTertiary,
                         borderRadius: 12,
                         marginHorizontal: 20,
                         marginBottom: 8,
                         paddingHorizontal: 12,
                     }}>
-                        <Search color="#6b7280" size={18} />
+                        <Search color={colors.textMuted} size={18} />
                         <TextInput
                             ref={searchRef}
-                            placeholder="Поиск: USD, Euro, £…"
-                            placeholderTextColor="#4b5563"
+                            placeholder={t('currencyPicker.searchPlaceholder')}
+                            placeholderTextColor={colors.textDisabled}
                             value={query}
                             onChangeText={setQuery}
                             style={{
                                 flex: 1,
-                                color: '#fff',
+                                color: colors.textPrimary,
                                 fontSize: 16,
                                 paddingVertical: 12,
                                 paddingHorizontal: 10,
@@ -154,19 +158,19 @@ export function CurrencyPicker({ value, onSelect, renderTrigger }: CurrencyPicke
                         />
                         {query.length > 0 && (
                             <TouchableOpacity onPress={() => setQuery('')}>
-                                <X color="#6b7280" size={16} />
+                                <X color={colors.textMuted} size={16} />
                             </TouchableOpacity>
                         )}
                     </View>
 
                     {/* Count */}
                     <Text style={{
-                        color: '#4b5563',
+                        color: colors.textDisabled,
                         fontSize: 12,
                         marginHorizontal: 20,
                         marginBottom: 8,
                     }}>
-                        {filtered.length} {filtered.length === 1 ? 'валюта' : 'валют'}
+                        {t('currencyPicker.count', { count: filtered.length })}
                     </Text>
 
                     {/* List */}
@@ -183,12 +187,12 @@ export function CurrencyPicker({ value, onSelect, renderTrigger }: CurrencyPicke
                         )}
                         ListEmptyComponent={
                             <Text style={{
-                                color: '#4b5563',
+                                color: colors.textDisabled,
                                 textAlign: 'center',
                                 marginTop: 32,
                                 fontSize: 15,
                             }}>
-                                Ничего не найдено
+                                {t('currencyPicker.noResults')}
                             </Text>
                         }
                     />
@@ -209,6 +213,7 @@ function CurrencyRow({
     selected: boolean;
     onPress: () => void;
 }) {
+    const { colors } = useTheme();
     return (
         <TouchableOpacity
             onPress={onPress}
@@ -225,12 +230,12 @@ function CurrencyRow({
                 {item.flag}
             </Text>
             <View style={{ flex: 1 }}>
-                <Text style={{ color: '#fff', fontSize: 15, fontWeight: selected ? '700' : '500' }}>
+                <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: selected ? '700' : '500' }}>
                     {item.code}
-                    <Text style={{ color: '#6b7280', fontWeight: '400' }}>  {item.name}</Text>
+                    <Text style={{ color: colors.textMuted, fontWeight: '400' }}>  {item.name}</Text>
                 </Text>
             </View>
-            <Text style={{ color: '#6b7280', fontSize: 15, marginRight: 10 }}>
+            <Text style={{ color: colors.textMuted, fontSize: 15, marginRight: 10 }}>
                 {item.symbol}
             </Text>
             {selected && <Check color="#3b82f6" size={18} />}

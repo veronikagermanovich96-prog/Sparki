@@ -1,8 +1,11 @@
 import { CurrencyPicker } from '@/components/ui/CurrencyPicker';
 import { CURRENCY_MAP, formatAmount } from '@/constants/currencies';
+import { useTheme } from '@/context/ThemeContext';
 import { format, startOfMonth, startOfWeek, startOfYear, startOfDay } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 import { Account, Frequency } from '@/types';
+import { useTranslation } from 'react-i18next';
+import i18n from '@/lib/i18n';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import {
     ArrowDownToLine,
@@ -30,7 +33,6 @@ import {
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -63,17 +65,17 @@ const COLOR_PRESETS = [
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const PERIOD_LABELS: Record<Frequency, string> = {
-    daily: 'Дневной лимит',
-    weekly: 'Недельный лимит',
-    monthly: 'Месячный лимит',
-    yearly: 'Годовой лимит',
+    daily: i18n.t('accounts.dailyLimit'),
+    weekly: i18n.t('accounts.weeklyLimit'),
+    monthly: i18n.t('accounts.monthlyLimit'),
+    yearly: i18n.t('accounts.yearlyLimit'),
 };
 
 const PERIOD_PICKER_LABELS: Record<Frequency, string> = {
-    daily: 'День',
-    weekly: 'Неделя',
-    monthly: 'Месяц',
-    yearly: 'Год',
+    daily: i18n.t('accounts.periodDay'),
+    weekly: i18n.t('accounts.periodWeek'),
+    monthly: i18n.t('accounts.periodMonth'),
+    yearly: i18n.t('accounts.periodYear'),
 };
 
 function getSpendingPeriodStart(period: Frequency): string {
@@ -110,14 +112,16 @@ interface AccountCardProps {
 }
 
 function AccountCard({ account, spending, onPress, onAddFunds, onTransfer, onDrag, isActive }: AccountCardProps) {
+    const { colors } = useTheme();
+    const { t } = useTranslation();
     const IconComp = ICON_MAP[account.icon ?? 'CreditCard'] ?? CreditCard;
     const color = account.color ?? '#3b82f6';
 
     return (
         <View style={{
-            backgroundColor: isActive ? '#1a2535' : '#111827',
+            backgroundColor: isActive ? '#1a2535' : colors.bgSecondary,
             borderWidth: 1,
-            borderColor: isActive ? (color + '66') : '#1f2937',
+            borderColor: isActive ? (color + '66') : colors.bgTertiary,
             borderRadius: 16,
             marginBottom: 10,
             overflow: 'hidden',
@@ -140,35 +144,35 @@ function AccountCard({ account, spending, onPress, onAddFunds, onTransfer, onDra
                 </View>
 
                 <View style={{ flex: 1 }}>
-                    <Text style={{ color: '#fff', fontWeight: '600', fontSize: 16 }}>{account.name}</Text>
-                    <Text style={{ color: '#9ca3af', fontSize: 13, marginTop: 2 }}>
+                    <Text style={{ color: colors.textPrimary, fontWeight: '600', fontSize: 16 }}>{account.name}</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 2 }}>
                         {CURRENCY_MAP[account.currency]?.flag ?? ''} {account.currency}
                     </Text>
                     {account.exclude_from_dashboard && (
-                        <Text style={{ color: '#4b5563', fontSize: 11, marginTop: 2 }}>Скрыт из расчётов</Text>
+                        <Text style={{ color: colors.textDisabled, fontSize: 11, marginTop: 2 }}>{t('accounts.hiddenFromCalc')}</Text>
                     )}
                 </View>
 
                 <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>
+                    <Text style={{ color: colors.textPrimary, fontWeight: '700', fontSize: 16 }}>
                         {formatAmount(account.balance, account.currency)}
                     </Text>
-                    <GripVertical color="#374151" size={16} />
+                    <GripVertical color={colors.borderLight} size={16} />
                 </View>
             </GHTouch>
 
             {/* Action buttons */}
-            <View style={{ flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#1f2937' }}>
+            <View style={{ flexDirection: 'row', borderTopWidth: 1, borderTopColor: colors.bgTertiary }}>
                 <GHTouch
                     onPress={onAddFunds}
                     activeOpacity={0.6}
                     style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 11, gap: 6 }}
                 >
                     <ArrowDownToLine color="#22c55e" size={15} />
-                    <Text style={{ color: '#22c55e', fontSize: 13, fontWeight: '600' }}>Пополнить</Text>
+                    <Text style={{ color: '#22c55e', fontSize: 13, fontWeight: '600' }}>{t('accounts.topUp')}</Text>
                 </GHTouch>
 
-                <View style={{ width: 1, backgroundColor: '#1f2937' }} />
+                <View style={{ width: 1, backgroundColor: colors.bgTertiary }} />
 
                 <GHTouch
                     onPress={onTransfer}
@@ -176,7 +180,7 @@ function AccountCard({ account, spending, onPress, onAddFunds, onTransfer, onDra
                     style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 11, gap: 6 }}
                 >
                     <ArrowRightLeft color="#3b82f6" size={15} />
-                    <Text style={{ color: '#3b82f6', fontSize: 13, fontWeight: '600' }}>Перевод</Text>
+                    <Text style={{ color: '#3b82f6', fontSize: 13, fontWeight: '600' }}>{t('accounts.transfer')}</Text>
                 </GHTouch>
             </View>
 
@@ -186,14 +190,14 @@ function AccountCard({ account, spending, onPress, onAddFunds, onTransfer, onDra
                 const barColor = pct < 0.7 ? '#22c55e' : pct < 0.9 ? '#f97316' : '#ef4444';
                 const periodLabel = PERIOD_LABELS[account.spending_limit_period ?? 'monthly'];
                 return (
-                    <View style={{ paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#1f2937' }}>
+                    <View style={{ paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.bgTertiary }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                            <Text style={{ color: '#9ca3af', fontSize: 12 }}>{periodLabel}</Text>
-                            <Text style={{ color: pct >= 0.9 ? '#ef4444' : '#9ca3af', fontSize: 12, fontWeight: '500' }}>
+                            <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{periodLabel}</Text>
+                            <Text style={{ color: pct >= 0.9 ? '#ef4444' : colors.textSecondary, fontSize: 12, fontWeight: '500' }}>
                                 {formatAmount(spending, account.currency)} / {formatAmount(account.spending_limit!, account.currency)}
                             </Text>
                         </View>
-                        <View style={{ height: 4, backgroundColor: '#1f2937', borderRadius: 2 }}>
+                        <View style={{ height: 4, backgroundColor: colors.bgTertiary, borderRadius: 2 }}>
                             <View style={{ width: `${pct * 100}%` as any, height: 4, backgroundColor: barColor, borderRadius: 2 }} />
                         </View>
                     </View>
@@ -206,6 +210,8 @@ function AccountCard({ account, spending, onPress, onAddFunds, onTransfer, onDra
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function AccountsScreen() {
+    const { colors } = useTheme();
+    const { t } = useTranslation();
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [loading, setLoading] = useState(true);
     const [householdId, setHouseholdId] = useState<string | null>(null);
@@ -242,6 +248,7 @@ export default function AccountsScreen() {
     const [transferSaving, setTransferSaving] = useState(false);
     const [loadingRate, setLoadingRate] = useState(false);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { loadData(); }, []);
 
     // Refresh list when returning from detail screen
@@ -250,6 +257,7 @@ export default function AccountsScreen() {
             fetchAccounts(householdId);
             fetchSpending(householdId);
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [householdId]));
 
     async function loadData() {
@@ -493,23 +501,23 @@ export default function AccountsScreen() {
     // ─── Render ──────────────────────────────────────────────────────────────
 
     return (
-        <View style={{ flex: 1, backgroundColor: '#030712' }}>
+        <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
             {/* Header */}
             <View style={{ paddingTop: 64, paddingHorizontal: 24, paddingBottom: 16 }}>
-                <Text style={{ color: '#9ca3af', fontSize: 15, marginBottom: 4 }}>Активный баланс</Text>
-                <Text style={{ color: '#fff', fontSize: 40, fontWeight: '700' }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 15, marginBottom: 4 }}>{t('accounts.title')}</Text>
+                <Text style={{ color: colors.textPrimary, fontSize: 40, fontWeight: '700' }}>
                     {formatAmount(activeBalance, 'EUR')}
                 </Text>
                 {hasHidden && (
-                    <Text style={{ color: '#4b5563', fontSize: 13, marginTop: 4 }}>
-                        Всего на счетах: {formatAmount(totalBalance, 'EUR')}
+                    <Text style={{ color: colors.textDisabled, fontSize: 13, marginTop: 4 }}>
+                        {t('accounts.totalOnAccounts', { amount: formatAmount(totalBalance, 'EUR') })}
                     </Text>
                 )}
             </View>
 
             {/* List */}
             {loading ? (
-                <ActivityIndicator color="#fff" style={{ marginTop: 40 }} />
+                <ActivityIndicator color={colors.textPrimary} style={{ marginTop: 40 }} />
             ) : (
                 <DraggableFlatList
                     data={accounts}
@@ -518,8 +526,8 @@ export default function AccountsScreen() {
                     onDragEnd={({ data }) => handleReorder(data)}
                     ListEmptyComponent={
                         <View style={{ alignItems: 'center', marginTop: 80 }}>
-                            <Text style={{ color: '#374151', fontSize: 16 }}>Нет счетов</Text>
-                            <Text style={{ color: '#1f2937', fontSize: 14, marginTop: 8 }}>Нажмите + чтобы добавить</Text>
+                            <Text style={{ color: colors.borderLight, fontSize: 16 }}>{t('accounts.noAccounts')}</Text>
+                            <Text style={{ color: colors.bgTertiary, fontSize: 14, marginTop: 8 }}>{t('accounts.tapToAdd')}</Text>
                         </View>
                     }
                     renderItem={({ item, drag, isActive }: RenderItemParams<Account>) => (
@@ -558,24 +566,24 @@ export default function AccountsScreen() {
             <Modal visible={showAddModal} transparent animationType="slide" onRequestClose={() => setShowAddModal(false)}>
                 <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
                     <Pressable style={{ flex: 1 }} onPress={() => setShowAddModal(false)} />
-                    <View style={sheetStyle}>
+                    <View style={[sheetStyle, { backgroundColor: colors.bgSecondary }]}>
                         <SheetHandle />
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-                            <Text style={titleStyle}>Новый счёт</Text>
-                            <TouchableOpacity onPress={() => setShowAddModal(false)}><X color="#6b7280" size={22} /></TouchableOpacity>
+                            <Text style={[titleStyle, { color: colors.textPrimary }]}>{t('accounts.newAccount')}</Text>
+                            <TouchableOpacity onPress={() => setShowAddModal(false)}><X color={colors.textMuted} size={22} /></TouchableOpacity>
                         </View>
 
                         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                            <Label>Название</Label>
-                            <TextInput style={inputStyle} placeholder="Основная карта" placeholderTextColor="#4b5563" value={addName} onChangeText={setAddName} />
+                            <Label>{t('accounts.accountName')}</Label>
+                            <TextInput style={[inputStyle, { backgroundColor: colors.bgTertiary, borderColor: colors.borderLight, color: colors.textPrimary }]} placeholder={t('accounts.placeholder')} placeholderTextColor={colors.textDisabled} value={addName} onChangeText={setAddName} />
 
-                            <Label>Валюта</Label>
+                            <Label>{t('common.currency')}</Label>
                             <CurrencyPicker value={addCurrency} onSelect={setAddCurrency} />
 
-                            <Label>Начальный баланс</Label>
-                            <TextInput style={inputStyle} placeholder="0" placeholderTextColor="#4b5563" value={addBalance} onChangeText={setAddBalance} keyboardType="decimal-pad" />
+                            <Label>{t('accounts.initialBalance')}</Label>
+                            <TextInput style={[inputStyle, { backgroundColor: colors.bgTertiary, borderColor: colors.borderLight, color: colors.textPrimary }]} placeholder="0" placeholderTextColor={colors.textDisabled} value={addBalance} onChangeText={setAddBalance} keyboardType="decimal-pad" />
 
-                            <Label>Иконка</Label>
+                            <Label>{t('common.icon')}</Label>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
                                 {ICON_NAMES.map(iconName => {
                                     const IC = ICON_MAP[iconName]!;
@@ -584,16 +592,16 @@ export default function AccountsScreen() {
                                         <TouchableOpacity key={iconName} onPress={() => setAddIcon(iconName)} style={{
                                             width: 48, height: 48, borderRadius: 14, marginRight: 8,
                                             borderWidth: 1.5, alignItems: 'center', justifyContent: 'center',
-                                            backgroundColor: sel ? addColor + '33' : '#1f2937',
-                                            borderColor: sel ? addColor : '#374151',
+                                            backgroundColor: sel ? addColor + '33' : colors.bgTertiary,
+                                            borderColor: sel ? addColor : colors.borderLight,
                                         }}>
-                                            <IC color={sel ? addColor : '#6b7280'} size={22} />
+                                            <IC color={sel ? addColor : colors.textMuted} size={22} />
                                         </TouchableOpacity>
                                     );
                                 })}
                             </ScrollView>
 
-                            <Label>Цвет</Label>
+                            <Label>{t('common.color')}</Label>
                             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
                                 {COLOR_PRESETS.map(c => (
                                     <TouchableOpacity key={c} onPress={() => setAddColor(c)} style={{
@@ -606,26 +614,26 @@ export default function AccountsScreen() {
                                 ))}
                             </View>
 
-                            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#1f2937', borderRadius: 14, padding: 16, marginBottom: 20 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgTertiary, borderRadius: 14, padding: 16, marginBottom: 20 }}>
                                 <View style={{ flex: 1, marginRight: 12 }}>
-                                    <Text style={{ color: '#fff', fontSize: 15 }}>Скрыть из активного баланса</Text>
-                                    <Text style={{ color: '#6b7280', fontSize: 12, marginTop: 2 }}>Счёт виден, но не учитывается в лимитах</Text>
+                                    <Text style={{ color: colors.textPrimary, fontSize: 15 }}>{t('accounts.hideFromBalance')}</Text>
+                                    <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>{t('accounts.hideHint')}</Text>
                                 </View>
-                                <Switch value={addExclude} onValueChange={setAddExclude} trackColor={{ false: '#374151', true: '#2563eb' }} thumbColor="#fff" />
+                                <Switch value={addExclude} onValueChange={setAddExclude} trackColor={{ false: colors.borderLight, true: '#2563eb' }} thumbColor="#fff" />
                             </View>
 
-                            <Label>Лимит расходов ({addCurrency})</Label>
+                            <Label>{t('accounts.spendingLimit', { currency: addCurrency })}</Label>
                             <TextInput
-                                style={inputStyle}
-                                placeholder="0 — без лимита"
-                                placeholderTextColor="#4b5563"
+                                style={[inputStyle, { backgroundColor: colors.bgTertiary, borderColor: colors.borderLight, color: colors.textPrimary }]}
+                                placeholder={t('accounts.noLimit')}
+                                placeholderTextColor={colors.textDisabled}
                                 value={addLimit}
                                 onChangeText={t => setAddLimit(t.replace(/[^0-9.]/g, ''))}
                                 keyboardType="decimal-pad"
                             />
                             {!!addLimit && parseFloat(addLimit) > 0 && (
                                 <>
-                                    <Label>Период лимита</Label>
+                                    <Label>{t('accounts.limitPeriod')}</Label>
                                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
                                         {(['daily', 'weekly', 'monthly', 'yearly'] as Frequency[]).map(f => (
                                             <TouchableOpacity
@@ -633,11 +641,11 @@ export default function AccountsScreen() {
                                                 onPress={() => setAddLimitPeriod(f)}
                                                 style={{
                                                     paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10,
-                                                    backgroundColor: addLimitPeriod === f ? '#2563eb' : '#1f2937',
-                                                    borderWidth: 1, borderColor: addLimitPeriod === f ? '#3b82f6' : '#374151',
+                                                    backgroundColor: addLimitPeriod === f ? '#2563eb' : colors.bgTertiary,
+                                                    borderWidth: 1, borderColor: addLimitPeriod === f ? '#3b82f6' : colors.borderLight,
                                                 }}
                                             >
-                                                <Text style={{ color: addLimitPeriod === f ? '#fff' : '#9ca3af', fontSize: 13 }}>
+                                                <Text style={{ color: addLimitPeriod === f ? '#fff' : colors.textSecondary, fontSize: 13 }}>
                                                     {PERIOD_PICKER_LABELS[f]}
                                                 </Text>
                                             </TouchableOpacity>
@@ -645,11 +653,11 @@ export default function AccountsScreen() {
                                     </View>
                                 </>
                             )}
-                            <Text style={{ color: '#4b5563', fontSize: 12, marginTop: -12, marginBottom: 20, marginLeft: 4 }}>
-                                Прогресс-бар появится на карточке счёта
+                            <Text style={{ color: colors.textDisabled, fontSize: 12, marginTop: -12, marginBottom: 20, marginLeft: 4 }}>
+                                {t('accounts.progressBarHint')}
                             </Text>
 
-                            <PrimaryButton label={addSaving ? 'Сохранение…' : 'Создать счёт'} onPress={saveAdd} disabled={addSaving || !addName.trim()} />
+                            <PrimaryButton label={addSaving ? t('common.saving') : t('accounts.createAccount')} onPress={saveAdd} disabled={addSaving || !addName.trim()} />
                         </ScrollView>
                     </View>
                 </KeyboardAvoidingView>
@@ -661,7 +669,7 @@ export default function AccountsScreen() {
             <Modal visible={showAddFundsModal} transparent animationType="slide" onRequestClose={() => setShowAddFundsModal(false)}>
                 <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
                     <Pressable style={{ flex: 1 }} onPress={() => setShowAddFundsModal(false)} />
-                    <View style={sheetStyle}>
+                    <View style={[sheetStyle, { backgroundColor: colors.bgSecondary }]}>
                         <SheetHandle />
 
                         {addFundsAccount && (() => {
@@ -673,8 +681,8 @@ export default function AccountsScreen() {
                                         <IC color={col} size={20} />
                                     </View>
                                     <View>
-                                        <Text style={titleStyle}>Пополнить</Text>
-                                        <Text style={{ color: '#6b7280', fontSize: 13 }}>
+                                        <Text style={[titleStyle, { color: colors.textPrimary }]}>{t('accounts.topUpTitle')}</Text>
+                                        <Text style={{ color: colors.textMuted, fontSize: 13 }}>
                                             {addFundsAccount.name} · {formatAmount(addFundsAccount.balance, addFundsAccount.currency)}
                                         </Text>
                                     </View>
@@ -683,22 +691,22 @@ export default function AccountsScreen() {
                         })()}
 
                         <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-                            <Label>Сумма {addFundsAccount ? `(${addFundsAccount.currency})` : ''}</Label>
+                            <Label>{addFundsAccount ? t('accounts.topUpAmount', { currency: addFundsAccount.currency }) : t('common.amount')}</Label>
                             <TextInput
-                                style={[inputStyle, { fontSize: 28, fontWeight: '700', textAlign: 'center', paddingVertical: 20 }]}
+                                style={[inputStyle, { backgroundColor: colors.bgTertiary, borderColor: colors.borderLight, color: colors.textPrimary, fontSize: 28, fontWeight: '700', textAlign: 'center', paddingVertical: 20 }]}
                                 placeholder="0"
-                                placeholderTextColor="#4b5563"
+                                placeholderTextColor={colors.textDisabled}
                                 value={addFundsAmount}
                                 onChangeText={setAddFundsAmount}
                                 keyboardType="decimal-pad"
                                 autoFocus
                             />
 
-                            <Label>Заметка (необязательно)</Label>
-                            <TextInput style={inputStyle} placeholder="Откуда деньги…" placeholderTextColor="#4b5563" value={addFundsNote} onChangeText={setAddFundsNote} />
+                            <Label>{t('accounts.topUpNote')}</Label>
+                            <TextInput style={[inputStyle, { backgroundColor: colors.bgTertiary, borderColor: colors.borderLight, color: colors.textPrimary }]} placeholder={t('accounts.topUpPlaceholder')} placeholderTextColor={colors.textDisabled} value={addFundsNote} onChangeText={setAddFundsNote} />
 
                             <PrimaryButton
-                                label={addFundsSaving ? 'Сохранение…' : `Пополнить${addFundsAmount ? ' ' + formatAmount(parseFloat(addFundsAmount) || 0, addFundsAccount?.currency ?? 'EUR') : ''}`}
+                                label={addFundsSaving ? t('common.saving') : `${t('accounts.topUp')}${addFundsAmount ? ' ' + formatAmount(parseFloat(addFundsAmount) || 0, addFundsAccount?.currency ?? 'EUR') : ''}`}
                                 onPress={handleAddFunds}
                                 disabled={addFundsSaving || !addFundsAmount || parseFloat(addFundsAmount) <= 0}
                                 color="#22c55e"
@@ -714,20 +722,20 @@ export default function AccountsScreen() {
             <Modal visible={showTransferModal} transparent animationType="slide" onRequestClose={() => setShowTransferModal(false)}>
                 <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
                     <Pressable style={{ flex: 1 }} onPress={() => setShowTransferModal(false)} />
-                    <View style={sheetStyle}>
+                    <View style={[sheetStyle, { backgroundColor: colors.bgSecondary }]}>
                         <SheetHandle />
 
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                            <Text style={titleStyle}>Перевод</Text>
-                            <TouchableOpacity onPress={() => setShowTransferModal(false)}><X color="#6b7280" size={22} /></TouchableOpacity>
+                            <Text style={[titleStyle, { color: colors.textPrimary }]}>{t('accounts.transferTitle')}</Text>
+                            <TouchableOpacity onPress={() => setShowTransferModal(false)}><X color={colors.textMuted} size={22} /></TouchableOpacity>
                         </View>
 
                         <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 10 }}>
-                                <MiniAccountBadge account={transferFrom} label="Откуда" />
-                                <ArrowRightLeft color="#6b7280" size={18} />
+                                <MiniAccountBadge account={transferFrom} label={t('accounts.from')} />
+                                <ArrowRightLeft color={colors.textMuted} size={18} />
                                 <View style={{ flex: 1 }}>
-                                    <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 6 }}>Куда</Text>
+                                    <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 6 }}>{t('accounts.to')}</Text>
                                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                                         {accounts
                                             .filter(a => a.id !== transferFrom?.id)
@@ -741,14 +749,14 @@ export default function AccountsScreen() {
                                                         onPress={() => selectTransferTo(a)}
                                                         style={{
                                                             flexDirection: 'row', alignItems: 'center',
-                                                            backgroundColor: selected ? col + '22' : '#1f2937',
+                                                            backgroundColor: selected ? col + '22' : colors.bgTertiary,
                                                             borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8,
                                                             marginRight: 8, borderWidth: 1.5,
-                                                            borderColor: selected ? col : '#374151',
+                                                            borderColor: selected ? col : colors.borderLight,
                                                         }}
                                                     >
-                                                        <IC color={selected ? col : '#6b7280'} size={16} />
-                                                        <Text style={{ color: selected ? '#fff' : '#9ca3af', marginLeft: 6, fontSize: 13, fontWeight: '600' }}>{a.name}</Text>
+                                                        <IC color={selected ? col : colors.textMuted} size={16} />
+                                                        <Text style={{ color: selected ? colors.textPrimary : colors.textSecondary, marginLeft: 6, fontSize: 13, fontWeight: '600' }}>{a.name}</Text>
                                                     </TouchableOpacity>
                                                 );
                                             })}
@@ -756,11 +764,11 @@ export default function AccountsScreen() {
                                 </View>
                             </View>
 
-                            <Label>Сумма {transferFrom ? `(${transferFrom.currency})` : ''}</Label>
+                            <Label>{transferFrom ? t('accounts.transferAmount', { currency: transferFrom.currency }) : t('common.amount')}</Label>
                             <TextInput
-                                style={[inputStyle, { fontSize: 28, fontWeight: '700', textAlign: 'center', paddingVertical: 20 }]}
+                                style={[inputStyle, { backgroundColor: colors.bgTertiary, borderColor: colors.borderLight, color: colors.textPrimary, fontSize: 28, fontWeight: '700', textAlign: 'center', paddingVertical: 20 }]}
                                 placeholder="0"
-                                placeholderTextColor="#4b5563"
+                                placeholderTextColor={colors.textDisabled}
                                 value={transferAmount}
                                 onChangeText={setTransferAmount}
                                 keyboardType="decimal-pad"
@@ -768,24 +776,24 @@ export default function AccountsScreen() {
                             />
 
                             {transferFrom && transferTo && transferFrom.currency !== transferTo.currency && (
-                                <View style={{ backgroundColor: '#1f2937', borderRadius: 14, padding: 16, marginBottom: 20 }}>
+                                <View style={{ backgroundColor: colors.bgTertiary, borderRadius: 14, padding: 16, marginBottom: 20 }}>
                                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                                        <Text style={{ color: '#9ca3af', fontSize: 13 }}>
-                                            Курс {transferFrom.currency} → {transferTo.currency}
+                                        <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
+                                            {t('accounts.exchangeRate', { from: transferFrom.currency, to: transferTo.currency })}
                                         </Text>
-                                        {loadingRate && <ActivityIndicator size="small" color="#6b7280" />}
+                                        {loadingRate && <ActivityIndicator size="small" color={colors.textMuted} />}
                                     </View>
                                     <TextInput
-                                        style={[inputStyle, { marginBottom: 0 }]}
+                                        style={[inputStyle, { backgroundColor: colors.bgTertiary, borderColor: colors.borderLight, color: colors.textPrimary, marginBottom: 0 }]}
                                         placeholder="1.00"
-                                        placeholderTextColor="#4b5563"
+                                        placeholderTextColor={colors.textDisabled}
                                         value={transferRate}
                                         onChangeText={setTransferRate}
                                         keyboardType="decimal-pad"
                                     />
                                     {parseFloat(transferAmount) > 0 && (
                                         <Text style={{ color: '#22c55e', fontSize: 14, marginTop: 10, textAlign: 'center' }}>
-                                            Получит {formatAmount(transferedAmount, transferTo.currency)}
+                                            {t('accounts.willReceive', { amount: formatAmount(transferedAmount, transferTo.currency) })}
                                         </Text>
                                     )}
                                 </View>
@@ -793,15 +801,15 @@ export default function AccountsScreen() {
 
                             {transferFrom && transferTo && transferFrom.currency === transferTo.currency && parseFloat(transferAmount) > 0 && (
                                 <Text style={{ color: '#22c55e', fontSize: 14, marginBottom: 16, textAlign: 'center' }}>
-                                    Получит {formatAmount(parseFloat(transferAmount), transferTo.currency)}
+                                    {t('accounts.willReceive', { amount: formatAmount(parseFloat(transferAmount), transferTo.currency) })}
                                 </Text>
                             )}
 
-                            <Label>Заметка (необязательно)</Label>
-                            <TextInput style={inputStyle} placeholder="За что…" placeholderTextColor="#4b5563" value={transferNote} onChangeText={setTransferNote} />
+                            <Label>{t('accounts.transferNote')}</Label>
+                            <TextInput style={[inputStyle, { backgroundColor: colors.bgTertiary, borderColor: colors.borderLight, color: colors.textPrimary }]} placeholder={t('accounts.transferPlaceholder')} placeholderTextColor={colors.textDisabled} value={transferNote} onChangeText={setTransferNote} />
 
                             <PrimaryButton
-                                label={transferSaving ? 'Выполняется…' : 'Перевести'}
+                                label={transferSaving ? t('accounts.executing') : t('accounts.doTransfer')}
                                 onPress={handleTransfer}
                                 disabled={transferSaving || !transferAmount || parseFloat(transferAmount) <= 0 || !transferTo}
                             />
@@ -816,26 +824,29 @@ export default function AccountsScreen() {
 // ─── Small reusable pieces ────────────────────────────────────────────────────
 
 function MiniAccountBadge({ account, label }: { account: Account | null; label: string }) {
+    const { colors } = useTheme();
     if (!account) return null;
     const IC = ICON_MAP[account.icon ?? 'CreditCard'] ?? CreditCard;
     const col = account.color ?? '#3b82f6';
     return (
         <View style={{ flex: 1 }}>
-            <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 6 }}>{label}</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 6 }}>{label}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: col + '22', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 }}>
                 <IC color={col} size={16} />
-                <Text style={{ color: '#fff', marginLeft: 6, fontSize: 13, fontWeight: '600' }}>{account.name}</Text>
+                <Text style={{ color: colors.textPrimary, marginLeft: 6, fontSize: 13, fontWeight: '600' }}>{account.name}</Text>
             </View>
         </View>
     );
 }
 
 function SheetHandle() {
-    return <View style={{ width: 40, height: 4, backgroundColor: '#374151', borderRadius: 2, alignSelf: 'center', marginBottom: 20 }} />;
+    const { colors } = useTheme();
+    return <View style={{ width: 40, height: 4, backgroundColor: colors.borderLight, borderRadius: 2, alignSelf: 'center', marginBottom: 20 }} />;
 }
 
 function Label({ children }: { children: React.ReactNode }) {
-    return <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8 }}>{children}</Text>;
+    const { colors } = useTheme();
+    return <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 8 }}>{children}</Text>;
 }
 
 function PrimaryButton({ label, onPress, disabled, color = '#2563eb' }: {
@@ -852,7 +863,6 @@ function PrimaryButton({ label, onPress, disabled, color = '#2563eb' }: {
 // ─── Sheet / input styles ─────────────────────────────────────────────────────
 
 const sheetStyle = {
-    backgroundColor: '#111827',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingHorizontal: 24,
@@ -862,19 +872,15 @@ const sheetStyle = {
 } as const;
 
 const titleStyle = {
-    color: '#fff',
     fontSize: 20,
     fontWeight: '700',
 } as const;
 
 const inputStyle = {
-    backgroundColor: '#1f2937',
     borderWidth: 1,
-    borderColor: '#374151',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    color: '#fff',
     fontSize: 16,
     marginBottom: 20,
 } as const;

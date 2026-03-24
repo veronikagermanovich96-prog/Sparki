@@ -320,7 +320,7 @@ function GoalCard({ goal }) {
 export default function AnalyticsScreen() {
   const [tab, setTab] = useState("overview");
   const [period, setPeriod] = useState("month");
-  const [periodIndex, setPeriodIndex] = useState(0);
+  const [/* periodIndex */, setPeriodIndex] = useState(0); // eslint-disable-line no-unused-vars
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {

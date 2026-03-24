@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 
 const Icon = ({ name, size = 20, color = "currentColor" }) => {
   const icons = {
@@ -77,6 +77,7 @@ function useCounter(target, duration, trigger) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target, trigger]);
   return v;
 }

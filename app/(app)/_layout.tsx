@@ -2,10 +2,14 @@ import { Tabs } from 'expo-router';
 import { BarChart2, Home, LineChart, Settings, Tag, Wallet } from 'lucide-react-native';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { configureNotifications, loadNotifSettings, checkAndNotify } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
+import { useTheme } from '@/context/ThemeContext';
 
 export default function AppLayout() {
+    const { colors } = useTheme();
+    const { t } = useTranslation();
     useEffect(() => {
         configureNotifications();
         let lastCheck = 0;
@@ -27,55 +31,55 @@ export default function AppLayout() {
 
     return (
         <Tabs
-            screenOptions={{
+            screenOptions={() => ({
                 headerShown: false,
                 tabBarStyle: {
-                    backgroundColor: '#030712', // gray-950
-                    borderTopColor: '#1f2937', // gray-800
+                    backgroundColor: colors.tabBar,
+                    borderTopColor: colors.tabBarBorder,
                 },
-                tabBarActiveTintColor: '#ffffff',
-                tabBarInactiveTintColor: '#6b7280', // gray-500
-            }}
+                tabBarActiveTintColor: colors.textPrimary,
+                tabBarInactiveTintColor: colors.textMuted,
+            })}
         >
             <Tabs.Screen
                 name="index"
                 options={{
-                    title: 'Главная',
+                    title: t('tabs.home'),
                     tabBarIcon: ({ color }) => <Home color={color} size={24} />,
                 }}
             />
             <Tabs.Screen
                 name="transactions/index"
                 options={{
-                    title: 'Транзакции',
+                    title: t('tabs.transactions'),
                     tabBarIcon: ({ color }) => <LineChart color={color} size={24} />,
                 }}
             />
             <Tabs.Screen
                 name="accounts"
                 options={{
-                    title: 'Счета',
+                    title: t('tabs.accounts'),
                     tabBarIcon: ({ color }) => <Wallet color={color} size={24} />,
                 }}
             />
             <Tabs.Screen
                 name="cards/index"
                 options={{
-                    title: 'Карты',
+                    title: t('tabs.cards'),
                     tabBarIcon: ({ color }) => <Tag color={color} size={24} />,
                 }}
             />
             <Tabs.Screen
                 name="analytics"
                 options={{
-                    title: 'Аналитика',
+                    title: t('tabs.analytics'),
                     tabBarIcon: ({ color }) => <BarChart2 color={color} size={24} />,
                 }}
             />
             <Tabs.Screen
                 name="settings"
                 options={{
-                    title: 'Настройки',
+                    title: t('tabs.settings'),
                     tabBarIcon: ({ color }) => <Settings color={color} size={24} />,
                 }}
             />

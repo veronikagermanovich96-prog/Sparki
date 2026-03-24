@@ -1,4 +1,5 @@
 import { formatAmount } from '@/constants/currencies';
+import { useTheme } from '@/context/ThemeContext';
 import { Transaction } from '@/types';
 import { format, getDaysInMonth, isFuture, isToday, startOfMonth } from 'date-fns';
 import React, { useMemo } from 'react';
@@ -12,6 +13,7 @@ interface DailyDotsProps {
 }
 
 export const DailyDots: React.FC<DailyDotsProps> = ({ period, dailyLimit, transactions }) => {
+    const { colors } = useTheme();
     const currentDate = new Date();
     const daysInMonth = getDaysInMonth(currentDate);
     const startMonth = startOfMonth(currentDate);
@@ -49,7 +51,7 @@ export const DailyDots: React.FC<DailyDotsProps> = ({ period, dailyLimit, transa
                 color = '#f97316'; // Orange
             } else if (spent === 0 && !isToday(dateObj)) {
                 state = 'filled';
-                color = '#1f2937'; // gray-800
+                color = colors.bgTertiary; // gray-800
             }
 
             if (isToday(dateObj) && spent === 0) {

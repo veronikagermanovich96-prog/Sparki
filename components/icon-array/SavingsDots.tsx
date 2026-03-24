@@ -14,7 +14,7 @@ export const SavingsDots: React.FC<SavingsDotsProps> = ({
     targetAmount,
 }) => {
     const dots: DotData[] = Array.from({ length: 100 }).map((_, i) => {
-        const totalCurrent = currentBalance + interestEarned;
+        // const totalCurrent = currentBalance + interestEarned;
         const currentPercent = (currentBalance / targetAmount) * 100;
         const interestPercent = (interestEarned / targetAmount) * 100;
 

@@ -3,11 +3,11 @@ import {
     Banknote, Bike, Bitcoin, BookOpen, Briefcase, Building2, Bus,
     Camera, Car, Check, ChevronDown, CircleDollarSign, Coffee, Coins, CreditCard, Images,
     Droplets, Dumbbell, Film, Flag, Flame, Fuel, Gift, Globe, GraduationCap,
-    Heart, Home, Landmark, Laptop, MapPin, Minus, Monitor, Music,
+    Heart, Home, Landmark, MapPin, Monitor, Music,
     Package, PawPrint, Pencil, Pill, Plane, Plus, Receipt, Scissors,
-    Repeat, Search, ShoppingBag, ShoppingCart, Shirt, Sofa, Star,
+    Search, ShoppingBag, ShoppingCart, Shirt, Sofa, Star,
     Tag, Train, TrendingDown, TrendingUp, Trophy, Tv, Utensils,
-    SlidersHorizontal, Wallet, Wifi, X, Zap,
+    Wallet, Wifi, X, Zap,
 } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -19,8 +19,10 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
-import { formatAmount } from '@/constants/currencies';
+import { formatAmount, CURRENCIES } from '@/constants/currencies';
 import { ExpenseType } from '@/types';
+import { useTheme } from '@/context/ThemeContext';
+import { useTranslation } from 'react-i18next';
 
 // ─── Icon map ─────────────────────────────────────────────────────────────────
 
@@ -49,65 +51,7 @@ const CAT_ICONS = ICON_KEYS.reduce<Record<string, IconComp>>((acc, k) => {
 
 const COLORS = ['#3b82f6', '#22c55e', '#a855f7', '#ef4444', '#f97316', '#eab308', '#14b8a6', '#ec4899', '#6b7280', '#f43f5e'];
 
-const CURRENCY_LIST: { code: string; name: string }[] = [
-    { code: 'EUR', name: 'Евро' },
-    { code: 'USD', name: 'Доллар США' },
-    { code: 'RUB', name: 'Рубль' },
-    { code: 'GBP', name: 'Фунт стерлингов' },
-    { code: 'CNY', name: 'Юань' },
-    { code: 'JPY', name: 'Иена' },
-    { code: 'CHF', name: 'Швейцарский франк' },
-    { code: 'AED', name: 'Дирхам ОАЭ' },
-    { code: 'CAD', name: 'Канадский доллар' },
-    { code: 'AUD', name: 'Австралийский доллар' },
-    { code: 'NZD', name: 'Новозеландский доллар' },
-    { code: 'SEK', name: 'Шведская крона' },
-    { code: 'NOK', name: 'Норвежская крона' },
-    { code: 'DKK', name: 'Датская крона' },
-    { code: 'PLN', name: 'Злотый' },
-    { code: 'CZK', name: 'Чешская крона' },
-    { code: 'HUF', name: 'Форинт' },
-    { code: 'RON', name: 'Румынский лей' },
-    { code: 'BGN', name: 'Болгарский лев' },
-    { code: 'ISK', name: 'Исландская крона' },
-    { code: 'TRY', name: 'Турецкая лира' },
-    { code: 'ILS', name: 'Израильский шекель' },
-    { code: 'KRW', name: 'Вона' },
-    { code: 'INR', name: 'Индийская рупия' },
-    { code: 'SGD', name: 'Сингапурский доллар' },
-    { code: 'HKD', name: 'Гонконгский доллар' },
-    { code: 'TWD', name: 'Тайваньский доллар' },
-    { code: 'THB', name: 'Тайский бат' },
-    { code: 'MYR', name: 'Ринггит' },
-    { code: 'IDR', name: 'Индонезийская рупия' },
-    { code: 'PHP', name: 'Филиппинское песо' },
-    { code: 'VND', name: 'Донг' },
-    { code: 'SAR', name: 'Саудовский риял' },
-    { code: 'QAR', name: 'Катарский риял' },
-    { code: 'KWD', name: 'Кувейтский динар' },
-    { code: 'BHD', name: 'Бахрейнский динар' },
-    { code: 'OMR', name: 'Оманский риял' },
-    { code: 'EGP', name: 'Египетский фунт' },
-    { code: 'ZAR', name: 'Южноафриканский рэнд' },
-    { code: 'NGN', name: 'Нигерийская найра' },
-    { code: 'KES', name: 'Кенийский шиллинг' },
-    { code: 'MAD', name: 'Марокканский дирхам' },
-    { code: 'BRL', name: 'Бразильский реал' },
-    { code: 'MXN', name: 'Мексиканское песо' },
-    { code: 'ARS', name: 'Аргентинское песо' },
-    { code: 'CLP', name: 'Чилийское песо' },
-    { code: 'COP', name: 'Колумбийское песо' },
-    { code: 'PEN', name: 'Перуанский соль' },
-    { code: 'UAH', name: 'Гривна' },
-    { code: 'KZT', name: 'Тенге' },
-    { code: 'GEL', name: 'Грузинский лари' },
-    { code: 'AMD', name: 'Армянский драм' },
-    { code: 'AZN', name: 'Азербайджанский манат' },
-    { code: 'BYN', name: 'Белорусский рубль' },
-    { code: 'UZS', name: 'Узбекский сум' },
-    { code: 'PKR', name: 'Пакистанская рупия' },
-    { code: 'BDT', name: 'Бангладешская така' },
-];
+const CURRENCY_LIST = CURRENCIES;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -198,6 +142,9 @@ export default function TransactionForm({
     editingTx, initialType, initialAccountId,
     onCategoriesChanged,
 }: TransactionFormProps) {
+
+    const { colors } = useTheme();
+    const { t } = useTranslation();
 
     // ── Form state ───────────────────────────────────────────────────────────
     const [formType,       setFormType]       = useState<'income' | 'expense' | 'transfer'>('expense');
@@ -295,6 +242,7 @@ export default function TransactionForm({
         setCatFormVisible(false);
         setCurrencyOpen(false);
         setCurrencySearch('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [visible, editingTx]);
 
     // ── Derived ──────────────────────────────────────────────────────────────
@@ -308,6 +256,7 @@ export default function TransactionForm({
     useEffect(() => {
         if (!showRate || !visible) return;
         fetchRate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [formCurrency, baseCurrency, visible]);
 
     async function fetchRate() {
@@ -432,11 +381,11 @@ export default function TransactionForm({
         let result: ImagePicker.ImagePickerResult;
         if (source === 'camera') {
             const { status } = await ImagePicker.requestCameraPermissionsAsync();
-            if (status !== 'granted') { Alert.alert('Нет доступа к камере', 'Разрешите доступ в настройках'); return; }
+            if (status !== 'granted') { Alert.alert(t('transactionForm.noCameraAccess'), t('transactionForm.noCameraMsg')); return; }
             result = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.8, allowsEditing: true, aspect: [4, 3] });
         } else {
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (status !== 'granted') { Alert.alert('Нет доступа к галерее', 'Разрешите доступ в настройках'); return; }
+            if (status !== 'granted') { Alert.alert(t('transactionForm.noGalleryAccess'), t('transactionForm.noGalleryMsg')); return; }
             result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.8, allowsEditing: true, aspect: [4, 3] });
         }
         if (result.canceled || !result.assets[0]) return;
@@ -452,14 +401,14 @@ export default function TransactionForm({
                 .from('receipts')
                 .upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: true });
             if (error) {
-                Alert.alert('Ошибка загрузки', error.message);
+                Alert.alert(t('transactionForm.uploadError'), error.message);
                 setReceiptUri(null);
             } else {
                 const { data: { publicUrl } } = supabase.storage.from('receipts').getPublicUrl(data.path);
                 setReceiptUploadUrl(publicUrl);
             }
         } catch (e: any) {
-            Alert.alert('Ошибка', e.message);
+            Alert.alert(t('common.error'), e.message);
             setReceiptUri(null);
         }
         setUploadingReceipt(false);
@@ -506,10 +455,10 @@ export default function TransactionForm({
     }
 
     async function deleteCategory(cat: CategoryLight) {
-        Alert.alert(`Удалить «${cat.name}»?`, 'Транзакции с этой категорией останутся.', [
-            { text: 'Отмена', style: 'cancel' },
+        Alert.alert(t('transactionForm.deleteCategory', { name: cat.name }), t('transactionForm.deleteCategoryMsg'), [
+            { text: t('common.cancel'), style: 'cancel' },
             {
-                text: 'Удалить', style: 'destructive',
+                text: t('common.delete'), style: 'destructive',
                 onPress: async () => {
                     await supabase.from('categories').update({ is_hidden: true }).eq('id', cat.id);
                     await reloadCategories(householdId);
@@ -555,7 +504,7 @@ export default function TransactionForm({
                     household_id: householdId,
                     account_id: formAccountId,
                     category_id: formCategoryId || null,
-                    name: localCategories.find(c => c.id === formCategoryId)?.name ?? 'Платёж',
+                    name: localCategories.find(c => c.id === formCategoryId)?.name ?? t('transactionForm.paymentNote'),
                     type: formType,
                     expense_type: localCategories.find(c => c.id === formCategoryId)?.expense_type || null,
                     amount,
@@ -607,47 +556,47 @@ export default function TransactionForm({
             onClose();
         }}>
             <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                <View style={{ backgroundColor: '#111827', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40, maxHeight: '95%' }}>
+                <View style={{ backgroundColor: colors.bgSecondary, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40, maxHeight: '95%' }}>
 
                     {catFormVisible ? (
                         /* ══ Category sub-form ══ */
                         <>
                             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
                                 <TouchableOpacity onPress={() => setCatFormVisible(false)} hitSlop={10} style={{ marginRight: 12 }}>
-                                    <ArrowLeft color="#6b7280" size={22} />
+                                    <ArrowLeft color={colors.textMuted} size={22} />
                                 </TouchableOpacity>
-                                <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', flex: 1 }}>Новая категория</Text>
+                                <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700', flex: 1 }}>{t('transactionForm.newCategoryTitle')}</Text>
                                 <TouchableOpacity onPress={() => setCatFormVisible(false)} hitSlop={10}>
-                                    <X color="#6b7280" size={20} />
+                                    <X color={colors.textMuted} size={20} />
                                 </TouchableOpacity>
                             </View>
 
                             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                                 {/* Name */}
-                                <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 8 }}>НАЗВАНИЕ</Text>
+                                <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 8 }}>{t('transactionForm.categoryNameLabel')}</Text>
                                 <TextInput value={catName} onChangeText={setCatName}
-                                    placeholder={formType === 'income' ? 'Например, Фриланс' : 'Например, Рестораны'}
-                                    placeholderTextColor="#4b5563" autoFocus
-                                    style={{ backgroundColor: '#1f2937', color: '#fff', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 20, fontSize: 15 }}
+                                    placeholder={formType === 'income' ? t('transactionForm.categoryNamePlaceholderIncome') : t('transactionForm.categoryNamePlaceholderExpense')}
+                                    placeholderTextColor={colors.textDisabled} autoFocus
+                                    style={{ backgroundColor: colors.bgTertiary, color: colors.textPrimary, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 20, fontSize: 15 }}
                                 />
 
                                 {/* Icon grid */}
-                                <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 10 }}>ИКОНКА</Text>
+                                <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 10 }}>{t('transactionForm.categoryIcon')}</Text>
                                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
                                     {ICON_KEYS.map(key => {
                                         const Ic     = CAT_ICONS[key];
                                         const active = catIcon === key;
                                         return (
                                             <TouchableOpacity key={key} onPress={() => setCatIcon(key)} activeOpacity={0.7}
-                                                style={{ width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: active ? catColor : '#374151', backgroundColor: active ? catColor + '22' : '#1f2937' }}>
-                                                <Ic color={active ? catColor : '#6b7280'} size={22} />
+                                                style={{ width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: active ? catColor : colors.borderLight, backgroundColor: active ? catColor + '22' : colors.bgTertiary }}>
+                                                <Ic color={active ? catColor : colors.textMuted} size={22} />
                                             </TouchableOpacity>
                                         );
                                     })}
                                 </View>
 
                                 {/* Color */}
-                                <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 10 }}>ЦВЕТ</Text>
+                                <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 10 }}>{t('transactionForm.categoryColor')}</Text>
                                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
                                     {COLORS.map(c => (
                                         <TouchableOpacity key={c} onPress={() => setCatColor(c)}
@@ -660,20 +609,20 @@ export default function TransactionForm({
                                 {/* Expense type */}
                                 {formType === 'expense' && (
                                     <>
-                                        <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 10 }}>ТИП РАСХОДА</Text>
+                                        <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 10 }}>{t('transactionForm.categoryExpenseType')}</Text>
                                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
                                             {([
-                                                { value: 'base',        label: '🏠 Базовые',      desc: 'Жильё, ЖКУ, связь, кредиты' },
-                                                { value: 'everyday',    label: '🛒 Повседневные',  desc: 'Еда, транспорт, бытовые' },
-                                                { value: 'development', label: '📈 Развитие',      desc: 'Здоровье, образование, спорт' },
-                                                { value: 'forself',     label: '🎉 Для себя',     desc: 'Развлечения, хобби, подарки' },
-                                                { value: 'work',        label: '💼 Рабочие',      desc: 'Инструменты, офис' },
-                                                { value: 'other',       label: '📋 Прочее',       desc: 'Штрафы, налоги' },
+                                                { value: 'base',        label: t('settings.expTypeBase'),        desc: t('settings.expTypeBaseDesc') },
+                                                { value: 'everyday',    label: t('settings.expTypeEveryday'),    desc: t('settings.expTypeEverydayDesc') },
+                                                { value: 'development', label: t('settings.expTypeDevelopment'), desc: t('settings.expTypeDevelopmentDesc') },
+                                                { value: 'forself',     label: t('settings.expTypeForSelf'),     desc: t('settings.expTypeForSelfDesc') },
+                                                { value: 'work',        label: t('settings.expTypeWork'),        desc: t('settings.expTypeWorkDesc') },
+                                                { value: 'other',       label: t('settings.expTypeOther'),       desc: t('settings.expTypeOtherDesc') },
                                             ]).map(opt => (
                                                 <TouchableOpacity key={opt.value} onPress={() => setCatExpType(opt.value as any)} activeOpacity={0.8}
-                                                    style={{ width: '48%', padding: 10, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', borderColor: catExpType === opt.value ? '#2563eb' : '#374151', backgroundColor: catExpType === opt.value ? '#172554' : '#1f2937' }}>
-                                                    <Text style={{ color: catExpType === opt.value ? '#fff' : '#9ca3af', fontSize: 13, fontWeight: '600', textAlign: 'center' }}>{opt.label}</Text>
-                                                    <Text style={{ color: '#4b5563', fontSize: 10, textAlign: 'center', marginTop: 2 }}>{opt.desc}</Text>
+                                                    style={{ width: '48%', padding: 10, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', borderColor: catExpType === opt.value ? '#2563eb' : colors.borderLight, backgroundColor: catExpType === opt.value ? '#172554' : colors.bgTertiary }}>
+                                                    <Text style={{ color: catExpType === opt.value ? '#fff' : colors.textSecondary, fontSize: 13, fontWeight: '600', textAlign: 'center' }}>{opt.label}</Text>
+                                                    <Text style={{ color: colors.textDisabled, fontSize: 10, textAlign: 'center', marginTop: 2 }}>{opt.desc}</Text>
                                                 </TouchableOpacity>
                                             ))}
                                         </View>
@@ -681,10 +630,10 @@ export default function TransactionForm({
                                 )}
 
                                 <TouchableOpacity onPress={saveCat} disabled={savingCat || !catName.trim() || (formType === 'expense' && !catExpType)}
-                                    style={{ paddingVertical: 16, borderRadius: 20, alignItems: 'center', backgroundColor: savingCat || !catName.trim() || (formType === 'expense' && !catExpType) ? '#374151' : '#2563eb', marginBottom: 8 }}>
+                                    style={{ paddingVertical: 16, borderRadius: 20, alignItems: 'center', backgroundColor: savingCat || !catName.trim() || (formType === 'expense' && !catExpType) ? colors.borderLight : '#2563eb', marginBottom: 8 }}>
                                     {savingCat
                                         ? <ActivityIndicator color="#fff" />
-                                        : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Создать категорию</Text>
+                                        : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{t('transactionForm.createCategory')}</Text>
                                     }
                                 </TouchableOpacity>
                             </ScrollView>
@@ -693,38 +642,38 @@ export default function TransactionForm({
                         /* ══ Transaction form ══ */
                         <>
                             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                                <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>
-                                    {editingTx ? 'Редактировать' : 'Новая транзакция'}
+                                <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: '700' }}>
+                                    {editingTx ? t('transactionForm.editTitle') : t('transactionForm.newTitle')}
                                 </Text>
                                 <TouchableOpacity onPress={onClose} hitSlop={10}>
-                                    <X color="#6b7280" size={22} />
+                                    <X color={colors.textMuted} size={22} />
                                 </TouchableOpacity>
                             </View>
 
                             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
                                 {/* Type switcher */}
-                                <View style={{ flexDirection: 'row', backgroundColor: '#1f2937', borderRadius: 14, padding: 4, marginBottom: 20 }}>
+                                <View style={{ flexDirection: 'row', backgroundColor: colors.bgTertiary, borderRadius: 14, padding: 4, marginBottom: 20 }}>
                                     {([
-                                        { label: 'Расход',  value: 'expense'  as const, color: '#ef4444' },
-                                        { label: 'Доход',   value: 'income'   as const, color: '#22c55e' },
-                                        { label: 'Перевод', value: 'transfer' as const, color: '#6b7280' },
-                                    ]).map(t => (
-                                        <TouchableOpacity key={t.value} onPress={() => onFormTypeChange(t.value)} activeOpacity={0.8}
-                                            style={{ flex: 1, paddingVertical: 10, borderRadius: 11, alignItems: 'center', backgroundColor: formType === t.value ? '#0f172a' : 'transparent' }}>
-                                            <Text style={{ color: formType === t.value ? t.color : '#6b7280', fontSize: 14, fontWeight: '600' }}>{t.label}</Text>
+                                        { label: t('transactionForm.expense'),  value: 'expense'  as const, color: '#ef4444' },
+                                        { label: t('transactionForm.income'),   value: 'income'   as const, color: '#22c55e' },
+                                        { label: t('transactionForm.transfer'), value: 'transfer' as const, color: colors.textMuted },
+                                    ]).map(tp => (
+                                        <TouchableOpacity key={tp.value} onPress={() => onFormTypeChange(tp.value)} activeOpacity={0.8}
+                                            style={{ flex: 1, paddingVertical: 10, borderRadius: 11, alignItems: 'center', backgroundColor: formType === tp.value ? '#0f172a' : 'transparent' }}>
+                                            <Text style={{ color: formType === tp.value ? tp.color : colors.textMuted, fontSize: 14, fontWeight: '600' }}>{tp.label}</Text>
                                         </TouchableOpacity>
                                     ))}
                                 </View>
 
                                 {/* Account */}
-                                <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 8 }}>{formType === 'transfer' ? 'ОТКУДА' : 'СЧЁТ'}</Text>
+                                <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 8 }}>{formType === 'transfer' ? t('transactionForm.fromAccount') : t('transactionForm.account')}</Text>
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={{ marginBottom: 16 }}>
                                     {accounts.map(acc => (
                                         <TouchableOpacity key={acc.id} onPress={() => onAccountChange(acc.id)} activeOpacity={0.8}
-                                            style={{ paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, marginRight: 8, borderWidth: 1.5, borderColor: formAccountId === acc.id ? (acc.color ?? '#2563eb') : '#374151', backgroundColor: formAccountId === acc.id ? '#1e293b' : '#1f2937' }}>
-                                            <Text style={{ color: formAccountId === acc.id ? '#fff' : '#9ca3af', fontSize: 13, fontWeight: '600' }} numberOfLines={1}>{acc.name}</Text>
-                                            <Text style={{ color: '#4b5563', fontSize: 11, marginTop: 2 }}>{formatAmount(acc.balance, acc.currency)}</Text>
+                                            style={{ paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, marginRight: 8, borderWidth: 1.5, borderColor: formAccountId === acc.id ? (acc.color ?? '#2563eb') : colors.borderLight, backgroundColor: formAccountId === acc.id ? '#1e293b' : colors.bgTertiary }}>
+                                            <Text style={{ color: formAccountId === acc.id ? '#fff' : colors.textSecondary, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>{acc.name}</Text>
+                                            <Text style={{ color: colors.textDisabled, fontSize: 11, marginTop: 2 }}>{formatAmount(acc.balance, acc.currency)}</Text>
                                         </TouchableOpacity>
                                     ))}
                                 </ScrollView>
@@ -732,13 +681,13 @@ export default function TransactionForm({
                                 {/* To account (transfer) */}
                                 {formType === 'transfer' && (
                                     <>
-                                        <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 8 }}>КУДА</Text>
+                                        <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 8 }}>{t('transactionForm.toAccount')}</Text>
                                         <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={{ marginBottom: 16 }}>
                                             {accounts.filter(a => a.id !== formAccountId).map(acc => (
                                                 <TouchableOpacity key={acc.id} onPress={() => setFormToAccId(acc.id)} activeOpacity={0.8}
-                                                    style={{ paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, marginRight: 8, borderWidth: 1.5, borderColor: formToAccId === acc.id ? (acc.color ?? '#2563eb') : '#374151', backgroundColor: formToAccId === acc.id ? '#1e293b' : '#1f2937' }}>
-                                                    <Text style={{ color: formToAccId === acc.id ? '#fff' : '#9ca3af', fontSize: 13, fontWeight: '600' }} numberOfLines={1}>{acc.name}</Text>
-                                                    <Text style={{ color: '#4b5563', fontSize: 11, marginTop: 2 }}>{formatAmount(acc.balance, acc.currency)}</Text>
+                                                    style={{ paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, marginRight: 8, borderWidth: 1.5, borderColor: formToAccId === acc.id ? (acc.color ?? '#2563eb') : colors.borderLight, backgroundColor: formToAccId === acc.id ? '#1e293b' : colors.bgTertiary }}>
+                                                    <Text style={{ color: formToAccId === acc.id ? '#fff' : colors.textSecondary, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>{acc.name}</Text>
+                                                    <Text style={{ color: colors.textDisabled, fontSize: 11, marginTop: 2 }}>{formatAmount(acc.balance, acc.currency)}</Text>
                                                 </TouchableOpacity>
                                             ))}
                                         </ScrollView>
@@ -748,7 +697,7 @@ export default function TransactionForm({
                                 {/* Category */}
                                 {formType !== 'transfer' && (
                                     <>
-                                        <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 8 }}>КАТЕГОРИЯ</Text>
+                                        <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 8 }}>{t('transactionForm.category')}</Text>
                                         <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={{ marginBottom: 16 }}>
                                             {formCats.map(cat => {
                                                 const active  = formCategoryId === cat.id;
@@ -759,24 +708,24 @@ export default function TransactionForm({
                                                     <TouchableOpacity key={cat.id}
                                                         onPress={() => onCatSelect(cat.id)}
                                                         onLongPress={() => !cat.is_system && Alert.alert(cat.name, undefined, [
-                                                            { text: 'Удалить', style: 'destructive', onPress: () => deleteCategory(cat) },
-                                                            { text: 'Отмена', style: 'cancel' },
+                                                            { text: t('common.delete'), style: 'destructive', onPress: () => deleteCategory(cat) },
+                                                            { text: t('common.cancel'), style: 'cancel' },
                                                         ])}
                                                         delayLongPress={400}
                                                         activeOpacity={0.8}
-                                                        style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, marginRight: 8, borderWidth: 1.5, borderColor: active ? accent : '#1f2937', backgroundColor: active ? accentBg : '#1f2937' }}>
+                                                        style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, marginRight: 8, borderWidth: 1.5, borderColor: active ? accent : colors.bgTertiary, backgroundColor: active ? accentBg : colors.bgTertiary }}>
                                                         {Ic && <Ic color={active ? '#fff' : (cat.color ?? '#6b7280')} size={14} />}
                                                         {!cat.is_system && (
                                                             <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: cat.color ?? '#6b7280' }} />
                                                         )}
-                                                        <Text style={{ color: active ? '#fff' : '#9ca3af', fontSize: 13 }}>{cat.name}</Text>
+                                                        <Text style={{ color: active ? '#fff' : colors.textSecondary, fontSize: 13 }}>{cat.name}</Text>
                                                     </TouchableOpacity>
                                                 );
                                             })}
                                             <TouchableOpacity onPress={openCatForm} activeOpacity={0.8}
-                                                style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: '#374151', borderStyle: 'dashed' }}>
-                                                <Plus color="#4b5563" size={13} />
-                                                <Text style={{ color: '#6b7280', fontSize: 13 }}>Новая</Text>
+                                                style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: colors.borderLight, borderStyle: 'dashed' }}>
+                                                <Plus color={colors.textDisabled} size={13} />
+                                                <Text style={{ color: colors.textMuted, fontSize: 13 }}>{t('transactionForm.newCategory')}</Text>
                                             </TouchableOpacity>
                                         </ScrollView>
                                     </>
@@ -785,7 +734,7 @@ export default function TransactionForm({
                                 {/* Tags */}
                                 {formCategoryId && formType !== 'transfer' && (
                                     <>
-                                        <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 8 }}>ТЕГ</Text>
+                                        <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 8 }}>{t('transactionForm.tag')}</Text>
                                         <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={{ marginBottom: 16 }}>
                                             {categoryTags.map(tag => (
                                                 editingTagId === tag.id ? (
@@ -797,7 +746,7 @@ export default function TransactionForm({
                                                         onBlur={updateTag}
                                                         autoFocus
                                                         returnKeyType="done"
-                                                        style={{ backgroundColor: '#1f2937', color: '#fff', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, fontSize: 13, borderWidth: 1.5, borderColor: '#f59e0b', minWidth: 90, marginRight: 6 }}
+                                                        style={{ backgroundColor: colors.bgTertiary, color: colors.textPrimary, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, fontSize: 13, borderWidth: 1.5, borderColor: '#f59e0b', minWidth: 90, marginRight: 6 }}
                                                     />
                                                 ) : (
                                                     <TouchableOpacity key={tag.id}
@@ -805,8 +754,8 @@ export default function TransactionForm({
                                                         onLongPress={() => setTagSheet(tag)}
                                                         delayLongPress={400}
                                                         activeOpacity={0.8}
-                                                        style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, marginRight: 6, borderWidth: 1.5, borderColor: selectedTagId === tag.id ? '#2563eb' : '#374151', backgroundColor: selectedTagId === tag.id ? '#172554' : '#1f2937' }}>
-                                                        <Text style={{ color: selectedTagId === tag.id ? '#60a5fa' : '#9ca3af', fontSize: 13 }}>{tag.name}</Text>
+                                                        style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, marginRight: 6, borderWidth: 1.5, borderColor: selectedTagId === tag.id ? '#2563eb' : colors.borderLight, backgroundColor: selectedTagId === tag.id ? '#172554' : colors.bgTertiary }}>
+                                                        <Text style={{ color: selectedTagId === tag.id ? '#60a5fa' : colors.textSecondary, fontSize: 13 }}>{tag.name}</Text>
                                                     </TouchableOpacity>
                                                 )
                                             ))}
@@ -817,16 +766,16 @@ export default function TransactionForm({
                                                     onSubmitEditing={addTag}
                                                     onBlur={() => { if (!newTagText.trim()) setAddingTag(false); }}
                                                     autoFocus
-                                                    placeholder="Новый тег…"
-                                                    placeholderTextColor="#4b5563"
+                                                    placeholder={t('transactionForm.newTag')}
+                                                    placeholderTextColor={colors.textDisabled}
                                                     returnKeyType="done"
-                                                    style={{ backgroundColor: '#1f2937', color: '#fff', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, fontSize: 13, borderWidth: 1.5, borderColor: '#2563eb', minWidth: 110 }}
+                                                    style={{ backgroundColor: colors.bgTertiary, color: colors.textPrimary, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, fontSize: 13, borderWidth: 1.5, borderColor: '#2563eb', minWidth: 110 }}
                                                 />
                                             ) : (
                                                 <TouchableOpacity onPress={() => setAddingTag(true)} activeOpacity={0.8}
-                                                    style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, borderWidth: 1.5, borderColor: '#374151', borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 4 }}>
-                                                    <Plus color="#4b5563" size={13} />
-                                                    <Text style={{ color: '#6b7280', fontSize: 12 }}>Тег</Text>
+                                                    style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, borderWidth: 1.5, borderColor: colors.borderLight, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 4 }}>
+                                                    <Plus color={colors.textDisabled} size={13} />
+                                                    <Text style={{ color: colors.textMuted, fontSize: 12 }}>{t('transactionForm.tagLabel')}</Text>
                                                 </TouchableOpacity>
                                             )}
                                         </ScrollView>
@@ -834,18 +783,18 @@ export default function TransactionForm({
                                 )}
 
                                 {/* Amount + Currency */}
-                                <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 8 }}>СУММА</Text>
+                                <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 8 }}>{t('transactionForm.amount')}</Text>
                                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 8 }}>
                                     <TextInput value={formAmount} onChangeText={setFormAmount}
-                                        keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#4b5563"
-                                        style={{ flex: 1, backgroundColor: '#1f2937', color: '#fff', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 24, fontWeight: '700' }}
+                                        keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.textDisabled}
+                                        style={{ flex: 1, backgroundColor: colors.bgTertiary, color: colors.textPrimary, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 24, fontWeight: '700' }}
                                     />
                                     <TouchableOpacity
                                         onPress={() => setCurrencyOpen(v => !v)}
                                         activeOpacity={0.8}
-                                        style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#1f2937', borderRadius: 12, paddingHorizontal: 16, borderWidth: 1.5, borderColor: currencyOpen ? '#2563eb' : '#374151', minWidth: 82 }}>
-                                        <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{formCurrency}</Text>
-                                        <ChevronDown color="#6b7280" size={15}
+                                        style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgTertiary, borderRadius: 12, paddingHorizontal: 16, borderWidth: 1.5, borderColor: currencyOpen ? '#2563eb' : colors.borderLight, minWidth: 82 }}>
+                                        <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '700' }}>{formCurrency}</Text>
+                                        <ChevronDown color={colors.textMuted} size={15}
                                             style={{ transform: [{ rotate: currencyOpen ? '180deg' : '0deg' }] }} />
                                     </TouchableOpacity>
                                 </View>
@@ -857,34 +806,34 @@ export default function TransactionForm({
                                         ? CURRENCY_LIST.filter(c => c.code.toLowerCase().includes(q) || c.name.toLowerCase().includes(q))
                                         : CURRENCY_LIST;
                                     return (
-                                        <View style={{ backgroundColor: '#1f2937', borderRadius: 14, marginBottom: 8, borderWidth: 1, borderColor: '#374151', overflow: 'hidden', maxHeight: 320 }}>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#374151' }}>
-                                                <Search color="#4b5563" size={15} />
+                                        <View style={{ backgroundColor: colors.bgTertiary, borderRadius: 14, marginBottom: 8, borderWidth: 1, borderColor: colors.borderLight, overflow: 'hidden', maxHeight: 320 }}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.borderLight }}>
+                                                <Search color={colors.textDisabled} size={15} />
                                                 <TextInput
                                                     value={currencySearch}
                                                     onChangeText={setCurrencySearch}
-                                                    placeholder="Поиск валюты…"
-                                                    placeholderTextColor="#4b5563"
+                                                    placeholder={t('transactionForm.searchCurrency')}
+                                                    placeholderTextColor={colors.textDisabled}
                                                     autoFocus
-                                                    style={{ flex: 1, color: '#fff', fontSize: 14, padding: 0 }}
+                                                    style={{ flex: 1, color: colors.textPrimary, fontSize: 14, padding: 0 }}
                                                 />
                                                 {currencySearch.length > 0 && (
                                                     <TouchableOpacity onPress={() => setCurrencySearch('')} hitSlop={8}>
-                                                        <X color="#4b5563" size={14} />
+                                                        <X color={colors.textDisabled} size={14} />
                                                     </TouchableOpacity>
                                                 )}
                                             </View>
                                             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                                                 {vis.length === 0 ? (
-                                                    <Text style={{ color: '#4b5563', fontSize: 14, textAlign: 'center', paddingVertical: 20 }}>Ничего не найдено</Text>
+                                                    <Text style={{ color: colors.textDisabled, fontSize: 14, textAlign: 'center', paddingVertical: 20 }}>{t('common.nothingFound')}</Text>
                                                 ) : vis.map((c, i) => (
                                                     <TouchableOpacity key={c.code}
                                                         onPress={() => { setFormCurrency(c.code); setCurrencyOpen(false); setCurrencySearch(''); }}
                                                         activeOpacity={0.7}
-                                                        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: i < vis.length - 1 ? 1 : 0, borderBottomColor: '#374151', backgroundColor: formCurrency === c.code ? '#172554' : 'transparent' }}>
+                                                        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: i < vis.length - 1 ? 1 : 0, borderBottomColor: colors.borderLight, backgroundColor: formCurrency === c.code ? '#172554' : 'transparent' }}>
                                                         <View>
                                                             <Text style={{ color: formCurrency === c.code ? '#fff' : '#e5e7eb', fontSize: 14, fontWeight: formCurrency === c.code ? '700' : '500' }}>{c.code}</Text>
-                                                            <Text style={{ color: '#6b7280', fontSize: 12, marginTop: 1 }}>{c.name}</Text>
+                                                            <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 1 }}>{c.name}</Text>
                                                         </View>
                                                         {formCurrency === c.code && <Check color="#2563eb" size={16} />}
                                                     </TouchableOpacity>
@@ -899,7 +848,7 @@ export default function TransactionForm({
                                 {showRate && (
                                     <View style={{ marginBottom: 16 }}>
                                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                                            <Text style={{ color: '#6b7280', fontSize: 12 }}>КУРС ({formCurrency} → {baseCurrency})</Text>
+                                            <Text style={{ color: colors.textMuted, fontSize: 12 }}>{t('transactionForm.exchangeRate', { from: formCurrency, to: baseCurrency })}</Text>
                                             <TouchableOpacity onPress={fetchRate} disabled={fetchingRate} hitSlop={8}
                                                 style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                                                 {fetchingRate
@@ -907,17 +856,17 @@ export default function TransactionForm({
                                                     : <TrendingUp color="#2563eb" size={14} />
                                                 }
                                                 <Text style={{ color: '#2563eb', fontSize: 12 }}>
-                                                    {fetchingRate ? 'Загрузка…' : 'Актуальный курс'}
+                                                    {fetchingRate ? t('common.loading') : t('transactionForm.actualRate')}
                                                 </Text>
                                             </TouchableOpacity>
                                         </View>
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                                             <TextInput value={formRate} onChangeText={setFormRate}
-                                                keyboardType="decimal-pad" placeholder="1.0000" placeholderTextColor="#4b5563"
-                                                style={{ flex: 1, backgroundColor: '#1f2937', color: '#fff', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15 }}
+                                                keyboardType="decimal-pad" placeholder="1.0000" placeholderTextColor={colors.textDisabled}
+                                                style={{ flex: 1, backgroundColor: colors.bgTertiary, color: colors.textPrimary, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15 }}
                                             />
                                             {formRate && formAmount && !isNaN(parseFloat(formRate)) && !isNaN(parseFloat(formAmount)) && (
-                                                <Text style={{ color: '#9ca3af', fontSize: 13 }}>
+                                                <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
                                                     = {formatAmount(parseFloat(formAmount) * parseFloat(formRate), baseCurrency)}
                                                 </Text>
                                             )}
@@ -926,17 +875,17 @@ export default function TransactionForm({
                                 )}
 
                                 {/* Date */}
-                                <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 8 }}>ДАТА</Text>
+                                <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 8 }}>{t('transactionForm.dateLabel')}</Text>
                                 <TextInput value={formDate} onChangeText={setFormDate}
-                                    keyboardType="numeric" placeholder="ГГГГ-ММ-ДД" placeholderTextColor="#4b5563"
-                                    style={{ backgroundColor: '#1f2937', color: '#fff', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 16, fontSize: 15, letterSpacing: 1 }}
+                                    keyboardType="numeric" placeholder={t('transactionForm.datePlaceholder')} placeholderTextColor={colors.textDisabled}
+                                    style={{ backgroundColor: colors.bgTertiary, color: colors.textPrimary, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 16, fontSize: 15, letterSpacing: 1 }}
                                 />
 
                                 {/* Note */}
-                                <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 8 }}>ЗАМЕТКА</Text>
+                                <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 8 }}>{t('transactionForm.noteLabel')}</Text>
                                 <TextInput value={formNote} onChangeText={setFormNote}
-                                    placeholder="Необязательно…" placeholderTextColor="#4b5563" multiline
-                                    style={{ backgroundColor: '#1f2937', color: '#fff', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 16, fontSize: 15, minHeight: 52, textAlignVertical: 'top' }}
+                                    placeholder={t('transactionForm.notePlaceholder')} placeholderTextColor={colors.textDisabled} multiline
+                                    style={{ backgroundColor: colors.bgTertiary, color: colors.textPrimary, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 16, fontSize: 15, minHeight: 52, textAlignVertical: 'top' }}
                                 />
 
                                 {/* Recurring payment */}
@@ -945,18 +894,18 @@ export default function TransactionForm({
                                         <TouchableOpacity
                                             onPress={() => !editingTx && setFormIsRecurring(v => !v)}
                                             activeOpacity={0.8}
-                                            style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 14, backgroundColor: '#1f2937', borderWidth: 1.5, borderColor: formIsRecurring ? '#2563eb' : '#374151' }}>
-                                            <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: formIsRecurring ? '#2563eb' : '#4b5563', backgroundColor: formIsRecurring ? '#2563eb' : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+                                            style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 14, backgroundColor: colors.bgTertiary, borderWidth: 1.5, borderColor: formIsRecurring ? '#2563eb' : colors.borderLight }}>
+                                            <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: formIsRecurring ? '#2563eb' : colors.textDisabled, backgroundColor: formIsRecurring ? '#2563eb' : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
                                                 {formIsRecurring && <Check color="#fff" size={14} />}
                                             </View>
-                                            <Text style={{ color: formIsRecurring ? '#fff' : '#9ca3af', fontSize: 14, fontWeight: '500' }}>
-                                                Рекуррентный платёж
+                                            <Text style={{ color: formIsRecurring ? '#fff' : colors.textSecondary, fontSize: 14, fontWeight: '500' }}>
+                                                {t('transactionForm.recurringPayment')}
                                             </Text>
                                         </TouchableOpacity>
 
                                         {formIsRecurring && !!editingTx && (
-                                            <View style={{ marginTop: 8, backgroundColor: '#111827', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#374151' }}>
-                                                <Text style={{ color: '#9ca3af', fontSize: 13 }}>Транзакция уже связана с регулярным платежом</Text>
+                                            <View style={{ marginTop: 8, backgroundColor: colors.bgSecondary, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: colors.borderLight }}>
+                                                <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{t('transactionForm.alreadyLinkedRecurring')}</Text>
                                             </View>
                                         )}
 
@@ -964,13 +913,13 @@ export default function TransactionForm({
                                             <View style={{ marginTop: 12, gap: 12 }}>
                                                 {/* Frequency */}
                                                 <View>
-                                                    <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 6 }}>ЧАСТОТА</Text>
+                                                    <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 6 }}>{t('transactionForm.frequency')}</Text>
                                                     <View style={{ flexDirection: 'row', gap: 8 }}>
                                                         {(['daily', 'weekly', 'monthly', 'yearly'] as RecurFreq[]).map(f => (
                                                             <TouchableOpacity key={f} onPress={() => setFormRecurFreq(f)} activeOpacity={0.8}
-                                                                style={{ flex: 1, paddingVertical: 9, borderRadius: 10, borderWidth: 1.5, borderColor: formRecurFreq === f ? '#2563eb' : '#374151', backgroundColor: formRecurFreq === f ? '#172554' : '#111827', alignItems: 'center' }}>
-                                                                <Text style={{ color: formRecurFreq === f ? '#fff' : '#6b7280', fontSize: 12 }}>
-                                                                    {f === 'daily' ? 'Ежедн.' : f === 'weekly' ? 'Нед.' : f === 'monthly' ? 'Мес.' : 'Год'}
+                                                                style={{ flex: 1, paddingVertical: 9, borderRadius: 10, borderWidth: 1.5, borderColor: formRecurFreq === f ? '#2563eb' : colors.borderLight, backgroundColor: formRecurFreq === f ? '#172554' : colors.bgSecondary, alignItems: 'center' }}>
+                                                                <Text style={{ color: formRecurFreq === f ? '#fff' : colors.textMuted, fontSize: 12 }}>
+                                                                    {f === 'daily' ? t('transactionForm.freqDaily') : f === 'weekly' ? t('transactionForm.freqWeekly') : f === 'monthly' ? t('transactionForm.freqMonthly') : t('transactionForm.freqYearly')}
                                                                 </Text>
                                                             </TouchableOpacity>
                                                         ))}
@@ -980,12 +929,12 @@ export default function TransactionForm({
                                                 {/* Weekly: day of week */}
                                                 {formRecurFreq === 'weekly' && (
                                                     <View>
-                                                        <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 6 }}>ДЕНЬ НЕДЕЛИ</Text>
+                                                        <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 6 }}>{t('transactionForm.dayOfWeek')}</Text>
                                                         <View style={{ flexDirection: 'row', gap: 5 }}>
-                                                            {['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map((d, i) => (
+                                                            {(t('payments.weekdays', { returnObjects: true }) as string[]).map((d, i) => (
                                                                 <TouchableOpacity key={i} onPress={() => setFormRecurWeekday(i)} activeOpacity={0.8}
-                                                                    style={{ flex: 1, paddingVertical: 9, borderRadius: 8, borderWidth: 1.5, borderColor: formRecurWeekday === i ? '#2563eb' : '#374151', backgroundColor: formRecurWeekday === i ? '#172554' : '#111827', alignItems: 'center' }}>
-                                                                    <Text style={{ color: formRecurWeekday === i ? '#fff' : '#6b7280', fontSize: 11 }}>{d}</Text>
+                                                                    style={{ flex: 1, paddingVertical: 9, borderRadius: 8, borderWidth: 1.5, borderColor: formRecurWeekday === i ? '#2563eb' : colors.borderLight, backgroundColor: formRecurWeekday === i ? '#172554' : colors.bgSecondary, alignItems: 'center' }}>
+                                                                    <Text style={{ color: formRecurWeekday === i ? '#fff' : colors.textMuted, fontSize: 11 }}>{d}</Text>
                                                                 </TouchableOpacity>
                                                             ))}
                                                         </View>
@@ -995,18 +944,18 @@ export default function TransactionForm({
                                                 {/* Monthly: day of month */}
                                                 {formRecurFreq === 'monthly' && (
                                                     <View>
-                                                        <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 6 }}>ЧИСЛО МЕСЯЦА</Text>
+                                                        <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 6 }}>{t('transactionForm.dayOfMonth')}</Text>
                                                         <TextInput
                                                             value={String(formRecurMonthDay)}
-                                                            onChangeText={t => {
-                                                                if (t === '') { setFormRecurMonthDay(1); return; }
-                                                                const n = parseInt(t);
+                                                            onChangeText={v => {
+                                                                if (v === '') { setFormRecurMonthDay(1); return; }
+                                                                const n = parseInt(v);
                                                                 if (!isNaN(n) && n >= 1 && n <= 31) setFormRecurMonthDay(n);
                                                             }}
                                                             keyboardType="number-pad"
                                                             placeholder="1–31"
-                                                            placeholderTextColor="#4b5563"
-                                                            style={{ backgroundColor: '#111827', color: '#fff', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1.5, borderColor: '#2563eb', fontSize: 15, width: 80, textAlign: 'center' }}
+                                                            placeholderTextColor={colors.textDisabled}
+                                                            style={{ backgroundColor: colors.bgSecondary, color: colors.textPrimary, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1.5, borderColor: '#2563eb', fontSize: 15, width: 80, textAlign: 'center' }}
                                                         />
                                                     </View>
                                                 )}
@@ -1015,27 +964,27 @@ export default function TransactionForm({
                                                 {formRecurFreq === 'yearly' && (
                                                     <View style={{ gap: 10 }}>
                                                         <View>
-                                                            <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 6 }}>ДЕНЬ</Text>
+                                                            <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 6 }}>{t('transactionForm.dayLabel')}</Text>
                                                             <TextInput
                                                                 value={String(formRecurYearDay)}
-                                                                onChangeText={t => {
-                                                                    if (t === '') { setFormRecurYearDay(1); return; }
-                                                                    const n = parseInt(t);
+                                                                onChangeText={v => {
+                                                                    if (v === '') { setFormRecurYearDay(1); return; }
+                                                                    const n = parseInt(v);
                                                                     if (!isNaN(n) && n >= 1 && n <= 31) setFormRecurYearDay(n);
                                                                 }}
                                                                 keyboardType="number-pad"
                                                                 placeholder="1–31"
-                                                                placeholderTextColor="#4b5563"
-                                                                style={{ backgroundColor: '#111827', color: '#fff', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1.5, borderColor: '#2563eb', fontSize: 15, width: 80, textAlign: 'center' }}
+                                                                placeholderTextColor={colors.textDisabled}
+                                                                style={{ backgroundColor: colors.bgSecondary, color: colors.textPrimary, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1.5, borderColor: '#2563eb', fontSize: 15, width: 80, textAlign: 'center' }}
                                                             />
                                                         </View>
                                                         <View>
-                                                            <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 6 }}>МЕСЯЦ</Text>
+                                                            <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 6 }}>{t('transactionForm.monthLabel')}</Text>
                                                             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                                                                {['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'].map((m, i) => (
+                                                                {(t('transactionForm.monthsShort', { returnObjects: true }) as string[]).map((m, i) => (
                                                                     <TouchableOpacity key={i} onPress={() => setFormRecurYearMonth(i + 1)} activeOpacity={0.8}
-                                                                        style={{ paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, borderColor: formRecurYearMonth === i + 1 ? '#2563eb' : '#374151', backgroundColor: formRecurYearMonth === i + 1 ? '#172554' : '#111827' }}>
-                                                                        <Text style={{ color: formRecurYearMonth === i + 1 ? '#fff' : '#6b7280', fontSize: 12 }}>{m}</Text>
+                                                                        style={{ paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, borderColor: formRecurYearMonth === i + 1 ? '#2563eb' : colors.borderLight, backgroundColor: formRecurYearMonth === i + 1 ? '#172554' : colors.bgSecondary }}>
+                                                                        <Text style={{ color: formRecurYearMonth === i + 1 ? '#fff' : colors.textMuted, fontSize: 12 }}>{m}</Text>
                                                                     </TouchableOpacity>
                                                                 ))}
                                                             </View>
@@ -1045,13 +994,13 @@ export default function TransactionForm({
 
                                                 {/* Notify */}
                                                 <View>
-                                                    <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 6 }}>НАПОМНИТЬ ЗА</Text>
+                                                    <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 6 }}>{t('transactionForm.remindBefore')}</Text>
                                                     <View style={{ flexDirection: 'row', gap: 8 }}>
                                                         {[1, 3, 7].map(n => (
                                                             <TouchableOpacity key={n} onPress={() => setFormRecurNotify(n)} activeOpacity={0.8}
-                                                                style={{ flex: 1, paddingVertical: 9, borderRadius: 10, borderWidth: 1.5, borderColor: formRecurNotify === n ? '#2563eb' : '#374151', backgroundColor: formRecurNotify === n ? '#172554' : '#111827', alignItems: 'center' }}>
-                                                                <Text style={{ color: formRecurNotify === n ? '#fff' : '#6b7280', fontSize: 13 }}>
-                                                                    {n} {n === 1 ? 'день' : 'дня'}
+                                                                style={{ flex: 1, paddingVertical: 9, borderRadius: 10, borderWidth: 1.5, borderColor: formRecurNotify === n ? '#2563eb' : colors.borderLight, backgroundColor: formRecurNotify === n ? '#172554' : colors.bgSecondary, alignItems: 'center' }}>
+                                                                <Text style={{ color: formRecurNotify === n ? '#fff' : colors.textMuted, fontSize: 13 }}>
+                                                                    {t('transactionForm.dayN', { count: n })}
                                                                 </Text>
                                                             </TouchableOpacity>
                                                         ))}
@@ -1060,8 +1009,8 @@ export default function TransactionForm({
 
                                                 {/* Next date preview */}
                                                 <TouchableOpacity onPress={() => setShowRecurDatePicker(true)} activeOpacity={0.8}
-                                                    style={{ backgroundColor: '#111827', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#374151', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                                                    <Text style={{ color: '#9ca3af', fontSize: 13 }}>Следующий платёж</Text>
+                                                    style={{ backgroundColor: colors.bgSecondary, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: colors.borderLight, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                    <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{t('transactionForm.nextPayment')}</Text>
                                                     <Text style={{ color: '#60a5fa', fontSize: 13, fontWeight: '600' }}>
                                                         {format(
                                                             formRecurOverrideDate ?? new Date(calcNextDate(formRecurFreq, formRecurWeekday, formRecurMonthDay, formRecurYearMonth, formRecurYearDay) + 'T00:00:00'),
@@ -1071,7 +1020,7 @@ export default function TransactionForm({
                                                 </TouchableOpacity>
 
                                                 {showRecurDatePicker && (
-                                                    <View style={{ backgroundColor: '#1f2937', borderRadius: 14, overflow: 'hidden', marginTop: 4 }}>
+                                                    <View style={{ backgroundColor: colors.bgTertiary, borderRadius: 14, overflow: 'hidden', marginTop: 4 }}>
                                                         <DateTimePicker
                                                             mode="date"
                                                             display="inline"
@@ -1099,37 +1048,37 @@ export default function TransactionForm({
                                 )}
 
                                 {/* Receipt photo */}
-                                <Text style={{ color: '#6b7280', fontSize: 12, marginBottom: 10 }}>ФОТО ЧЕКА</Text>
+                                <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 10 }}>{t('transactionForm.receiptPhoto')}</Text>
                                 {receiptUri ? (
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#1f2937', borderRadius: 14, padding: 12, marginBottom: 24 }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: colors.bgTertiary, borderRadius: 14, padding: 12, marginBottom: 24 }}>
                                         <Image source={{ uri: receiptUri }} style={{ width: 72, height: 72, borderRadius: 10 }} resizeMode="cover" />
                                         <View style={{ flex: 1 }}>
                                             {uploadingReceipt ? (
                                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                                     <ActivityIndicator size="small" color="#2563eb" />
-                                                    <Text style={{ color: '#9ca3af', fontSize: 13 }}>Загрузка…</Text>
+                                                    <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{t('common.loading')}</Text>
                                                 </View>
                                             ) : receiptUploadUrl ? (
-                                                <Text style={{ color: '#22c55e', fontSize: 13, fontWeight: '600' }}>✓ Загружено</Text>
+                                                <Text style={{ color: '#22c55e', fontSize: 13, fontWeight: '600' }}>{t('transactionForm.uploaded')}</Text>
                                             ) : (
-                                                <Text style={{ color: '#ef4444', fontSize: 13 }}>Ошибка загрузки</Text>
+                                                <Text style={{ color: '#ef4444', fontSize: 13 }}>{t('transactionForm.uploadError')}</Text>
                                             )}
                                             <TouchableOpacity onPress={() => { setReceiptUri(null); setReceiptUploadUrl(null); }} style={{ marginTop: 10 }} hitSlop={8}>
-                                                <Text style={{ color: '#ef4444', fontSize: 13 }}>Удалить фото</Text>
+                                                <Text style={{ color: '#ef4444', fontSize: 13 }}>{t('transactionForm.deletePhoto')}</Text>
                                             </TouchableOpacity>
                                         </View>
                                     </View>
                                 ) : (
                                     <View style={{ flexDirection: 'row', gap: 10, marginBottom: 24 }}>
                                         <TouchableOpacity onPress={() => pickReceipt('camera')} activeOpacity={0.8}
-                                            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1f2937', borderRadius: 12, paddingVertical: 14, borderWidth: 1, borderColor: '#374151' }}>
-                                            <Camera color="#6b7280" size={18} />
-                                            <Text style={{ color: '#9ca3af', fontSize: 14 }}>Камера</Text>
+                                            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.bgTertiary, borderRadius: 12, paddingVertical: 14, borderWidth: 1, borderColor: colors.borderLight }}>
+                                            <Camera color={colors.textMuted} size={18} />
+                                            <Text style={{ color: colors.textSecondary, fontSize: 14 }}>{t('transactionForm.camera')}</Text>
                                         </TouchableOpacity>
                                         <TouchableOpacity onPress={() => pickReceipt('gallery')} activeOpacity={0.8}
-                                            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1f2937', borderRadius: 12, paddingVertical: 14, borderWidth: 1, borderColor: '#374151' }}>
-                                            <Images color="#6b7280" size={18} />
-                                            <Text style={{ color: '#9ca3af', fontSize: 14 }}>Галерея</Text>
+                                            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.bgTertiary, borderRadius: 12, paddingVertical: 14, borderWidth: 1, borderColor: colors.borderLight }}>
+                                            <Images color={colors.textMuted} size={18} />
+                                            <Text style={{ color: colors.textSecondary, fontSize: 14 }}>{t('transactionForm.gallery')}</Text>
                                         </TouchableOpacity>
                                     </View>
                                 )}
@@ -1140,13 +1089,13 @@ export default function TransactionForm({
                                     style={{
                                         paddingVertical: 16, borderRadius: 20, alignItems: 'center',
                                         backgroundColor: saving || !formAmount || (formType !== 'transfer' && !formCategoryId) || !formAccountId
-                                            ? '#374151'
+                                            ? colors.borderLight
                                             : formType === 'income' ? '#16a34a' : formType === 'expense' ? '#dc2626' : '#2563eb',
                                     }}>
                                     {saving
                                         ? <ActivityIndicator color="#fff" />
                                         : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>
-                                            {editingTx ? 'Сохранить' : formType === 'income' ? 'Добавить доход' : formType === 'expense' ? 'Добавить расход' : 'Выполнить перевод'}
+                                            {editingTx ? t('common.save') : formType === 'income' ? t('transactionForm.addIncome') : formType === 'expense' ? t('transactionForm.addExpense') : t('transactionForm.doTransfer')}
                                           </Text>
                                     }
                                 </TouchableOpacity>
@@ -1161,21 +1110,21 @@ export default function TransactionForm({
                     <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' }}>
                         <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' }} activeOpacity={1} onPress={() => setTagSheet(null)} />
                         <View style={{ backgroundColor: '#1a2235', paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40 }}>
-                            <View style={{ width: 40, height: 4, backgroundColor: '#374151', borderRadius: 2, alignSelf: 'center', marginBottom: 16 }} />
-                            <Text style={{ color: '#9ca3af', fontSize: 13, textAlign: 'center', marginBottom: 16 }}>{tagSheet.name}</Text>
+                            <View style={{ width: 40, height: 4, backgroundColor: colors.borderLight, borderRadius: 2, alignSelf: 'center', marginBottom: 16 }} />
+                            <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center', marginBottom: 16 }}>{tagSheet.name}</Text>
                             <TouchableOpacity
                                 onPress={() => { setEditingTagId(tagSheet.id); setEditingTagText(tagSheet.name); setTagSheet(null); }}
                                 activeOpacity={0.8}
-                                style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
-                                <Pencil color="#9ca3af" size={20} />
-                                <Text style={{ color: '#f9fafb', fontSize: 16 }}>Редактировать</Text>
+                                style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
+                                <Pencil color={colors.textSecondary} size={20} />
+                                <Text style={{ color: colors.textPrimary, fontSize: 16 }}>{t('common.edit')}</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 onPress={() => { deleteTag(tagSheet.id); setTagSheet(null); }}
                                 activeOpacity={0.8}
                                 style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 16 }}>
                                 <X color="#ef4444" size={20} />
-                                <Text style={{ color: '#ef4444', fontSize: 16 }}>Удалить тег</Text>
+                                <Text style={{ color: '#ef4444', fontSize: 16 }}>{t('transactionForm.deleteTag')}</Text>
                             </TouchableOpacity>
                         </View>
                     </View>

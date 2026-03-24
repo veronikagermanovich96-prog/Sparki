@@ -1,10 +1,10 @@
 import {
-    Activity, ArrowLeft, ArrowRightLeft, Award,
+    Activity, ArrowRightLeft, Award,
     Banknote, Bike, Bitcoin, BookOpen, Briefcase, Building2, Bus,
-    Camera, Car, Check, ChevronDown, CircleDollarSign, Coffee, Coins, CreditCard, Images,
+    Camera, Car, Check, ChevronDown, CircleDollarSign, Coffee, Coins, CreditCard,
     Droplets, Dumbbell, Film, Flag, Flame, Fuel, Gift, Globe, GraduationCap,
-    Heart, Home, Landmark, Laptop, MapPin, Minus, Monitor, Music,
-    Package, PawPrint, Pencil, Pill, Plane, Plus, Receipt, Scissors,
+    Heart, Home, Landmark, MapPin, Monitor, Music,
+    Package, PawPrint, Pill, Plane, Plus, Receipt, Scissors,
     Repeat, Search, ShoppingBag, ShoppingCart, Shirt, Sofa, Star,
     Tag, Train, TrendingDown, TrendingUp, Trophy, Tv, Utensils,
     SlidersHorizontal, Wallet, Wifi, X, Zap,
@@ -23,6 +23,9 @@ import { ru } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
 import { formatAmount } from '@/constants/currencies';
 import TransactionForm from '@/components/TransactionForm';
+import { useTheme } from '@/context/ThemeContext';
+import { useTranslation } from 'react-i18next';
+import i18n from '@/lib/i18n';
 
 // ─── Icon map ─────────────────────────────────────────────────────────────────
 
@@ -114,6 +117,8 @@ function getPeriodRange(p: FilterPeriod, customFrom?: Date | null, customTo?: Da
 
 export default function TransactionsScreen() {
     const router = useRouter();
+    const { colors } = useTheme();
+    const { t } = useTranslation();
 
     // ── Data ─────────────────────────────────────────────────────────────────
     const [txs,        setTxs]        = useState<TxRow[]>([]);
@@ -148,6 +153,7 @@ export default function TransactionsScreen() {
 
     // ── Load ─────────────────────────────────────────────────────────────────
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useFocusEffect(useCallback(() => { loadData(); }, []));
 
     useEffect(() => {
@@ -155,6 +161,7 @@ export default function TransactionsScreen() {
         setLoading(true);
         fetchTxs(householdId, filterType, filterPeriod, filterAccountId, filterCategoryId, filterExpenseType, customFrom, customTo, filterRecurring, filterTagId)
             .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filterType, filterPeriod, filterAccountId, filterCategoryId, filterExpenseType, customFrom, customTo, filterRecurring, filterTagId]);
 
     async function loadData() {
@@ -219,7 +226,7 @@ export default function TransactionsScreen() {
             date: t.date, note: t.note, receipt_url: t.receipt_url, recurring_id: t.recurring_id,
             account_id: t.account_id, account_name: t.accounts?.name ?? '—', account_color: t.accounts?.color ?? null,
             category_id: t.category_id,
-            category_name:  t.categories?.name  ?? (t.type === 'transfer' ? 'Перевод' : '—'),
+            category_name:  t.categories?.name  ?? (t.type === 'transfer' ? i18n.t('transactions.transfer') : '—'),
             category_icon:  t.categories?.icon  ?? null,
             category_color: t.categories?.color ?? null,
             expense_type:   t.categories?.expense_type ?? null,
@@ -259,10 +266,10 @@ export default function TransactionsScreen() {
     }
 
     async function deleteTx(id: string) {
-        Alert.alert('Удалить транзакцию?', 'Это действие нельзя отменить.', [
-            { text: 'Отмена', style: 'cancel' },
+        Alert.alert(t('transactions.deleteTransaction'), t('transactions.deleteIrreversible'), [
+            { text: t('common.cancel'), style: 'cancel' },
             {
-                text: 'Удалить', style: 'destructive',
+                text: t('common.delete'), style: 'destructive',
                 onPress: async () => {
                     await supabase.from('transactions').update({ is_deleted: true }).eq('id', id);
                     setTxs(prev => prev.filter(t => t.id !== id));
@@ -295,34 +302,34 @@ export default function TransactionsScreen() {
         return (
             <TouchableOpacity onPress={() => deleteTx(id)}
                 style={{ backgroundColor: '#ef4444', justifyContent: 'center', alignItems: 'center', width: 88 }}>
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Удалить</Text>
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>{t('common.delete')}</Text>
             </TouchableOpacity>
         );
     }
 
     function renderRow({ item }: { item: TxRow }) {
         const Ic          = item.category_icon ? CAT_ICONS[item.category_icon] : null;
-        const iconColor   = item.category_color ?? '#6b7280';
-        const amountColor = item.type === 'income' ? '#22c55e' : item.type === 'transfer' ? '#6b7280' : '#ef4444';
+        const iconColor   = item.category_color ?? colors.textMuted;
+        const amountColor = item.type === 'income' ? '#22c55e' : item.type === 'transfer' ? colors.textMuted : '#ef4444';
         const prefix      = item.type === 'income' ? '+' : item.type === 'expense' ? '−' : '⇄';
 
         return (
             <ReanimatedSwipeable renderRightActions={() => renderRightActions(item.id)}>
                 <TouchableOpacity onPress={() => openForm(item)} activeOpacity={0.8}
-                    style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#030712', borderBottomWidth: 1, borderBottomColor: '#111827' }}>
+                    style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: colors.bgPrimary, borderBottomWidth: 1, borderBottomColor: colors.bgSecondary }}>
                     <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: iconColor + '22', alignItems: 'center', justifyContent: 'center' }}>
                         {Ic ? <Ic color={iconColor} size={19} /> : <ArrowRightLeft color={iconColor} size={19} />}
                     </View>
                     <View style={{ flex: 1, marginLeft: 12 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Text style={{ color: '#f9fafb', fontSize: 15, fontWeight: '500' }}>{item.category_name}</Text>
+                            <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '500' }}>{item.category_name}</Text>
                             {item.tag_name && (
                                 <View style={{ backgroundColor: '#172554', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 }}>
                                     <Text style={{ color: '#60a5fa', fontSize: 11 }}>{item.tag_name}</Text>
                                 </View>
                             )}
                         </View>
-                        <Text style={{ color: '#6b7280', fontSize: 13, marginTop: 2 }} numberOfLines={1}>
+                        <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 2 }} numberOfLines={1}>
                             {item.account_name}{item.note ? ` · ${item.note}` : ''}
                         </Text>
                     </View>
@@ -332,8 +339,8 @@ export default function TransactionsScreen() {
                         </Text>
                         {(item.recurring_id || item.receipt_url) && (
                             <View style={{ flexDirection: 'row', gap: 4, marginTop: 3 }}>
-                                {item.recurring_id && <Repeat color="#4b5563" size={11} />}
-                                {item.receipt_url  && <Camera color="#4b5563" size={11} />}
+                                {item.recurring_id && <Repeat color={colors.textDisabled} size={11} />}
+                                {item.receipt_url  && <Camera color={colors.textDisabled} size={11} />}
                             </View>
                         )}
                     </View>
@@ -349,11 +356,11 @@ export default function TransactionsScreen() {
         const totalIncome  = section.data.filter(t => t.type === 'income').reduce((s, t) => s + (t.amount_base ?? t.amount), 0);
         const transfers    = section.data.filter(t => t.type === 'transfer').length;
         return (
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 7, backgroundColor: '#0a0f1e' }}>
-                <Text style={{ color: '#9ca3af', fontSize: 12, textTransform: 'capitalize', fontWeight: '500' }}>{label}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 7, backgroundColor: colors.bgTertiary }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 12, textTransform: 'capitalize', fontWeight: '500' }}>{label}</Text>
                 <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                     {filterType === 'transfer'
-                        ? <Text style={{ color: '#6b7280', fontSize: 12 }}>{transfers} перевод{transfers === 1 ? '' : transfers < 5 ? 'а' : 'ов'}</Text>
+                        ? <Text style={{ color: colors.textMuted, fontSize: 12 }}>{t('transactions.transferCount', { count: transfers })}</Text>
                         : <>
                             {totalExpense > 0 && <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '600' }}>−{formatAmount(totalExpense, cur)}</Text>}
                             {totalIncome  > 0 && <Text style={{ color: '#22c55e', fontSize: 12, fontWeight: '600' }}>+{formatAmount(totalIncome, cur)}</Text>}
@@ -367,41 +374,41 @@ export default function TransactionsScreen() {
     const hasExtraFilters = filterCategoryId !== null || filterTagId !== null || filterExpenseType !== 'all' || filterRecurring !== 'all' || filterAccountId !== null;
 
     const typeFilters: { label: string; value: FilterType }[] = [
-        { label: 'Все', value: 'all' }, { label: 'Расход', value: 'expense' },
-        { label: 'Доход', value: 'income' }, { label: 'Перевод', value: 'transfer' },
+        { label: t('transactions.all'), value: 'all' }, { label: t('transactions.expense'), value: 'expense' },
+        { label: t('transactions.income'), value: 'income' }, { label: t('transactions.transfer'), value: 'transfer' },
     ];
     const PERIOD_LABELS: Record<FilterPeriod, string> = {
-        today: 'Сегодня', yesterday: 'Вчера', week: 'Неделя',
-        month: 'Месяц', year: 'Год', custom: 'Произвольный',
+        today: t('transactions.today'), yesterday: t('transactions.yesterday'), week: t('transactions.week'),
+        month: t('transactions.month'), year: t('transactions.year'), custom: t('transactions.custom'),
     };
 
     function periodChipLabel(): string {
         if (filterPeriod !== 'custom') return PERIOD_LABELS[filterPeriod];
-        if (!customFrom && !customTo) return 'Период';
+        if (!customFrom && !customTo) return t('transactions.period');
         const fmtShort = (d: Date) => format(d, 'd MMM', { locale: ru });
         if (customFrom && customTo) {
             if (format(customFrom, 'MM') === format(customTo, 'MM'))
                 return `${format(customFrom, 'd')}–${fmtShort(customTo)}`;
             return `${fmtShort(customFrom)} – ${fmtShort(customTo)}`;
         }
-        if (customFrom) return `с ${fmtShort(customFrom)}`;
-        return `по ${fmtShort(customTo!)}`;
+        if (customFrom) return `${t('transactions.fromDate')} ${fmtShort(customFrom)}`;
+        return `${t('transactions.toDate')} ${fmtShort(customTo!)}`;
     }
 
     // ─── Render ───────────────────────────────────────────────────────────────
 
     return (
-        <View style={{ flex: 1, backgroundColor: '#030712' }}>
+        <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
 
             {/* Header */}
             <View style={{ paddingTop: 60, paddingBottom: 12, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Text style={{ color: '#f9fafb', fontSize: 24, fontWeight: '700' }}>Транзакции</Text>
+                <Text style={{ color: colors.textPrimary, fontSize: 24, fontWeight: '700' }}>{t('transactions.title')}</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
                     <TouchableOpacity onPress={() => router.push('/recurring/index' as any)} style={{ padding: 4 }}>
-                        <Repeat color="#9ca3af" size={22} />
+                        <Repeat color={colors.textSecondary} size={22} />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => { setSearchVisible(v => !v); if (searchVisible) setSearch(''); }} style={{ padding: 4 }}>
-                        {searchVisible ? <X color="#9ca3af" size={22} /> : <Search color="#9ca3af" size={22} />}
+                        {searchVisible ? <X color={colors.textSecondary} size={22} /> : <Search color={colors.textSecondary} size={22} />}
                     </TouchableOpacity>
                 </View>
             </View>
@@ -409,9 +416,9 @@ export default function TransactionsScreen() {
             {/* Search */}
             {searchVisible && (
                 <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
-                    <TextInput value={search} onChangeText={setSearch} placeholder="Поиск по категории, заметке, счёту…"
-                        placeholderTextColor="#4b5563" autoFocus
-                        style={{ backgroundColor: '#111827', color: '#f9fafb', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15 }}
+                    <TextInput value={search} onChangeText={setSearch} placeholder={t('transactions.searchPlaceholder')}
+                        placeholderTextColor={colors.textDisabled} autoFocus
+                        style={{ backgroundColor: colors.bgSecondary, color: colors.textPrimary, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15 }}
                     />
                 </View>
             )}
@@ -422,16 +429,16 @@ export default function TransactionsScreen() {
                 contentContainerStyle={{ paddingHorizontal: 12, gap: 6, alignItems: 'center' }}>
                 {typeFilters.map(f => (
                     <TouchableOpacity key={f.value} onPress={() => setFilterType(f.value)}
-                        style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: filterType === f.value ? '#3b82f6' : '#1f2937' }}>
-                        <Text style={{ color: filterType === f.value ? '#fff' : '#9ca3af', fontSize: 13, fontWeight: '500' }}>{f.label}</Text>
+                        style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: filterType === f.value ? '#7C6FFF' : colors.bgTertiary }}>
+                        <Text style={{ color: filterType === f.value ? '#ffffff' : colors.textPrimary, fontSize: 13, fontWeight: '500' }}>{f.label}</Text>
                     </TouchableOpacity>
                 ))}
             </ScrollView>
 
             {/* Row 2 — Фильтры button + sticky PeriodChip */}
             {(() => {
-                const expLabels: Record<FilterExpenseType, string> = { all: 'Тип расходов', base: 'Базовые', everyday: 'Повседневные', development: 'Развитие', forself: 'Для себя', work: 'Рабочие', other: 'Прочее' };
-                const recLabels: Record<string, string> = { all: 'Рекуррентность', recurring: 'Рекуррентные', non_recurring: 'Разовые' };
+                const expLabels: Record<FilterExpenseType, string> = { all: t('transactions.expenseType'), base: t('transactions.base'), everyday: t('transactions.everyday'), development: t('transactions.development'), forself: t('transactions.forSelf'), work: t('transactions.work'), other: t('transactions.other') };
+                const recLabels: Record<string, string> = { all: t('transactions.recurrence'), recurring: t('transactions.recurring'), non_recurring: t('transactions.oneTime') };
                 const catName = filterCategoryId ? (categories.find(c => c.id === filterCategoryId)?.name ?? null) : null;
                 const tagName = filterTagId ? (filterSheetTags.find(t => t.id === filterTagId)?.name ?? null) : null;
 
@@ -449,9 +456,9 @@ export default function TransactionsScreen() {
                         <View style={{ flexDirection: 'row', alignItems: 'center', paddingBottom: hasExtraFilters ? 6 : 10 }}>
                             <View style={{ flex: 1, paddingLeft: 12 }}>
                                 <TouchableOpacity onPress={() => setActiveSheet('filters')}
-                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: hasExtraFilters ? '#3b82f6' : '#374151', backgroundColor: hasExtraFilters ? '#172554' : '#1f2937' }}>
-                                    <SlidersHorizontal size={13} color={hasExtraFilters ? '#60a5fa' : '#9ca3af'} />
-                                    <Text style={{ color: hasExtraFilters ? '#60a5fa' : '#9ca3af', fontSize: 12, fontWeight: hasExtraFilters ? '600' : '400' }}>Фильтры</Text>
+                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: hasExtraFilters ? '#3b82f6' : colors.borderLight, backgroundColor: hasExtraFilters ? '#172554' : colors.bgTertiary }}>
+                                    <SlidersHorizontal size={13} color={hasExtraFilters ? '#60a5fa' : colors.textSecondary} />
+                                    <Text style={{ color: hasExtraFilters ? '#60a5fa' : colors.textSecondary, fontSize: 12, fontWeight: hasExtraFilters ? '600' : '400' }}>{t('transactions.filters')}</Text>
                                 </TouchableOpacity>
                             </View>
                             <TouchableOpacity onPress={() => setPeriodSheetVisible(true)}
@@ -466,15 +473,15 @@ export default function TransactionsScreen() {
                                 style={{ flexGrow: 0, paddingBottom: 10 }}
                                 contentContainerStyle={{ paddingHorizontal: 12, gap: 8, alignItems: 'center' }}>
                                 {filterAccountId && badge(
-                                    accounts.find(a => a.id === filterAccountId)?.name ?? 'Счёт',
+                                    accounts.find(a => a.id === filterAccountId)?.name ?? t('transactions.account'),
                                     () => setFilterAccountId(null)
                                 )}
                                 {filterCategoryId && badge(
-                                    tagName ? `${catName} · ${tagName}` : catName ?? 'Категория',
+                                    tagName ? `${catName} · ${tagName}` : catName ?? t('transactions.category'),
                                     () => { setFilterCategoryId(null); setFilterTagId(null); setFilterSheetTags([]); }
                                 )}
                                 {filterTagId && !filterCategoryId && badge(
-                                    tagName ?? 'Тег',
+                                    tagName ?? t('transactions.tag'),
                                     () => setFilterTagId(null)
                                 )}
                                 {filterExpenseType !== 'all' && badge(expLabels[filterExpenseType], () => setFilterExpenseType('all'))}
@@ -492,15 +499,15 @@ export default function TransactionsScreen() {
                 </View>
             ) : sections.length === 0 ? (
                 <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    <Text style={{ color: '#6b7280', fontSize: 16 }}>
-                        {search.trim() ? 'Не найдено' : hasExtraFilters || filterPeriod !== 'month' ? 'Ничего не найдено' : 'Транзакций нет'}
+                    <Text style={{ color: colors.textMuted, fontSize: 16 }}>
+                        {search.trim() ? t('transactions.notFound') : hasExtraFilters || filterPeriod !== 'month' ? t('common.nothingFound') : t('transactions.noTransactions')}
                     </Text>
-                    <Text style={{ color: '#4b5563', fontSize: 14 }}>
+                    <Text style={{ color: colors.textDisabled, fontSize: 14 }}>
                         {search.trim()
-                            ? `По запросу «${search.trim()}»`
+                            ? t('transactions.searchNoResults', { query: search.trim() })
                             : hasExtraFilters || filterPeriod !== 'month'
-                                ? 'Попробуйте изменить фильтры'
-                                : 'Нажмите + чтобы добавить'}
+                                ? t('transactions.tryChangeFilters')
+                                : t('transactions.tapPlusToAdd')}
                     </Text>
                 </View>
             ) : (
@@ -521,39 +528,39 @@ export default function TransactionsScreen() {
 
             {/* ════ PeriodSheet ════ */}
             <BaseBottomSheet visible={periodSheetVisible} onClose={() => setPeriodSheetVisible(false)} scrollable={false}>
-                            <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', marginBottom: 16 }}>Период</Text>
+                            <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700', marginBottom: 16 }}>{t('transactions.period')}</Text>
                             {([
-                                { value: 'today'     as const, label: 'Сегодня' },
-                                { value: 'yesterday' as const, label: 'Вчера' },
-                                { value: 'week'      as const, label: 'Неделя' },
-                                { value: 'month'     as const, label: 'Месяц' },
-                                { value: 'year'      as const, label: 'Год' },
+                                { value: 'today'     as const, label: t('transactions.today') },
+                                { value: 'yesterday' as const, label: t('transactions.yesterday') },
+                                { value: 'week'      as const, label: t('transactions.week') },
+                                { value: 'month'     as const, label: t('transactions.month') },
+                                { value: 'year'      as const, label: t('transactions.year') },
                             ]).map(p => (
                                 <TouchableOpacity key={p.value} onPress={() => { setFilterPeriod(p.value); setCustomFrom(null); setCustomTo(null); setPeriodSheetVisible(false); }}
-                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
-                                    <Text style={{ color: filterPeriod === p.value ? '#60a5fa' : '#e5e7eb', fontSize: 16, fontWeight: filterPeriod === p.value ? '600' : '400' }}>{p.label}</Text>
+                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
+                                    <Text style={{ color: filterPeriod === p.value ? '#60a5fa' : colors.textPrimary, fontSize: 16, fontWeight: filterPeriod === p.value ? '600' : '400' }}>{p.label}</Text>
                                     {filterPeriod === p.value && <Check color="#3b82f6" size={18} />}
                                 </TouchableOpacity>
                             ))}
-                            <View style={{ height: 1, backgroundColor: '#374151', marginVertical: 8 }} />
+                            <View style={{ height: 1, backgroundColor: colors.borderLight, marginVertical: 8 }} />
                             <TouchableOpacity onPress={() => setFilterPeriod('custom')}
                                 style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14 }}>
-                                <Text style={{ color: filterPeriod === 'custom' ? '#60a5fa' : '#e5e7eb', fontSize: 16, fontWeight: filterPeriod === 'custom' ? '600' : '400' }}>Произвольный период</Text>
+                                <Text style={{ color: filterPeriod === 'custom' ? '#60a5fa' : colors.textPrimary, fontSize: 16, fontWeight: filterPeriod === 'custom' ? '600' : '400' }}>{t('transactions.customPeriod')}</Text>
                                 {filterPeriod === 'custom' && <Check color="#3b82f6" size={18} />}
                             </TouchableOpacity>
                             {filterPeriod === 'custom' && (
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                                     <TouchableOpacity onPress={() => setShowCustomFrom(true)}
-                                        style={{ flex: 1, backgroundColor: '#1f2937', borderRadius: 12, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: customFrom ? '#3b82f6' : '#374151' }}>
-                                        <Text style={{ color: customFrom ? '#fff' : '#6b7280', fontSize: 14 }}>
-                                            {customFrom ? format(customFrom, 'd MMM yyyy', { locale: ru }) : 'С даты'}
+                                        style={{ flex: 1, backgroundColor: colors.bgTertiary, borderRadius: 12, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: customFrom ? '#3b82f6' : colors.borderLight }}>
+                                        <Text style={{ color: customFrom ? colors.textPrimary : colors.textMuted, fontSize: 14 }}>
+                                            {customFrom ? format(customFrom, 'd MMM yyyy', { locale: ru }) : t('transactions.fromDate')}
                                         </Text>
                                     </TouchableOpacity>
-                                    <Text style={{ color: '#4b5563' }}>—</Text>
+                                    <Text style={{ color: colors.textDisabled }}>—</Text>
                                     <TouchableOpacity onPress={() => setShowCustomTo(true)}
-                                        style={{ flex: 1, backgroundColor: '#1f2937', borderRadius: 12, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: customTo ? '#3b82f6' : '#374151' }}>
-                                        <Text style={{ color: customTo ? '#fff' : '#6b7280', fontSize: 14 }}>
-                                            {customTo ? format(customTo, 'd MMM yyyy', { locale: ru }) : 'По дату'}
+                                        style={{ flex: 1, backgroundColor: colors.bgTertiary, borderRadius: 12, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: customTo ? '#3b82f6' : colors.borderLight }}>
+                                        <Text style={{ color: customTo ? colors.textPrimary : colors.textMuted, fontSize: 14 }}>
+                                            {customTo ? format(customTo, 'd MMM yyyy', { locale: ru }) : t('transactions.toDate')}
                                         </Text>
                                     </TouchableOpacity>
                                 </View>
@@ -572,7 +579,7 @@ export default function TransactionsScreen() {
                             {filterPeriod === 'custom' && (customFrom || customTo) && (
                                 <TouchableOpacity onPress={() => setPeriodSheetVisible(false)}
                                     style={{ backgroundColor: '#2563eb', borderRadius: 16, paddingVertical: 14, alignItems: 'center', marginTop: 8 }}>
-                                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Применить</Text>
+                                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{t('common.apply')}</Text>
                                 </TouchableOpacity>
                             )}
             </BaseBottomSheet>
@@ -580,37 +587,37 @@ export default function TransactionsScreen() {
             {/* ════ Dropdown Sheet (account / category / expensetype / recurring) ════ */}
             <BaseBottomSheet visible={activeSheet !== null} onClose={() => setActiveSheet(null)} maxHeight={activeSheet === 'filters' ? '90%' : '75%'}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                                <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>
-                                    {activeSheet === 'filters' ? 'Фильтры' : activeSheet === 'account' ? 'Счёт' : activeSheet === 'category' ? 'Категория' : activeSheet === 'expensetype' ? 'Тип расходов' : 'Рекуррентность'}
+                                <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700' }}>
+                                    {activeSheet === 'filters' ? t('transactions.filters') : activeSheet === 'account' ? t('transactions.account') : activeSheet === 'category' ? t('transactions.category') : activeSheet === 'expensetype' ? t('transactions.expenseType') : t('transactions.recurrence')}
                                 </Text>
-                                <TouchableOpacity onPress={() => setActiveSheet(null)} hitSlop={8}><X color="#6b7280" size={20} /></TouchableOpacity>
+                                <TouchableOpacity onPress={() => setActiveSheet(null)} hitSlop={8}><X color={colors.textMuted} size={20} /></TouchableOpacity>
                             </View>
 
                                 {/* ── Unified Filters ── */}
                                 {activeSheet === 'filters' && (() => {
                                     const secHeader = (label: string) => (
-                                        <Text style={{ color: '#6b7280', fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 10, marginTop: 20 }}>{label}</Text>
+                                        <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 10, marginTop: 20 }}>{label}</Text>
                                     );
                                     return (
                                         <View>
                                             {/* Счёт */}
-                                            {secHeader('СЧЁТ')}
+                                            {secHeader(t('transactions.sectionAccount'))}
                                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
-                                                {[{ id: null as string | null, name: 'Все счета', color: null as string | null }, ...accounts].map(acc => {
+                                                {[{ id: null as string | null, name: t('transactions.allAccounts'), color: null as string | null }, ...accounts].map(acc => {
                                                     const active = acc.id === filterAccountId;
                                                     return (
                                                         <TouchableOpacity key={acc.id ?? '__all__'} onPress={() => setFilterAccountId(acc.id)}
-                                                            style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: active ? '#3b82f6' : '#374151', backgroundColor: active ? '#172554' : '#1f2937' }}>
-                                                            <Text style={{ color: active ? '#60a5fa' : '#9ca3af', fontSize: 13, fontWeight: active ? '600' : '400' }}>{acc.name}</Text>
+                                                            style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: active ? '#3b82f6' : colors.borderLight, backgroundColor: active ? '#172554' : colors.bgTertiary }}>
+                                                            <Text style={{ color: active ? '#60a5fa' : colors.textSecondary, fontSize: 13, fontWeight: active ? '600' : '400' }}>{acc.name}</Text>
                                                         </TouchableOpacity>
                                                     );
                                                 })}
                                             </ScrollView>
 
                                             {/* Категория */}
-                                            {secHeader('КАТЕГОРИЯ')}
+                                            {secHeader(t('transactions.sectionCategory'))}
                                             <View style={{ gap: 2 }}>
-                                                {[{ id: null as string | null, name: 'Все категории', icon: null, color: null, type: 'expense' as const, expense_type: null, is_system: true },
+                                                {[{ id: null as string | null, name: t('transactions.allCategories'), icon: null, color: null, type: 'expense' as const, expense_type: null, is_system: true },
                                                   ...categories.filter(c => filterType === 'income' ? c.type === 'income' : c.type === 'expense')
                                                 ].map(cat => {
                                                     const active = cat.id === filterCategoryId;
@@ -621,11 +628,11 @@ export default function TransactionsScreen() {
                                                                 if (cat.id === null) { setFilterCategoryId(null); setFilterTagId(null); setFilterSheetTags([]); }
                                                                 else { setFilterCategoryId(cat.id); setFilterTagId(null); loadFilterTags(cat.id); }
                                                             }}
-                                                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: active && cat.id !== null ? 0 : 1, borderBottomColor: '#1f2937' }}>
+                                                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: active && cat.id !== null ? 0 : 1, borderBottomColor: colors.bgTertiary }}>
                                                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                                                                     {Ic
-                                                                        ? <View style={{ width: 26, height: 26, borderRadius: 8, backgroundColor: (cat.color ?? '#6b7280') + '22', alignItems: 'center', justifyContent: 'center' }}>
-                                                                            <Ic color={cat.color ?? '#6b7280'} size={14} />
+                                                                        ? <View style={{ width: 26, height: 26, borderRadius: 8, backgroundColor: (cat.color ?? colors.textMuted) + '22', alignItems: 'center', justifyContent: 'center' }}>
+                                                                            <Ic color={cat.color ?? colors.textMuted} size={14} />
                                                                           </View>
                                                                         : cat.color ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: cat.color }} /> : null
                                                                     }
@@ -634,13 +641,13 @@ export default function TransactionsScreen() {
                                                                 {active && <Check color="#3b82f6" size={16} />}
                                                             </TouchableOpacity>
                                                             {active && cat.id !== null && filterSheetTags.length > 0 && (
-                                                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
+                                                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
                                                                     {filterSheetTags.map(tag => {
                                                                         const tagActive = filterTagId === tag.id;
                                                                         return (
                                                                             <TouchableOpacity key={tag.id} onPress={() => setFilterTagId(tagActive ? null : tag.id)}
-                                                                                style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, borderWidth: 1.5, borderColor: tagActive ? '#3b82f6' : '#374151', backgroundColor: tagActive ? '#172554' : '#1f2937' }}>
-                                                                                <Text style={{ color: tagActive ? '#60a5fa' : '#9ca3af', fontSize: 12, fontWeight: tagActive ? '600' : '400' }}>{tag.name}</Text>
+                                                                                style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, borderWidth: 1.5, borderColor: tagActive ? '#3b82f6' : colors.borderLight, backgroundColor: tagActive ? '#172554' : colors.bgTertiary }}>
+                                                                                <Text style={{ color: tagActive ? '#60a5fa' : colors.textSecondary, fontSize: 12, fontWeight: tagActive ? '600' : '400' }}>{tag.name}</Text>
                                                                             </TouchableOpacity>
                                                                         );
                                                                     })}
@@ -652,21 +659,21 @@ export default function TransactionsScreen() {
                                             </View>
 
                                             {/* Тип расходов */}
-                                            {secHeader('ТИП РАСХОДОВ')}
+                                            {secHeader(t('transactions.sectionExpenseType'))}
                                             <View style={{ gap: 2 }}>
                                                 {([
-                                                    { value: 'all' as const,         label: 'Все типы' },
-                                                    { value: 'base' as const,        label: 'Базовые' },
-                                                    { value: 'everyday' as const,    label: 'Повседневные' },
-                                                    { value: 'development' as const, label: 'Развитие' },
-                                                    { value: 'forself' as const,     label: 'Для себя' },
-                                                    { value: 'work' as const,        label: 'Рабочие' },
-                                                    { value: 'other' as const,       label: 'Прочее' },
+                                                    { value: 'all' as const,         label: t('transactions.allTypes') },
+                                                    { value: 'base' as const,        label: t('transactions.base') },
+                                                    { value: 'everyday' as const,    label: t('transactions.everyday') },
+                                                    { value: 'development' as const, label: t('transactions.development') },
+                                                    { value: 'forself' as const,     label: t('transactions.forSelf') },
+                                                    { value: 'work' as const,        label: t('transactions.work') },
+                                                    { value: 'other' as const,       label: t('transactions.other') },
                                                 ]).map(opt => {
                                                     const active = filterExpenseType === opt.value;
                                                     return (
                                                         <TouchableOpacity key={opt.value} onPress={() => setFilterExpenseType(opt.value)}
-                                                            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
+                                                            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
                                                             <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: active ? '600' : '400' }}>{opt.label}</Text>
                                                             {active && <Check color="#3b82f6" size={16} />}
                                                         </TouchableOpacity>
@@ -675,17 +682,17 @@ export default function TransactionsScreen() {
                                             </View>
 
                                             {/* Рекуррентность */}
-                                            {secHeader('РЕКУРРЕНТНОСТЬ')}
+                                            {secHeader(t('transactions.sectionRecurrence'))}
                                             <View style={{ gap: 2, marginBottom: 24 }}>
                                                 {([
-                                                    { value: 'all' as const,          label: 'Все платежи' },
-                                                    { value: 'recurring' as const,    label: 'Рекуррентные' },
-                                                    { value: 'non_recurring' as const, label: 'Разовые' },
+                                                    { value: 'all' as const,          label: t('transactions.allPayments') },
+                                                    { value: 'recurring' as const,    label: t('transactions.recurring') },
+                                                    { value: 'non_recurring' as const, label: t('transactions.oneTime') },
                                                 ]).map(opt => {
                                                     const active = filterRecurring === opt.value;
                                                     return (
                                                         <TouchableOpacity key={opt.value} onPress={() => setFilterRecurring(opt.value)}
-                                                            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
+                                                            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
                                                             <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: active ? '600' : '400' }}>{opt.label}</Text>
                                                             {active && <Check color="#3b82f6" size={16} />}
                                                         </TouchableOpacity>
@@ -697,12 +704,12 @@ export default function TransactionsScreen() {
                                             <View style={{ flexDirection: 'row', gap: 12 }}>
                                                 <TouchableOpacity
                                                     onPress={() => { setFilterAccountId(null); setFilterCategoryId(null); setFilterTagId(null); setFilterSheetTags([]); setFilterExpenseType('all'); setFilterRecurring('all'); setActiveSheet(null); }}
-                                                    style={{ flex: 1, borderRadius: 16, paddingVertical: 13, alignItems: 'center', borderWidth: 1.5, borderColor: '#374151' }}>
-                                                    <Text style={{ color: '#9ca3af', fontWeight: '600', fontSize: 15 }}>Сбросить</Text>
+                                                    style={{ flex: 1, borderRadius: 16, paddingVertical: 13, alignItems: 'center', borderWidth: 1.5, borderColor: colors.borderLight }}>
+                                                    <Text style={{ color: colors.textSecondary, fontWeight: '600', fontSize: 15 }}>{t('transactions.reset')}</Text>
                                                 </TouchableOpacity>
                                                 <TouchableOpacity onPress={() => setActiveSheet(null)}
                                                     style={{ flex: 2, borderRadius: 16, paddingVertical: 13, alignItems: 'center', backgroundColor: '#2563eb' }}>
-                                                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Применить</Text>
+                                                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{t('common.apply')}</Text>
                                                 </TouchableOpacity>
                                             </View>
                                         </View>
@@ -712,11 +719,11 @@ export default function TransactionsScreen() {
                                 {/* ── Account ── */}
                                 {activeSheet === 'account' && (
                                     <View style={{ gap: 2 }}>
-                                        {[{ id: null as string | null, name: 'Все счета', color: null as string | null },...accounts].map(acc => {
+                                        {[{ id: null as string | null, name: t('transactions.allAccounts'), color: null as string | null },...accounts].map(acc => {
                                             const active = acc.id === filterAccountId;
                                             return (
                                                 <TouchableOpacity key={acc.id ?? '__all__'} onPress={() => { setFilterAccountId(acc.id); setActiveSheet(null); }}
-                                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
+                                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
                                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                                                         {acc.color && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: acc.color }} />}
                                                         <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 16, fontWeight: active ? '600' : '400' }}>{acc.name}</Text>
@@ -731,7 +738,7 @@ export default function TransactionsScreen() {
                                 {/* ── Category ── */}
                                 {activeSheet === 'category' && (
                                     <View style={{ gap: 2 }}>
-                                        {[{ id: null as string | null, name: 'Все категории', icon: null, color: null, type: 'expense' as const, expense_type: null, is_system: true },
+                                        {[{ id: null as string | null, name: t('transactions.allCategories'), icon: null, color: null, type: 'expense' as const, expense_type: null, is_system: true },
                                           ...categories.filter(c => filterType === 'income' ? c.type === 'income' : c.type === 'expense')
                                         ].map(cat => {
                                             const active = cat.id === filterCategoryId;
@@ -750,11 +757,11 @@ export default function TransactionsScreen() {
                                                             loadFilterTags(cat.id);
                                                         }
                                                     }}
-                                                        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: active && filterSheetTags.length > 0 ? 0 : 1, borderBottomColor: '#1f2937' }}>
+                                                        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: active && filterSheetTags.length > 0 ? 0 : 1, borderBottomColor: colors.bgTertiary }}>
                                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                                                             {Ic
-                                                                ? <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: (cat.color ?? '#6b7280') + '22', alignItems: 'center', justifyContent: 'center' }}>
-                                                                    <Ic color={cat.color ?? '#6b7280'} size={15} />
+                                                                ? <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: (cat.color ?? colors.textMuted) + '22', alignItems: 'center', justifyContent: 'center' }}>
+                                                                    <Ic color={cat.color ?? colors.textMuted} size={15} />
                                                                   </View>
                                                                 : cat.color
                                                                     ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: cat.color }} />
@@ -767,17 +774,17 @@ export default function TransactionsScreen() {
 
                                                     {/* Inline tags under the selected category */}
                                                     {active && cat.id !== null && (
-                                                        <View style={{ paddingHorizontal: 4, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
+                                                        <View style={{ paddingHorizontal: 4, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
                                                             {filterSheetTags.length === 0
-                                                                ? <Text style={{ color: '#4b5563', fontSize: 13 }}>Нет тегов</Text>
+                                                                ? <Text style={{ color: colors.textDisabled, fontSize: 13 }}>{t('common.noData')}</Text>
                                                                 : <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                                                                     {filterSheetTags.map(tag => {
                                                                         const tagActive = filterTagId === tag.id;
                                                                         return (
                                                                             <TouchableOpacity key={tag.id}
                                                                                 onPress={() => { setFilterTagId(tagActive ? null : tag.id); setActiveSheet(null); }}
-                                                                                style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5, borderColor: tagActive ? '#3b82f6' : '#374151', backgroundColor: tagActive ? '#172554' : '#1f2937' }}>
-                                                                                <Text style={{ color: tagActive ? '#60a5fa' : '#9ca3af', fontSize: 13, fontWeight: tagActive ? '600' : '400' }}>{tag.name}</Text>
+                                                                                style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5, borderColor: tagActive ? '#3b82f6' : colors.borderLight, backgroundColor: tagActive ? '#172554' : colors.bgTertiary }}>
+                                                                                <Text style={{ color: tagActive ? '#60a5fa' : colors.textSecondary, fontSize: 13, fontWeight: tagActive ? '600' : '400' }}>{tag.name}</Text>
                                                                             </TouchableOpacity>
                                                                         );
                                                                     })}
@@ -795,21 +802,21 @@ export default function TransactionsScreen() {
                                 {activeSheet === 'expensetype' && (
                                     <View style={{ gap: 2 }}>
                                         {([
-                                            { value: 'all'         as const, label: 'Все типы',      sub: '' },
-                                            { value: 'base'        as const, label: 'Базовые',       sub: 'Жильё, ЖКУ, связь, кредиты' },
-                                            { value: 'everyday'    as const, label: 'Повседневные',  sub: 'Еда, транспорт, бытовые' },
-                                            { value: 'development' as const, label: 'Развитие',      sub: 'Курсы, здоровье, спорт' },
-                                            { value: 'forself'     as const, label: 'Для себя',      sub: 'Развлечения, хобби, подарки' },
-                                            { value: 'work'        as const, label: 'Рабочие',       sub: 'Инструменты, офис, командировки' },
-                                            { value: 'other'       as const, label: 'Прочее',        sub: 'Штрафы, налоги, прочее' },
+                                            { value: 'all'         as const, label: t('transactions.allTypes'),      sub: '' },
+                                            { value: 'base'        as const, label: t('transactions.base'),       sub: t('settings.expTypeBaseDesc') },
+                                            { value: 'everyday'    as const, label: t('transactions.everyday'),  sub: t('settings.expTypeEverydayDesc') },
+                                            { value: 'development' as const, label: t('transactions.development'),      sub: t('settings.expTypeDevelopmentDesc') },
+                                            { value: 'forself'     as const, label: t('transactions.forSelf'),      sub: t('settings.expTypeForSelfDesc') },
+                                            { value: 'work'        as const, label: t('transactions.work'),       sub: t('settings.expTypeWorkDesc') },
+                                            { value: 'other'       as const, label: t('transactions.other'),        sub: t('settings.expTypeOtherDesc') },
                                         ]).map(opt => {
                                             const active = filterExpenseType === opt.value;
                                             return (
                                                 <TouchableOpacity key={opt.value} onPress={() => { setFilterExpenseType(opt.value); setActiveSheet(null); }}
-                                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
+                                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
                                                     <View>
                                                         <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 16, fontWeight: active ? '600' : '400' }}>{opt.label}</Text>
-                                                        {opt.sub ? <Text style={{ color: '#4b5563', fontSize: 12, marginTop: 2 }}>{opt.sub}</Text> : null}
+                                                        {opt.sub ? <Text style={{ color: colors.textDisabled, fontSize: 12, marginTop: 2 }}>{opt.sub}</Text> : null}
                                                     </View>
                                                     {active && <Check color="#3b82f6" size={18} />}
                                                 </TouchableOpacity>
@@ -822,17 +829,17 @@ export default function TransactionsScreen() {
                                 {activeSheet === 'recurring' && (
                                     <View style={{ gap: 2 }}>
                                         {([
-                                            { value: 'all'         as const, label: 'Все платежи',       sub: '' },
-                                            { value: 'recurring'   as const, label: 'Рекуррентные',      sub: 'Связаны с регулярным платежом' },
-                                            { value: 'non_recurring' as const, label: 'Разовые',         sub: 'Без привязки к расписанию' },
+                                            { value: 'all'         as const, label: t('transactions.allPayments'),       sub: '' },
+                                            { value: 'recurring'   as const, label: t('transactions.recurring'),      sub: '' },
+                                            { value: 'non_recurring' as const, label: t('transactions.oneTime'),         sub: '' },
                                         ]).map(opt => {
                                             const active = filterRecurring === opt.value;
                                             return (
                                                 <TouchableOpacity key={opt.value} onPress={() => { setFilterRecurring(opt.value); setActiveSheet(null); }}
-                                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#1f2937' }}>
+                                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
                                                     <View>
                                                         <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 16, fontWeight: active ? '600' : '400' }}>{opt.label}</Text>
-                                                        {opt.sub ? <Text style={{ color: '#4b5563', fontSize: 12, marginTop: 2 }}>{opt.sub}</Text> : null}
+                                                        {opt.sub ? <Text style={{ color: colors.textDisabled, fontSize: 12, marginTop: 2 }}>{opt.sub}</Text> : null}
                                                     </View>
                                                     {active && <Check color="#3b82f6" size={18} />}
                                                 </TouchableOpacity>
