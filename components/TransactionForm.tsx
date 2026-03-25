@@ -171,6 +171,7 @@ export default function TransactionForm({
     const [receiptUri,       setReceiptUri]       = useState<string | null>(null);
     const [receiptUploadUrl, setReceiptUploadUrl] = useState<string | null>(null);
     const [uploadingReceipt, setUploadingReceipt] = useState(false);
+    const [receiptPreview, setReceiptPreview] = useState(false);
     const [saving,           setSaving]           = useState(false);
 
     // ── Tags ─────────────────────────────────────────────────────────────────
@@ -421,24 +422,27 @@ export default function TransactionForm({
         if (source === 'camera') {
             const { status } = await ImagePicker.requestCameraPermissionsAsync();
             if (status !== 'granted') { Alert.alert(t('transactionForm.noCameraAccess'), t('transactionForm.noCameraMsg')); return; }
-            result = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.8, allowsEditing: true, aspect: [4, 3] });
+            result = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.8 });
         } else {
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (status !== 'granted') { Alert.alert(t('transactionForm.noGalleryAccess'), t('transactionForm.noGalleryMsg')); return; }
-            result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.8, allowsEditing: true, aspect: [4, 3] });
+            result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.8 });
         }
         if (result.canceled || !result.assets[0]) return;
         const uri = result.assets[0].uri;
         setReceiptUri(uri);
         setUploadingReceipt(true);
         try {
+            const ext  = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
+            const path = `${householdId}/${Date.now()}.${ext}`;
+
+            // Read file as base64 for reliable upload (blob can be empty in Expo Go)
             const response = await fetch(uri);
-            const blob     = await response.blob();
-            const ext      = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
-            const path     = `${householdId}/${Date.now()}.${ext}`;
+            const arrayBuffer = await response.arrayBuffer();
+            const uint8 = new Uint8Array(arrayBuffer);
             const { data, error } = await supabase.storage
                 .from('receipts')
-                .upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: true });
+                .upload(path, uint8, { contentType: `image/${ext === 'png' ? 'png' : 'jpeg'}`, upsert: true });
             if (error) {
                 Alert.alert(t('transactionForm.uploadError'), error.message);
                 setReceiptUri(null);
@@ -450,7 +454,8 @@ export default function TransactionForm({
                 try {
                     const { recognizeReceipt } = await import('@/lib/receiptOcr');
                     const ocr = await recognizeReceipt(publicUrl);
-                    if (ocr.amount && !formAmount) setFormAmount(String(ocr.amount));
+                    if (ocr.amount && (!formAmount || formAmount === '0' || formAmount === '0.00')) setFormAmount(String(ocr.amount));
+                    if (ocr.currency) setFormCurrency(ocr.currency);
                     if (ocr.date) setFormDate(ocr.date);
                     if (ocr.merchant && !formNote) setFormNote(ocr.merchant);
                 } catch { /* OCR optional */ }
@@ -598,6 +603,7 @@ export default function TransactionForm({
     // ── Render ────────────────────────────────────────────────────────────────
 
     return (
+        <>
         <Modal visible={visible} transparent animationType="slide" onRequestClose={() => {
             if (tagSheet) { setTagSheet(null); return; }
             if (catFormVisible) { setCatFormVisible(false); return; }
@@ -1113,7 +1119,9 @@ export default function TransactionForm({
                                 <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 10 }}>{t('transactionForm.receiptPhoto')}</Text>
                                 {receiptUri ? (
                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: colors.bgTertiary, borderRadius: 14, padding: 12, marginBottom: 24 }}>
-                                        <Image source={{ uri: receiptUri }} style={{ width: 72, height: 72, borderRadius: 10 }} resizeMode="cover" />
+                                        <TouchableOpacity onPress={() => setReceiptPreview(p => !p)} activeOpacity={0.6}>
+                                            <Image source={{ uri: receiptUri }} style={{ width: 72, height: 72, borderRadius: 10 }} resizeMode="cover" />
+                                        </TouchableOpacity>
                                         <View style={{ flex: 1 }}>
                                             {uploadingReceipt ? (
                                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -1192,6 +1200,17 @@ export default function TransactionForm({
                     </View>
                 )}
             </View>
+
+            {/* Receipt fullscreen preview overlay */}
+            {receiptPreview && receiptUri && (
+                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center', zIndex: 999 }}>
+                    <TouchableOpacity onPress={() => setReceiptPreview(false)} style={{ position: 'absolute', top: 60, right: 20, zIndex: 1000, padding: 8 }}>
+                        <X color="#fff" size={28} />
+                    </TouchableOpacity>
+                    <Image source={{ uri: receiptUri }} style={{ width: '90%', height: '80%', borderRadius: 12 }} resizeMode="contain" />
+                </View>
+            )}
         </Modal>
+        </>
     );
 }

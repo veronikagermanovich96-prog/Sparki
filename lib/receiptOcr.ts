@@ -5,6 +5,7 @@
 
 interface OcrResult {
     amount: number | null;
+    currency: string | null;
     date: string | null;
     merchant: string | null;
     rawText: string;
@@ -29,17 +30,18 @@ export async function recognizeReceipt(imageUrl: string): Promise<OcrResult> {
         const json = await res.json();
 
         const text = json?.ParsedResults?.[0]?.ParsedText ?? '';
-        if (!text) return { amount: null, date: null, merchant: null, rawText: '' };
+        if (!text) return { amount: null, currency: null, date: null, merchant: null, rawText: '' };
 
         return {
             amount: extractAmount(text),
+            currency: extractCurrency(text),
             date: extractDate(text),
             merchant: extractMerchant(text),
             rawText: text,
         };
     } catch (e) {
         console.warn('OCR error:', e);
-        return { amount: null, date: null, merchant: null, rawText: '' };
+        return { amount: null, currency: null, date: null, merchant: null, rawText: '' };
     }
 }
 
@@ -47,28 +49,57 @@ export async function recognizeReceipt(imageUrl: string): Promise<OcrResult> {
 
 function extractAmount(text: string): number | null {
     const lines = text.split('\n');
+    const amountRegex = /(\d[\d\s.,]*\d)/g;
 
-    // Look for total/итого lines first (most reliable)
+    function parseAmount(str: string): number {
+        // "4 199,00" or "4199.00" or "4,199.00"
+        const cleaned = str.replace(/\s/g, '');
+        // If has comma before dot or as last separator → treat comma as decimal
+        if (/,\d{2}$/.test(cleaned)) {
+            return parseFloat(cleaned.replace(/\./g, '').replace(',', '.'));
+        }
+        return parseFloat(cleaned.replace(/,/g, ''));
+    }
+
+    // Priority 1: "ИТОГО К ОПЛАТЕ" / "ИТОГ" lines (highest confidence)
     for (const line of lines) {
         const lower = line.toLowerCase();
-        if (/итого|итог|total|всего|к оплате|сумма|amount|subtotal/.test(lower)) {
-            const match = line.match(/(\d[\d\s]*[.,]\d{2})/);
-            if (match) {
-                const val = parseFloat(match[1].replace(/\s/g, '').replace(',', '.'));
-                if (val > 0) return val;
+        if (/итого к оплате|итог\b|total\b|к оплате/.test(lower)) {
+            let m;
+            let best = 0;
+            while ((m = amountRegex.exec(line)) !== null) {
+                const val = parseAmount(m[1]);
+                if (val > best) best = val;
             }
+            amountRegex.lastIndex = 0;
+            if (best > 0) return best;
         }
     }
 
-    // Fallback: find the largest number with 2 decimal places
-    const amounts: number[] = [];
-    const regex = /(\d[\d\s]*[.,]\d{2})/g;
-    let m;
-    while ((m = regex.exec(text)) !== null) {
-        const val = parseFloat(m[1].replace(/\s/g, '').replace(',', '.'));
-        if (val > 0 && val < 1_000_000) amounts.push(val);
+    // Priority 2: "ВСЕГО" / "СУММА" / "AMOUNT" (but not "НДС" / "TAX")
+    for (const line of lines) {
+        const lower = line.toLowerCase();
+        if (/ндс|tax|vat|скидка|discount/.test(lower)) continue;
+        if (/всего|сумма|amount|subtotal/.test(lower)) {
+            let m;
+            let best = 0;
+            while ((m = amountRegex.exec(line)) !== null) {
+                const val = parseAmount(m[1]);
+                if (val > best) best = val;
+            }
+            amountRegex.lastIndex = 0;
+            if (best > 0) return best;
+        }
     }
 
+    // Fallback: largest number with decimal part (not INN/phone/document numbers)
+    const amounts: number[] = [];
+    const decimalRegex = /(\d[\d\s]*[.,]\d{2})\b/g;
+    let m;
+    while ((m = decimalRegex.exec(text)) !== null) {
+        const val = parseAmount(m[1]);
+        if (val > 0 && val < 1_000_000) amounts.push(val);
+    }
     if (amounts.length === 0) return null;
     return Math.max(...amounts);
 }
@@ -108,4 +139,20 @@ function extractMerchant(text: string): string | null {
     }
 
     return lines[0]?.slice(0, 50) ?? null;
+}
+
+// ── Currency detection ──────────────────────────────────────────────────────
+
+function extractCurrency(text: string): string | null {
+    const t = text.toLowerCase();
+    if (/руб|rub|₽/.test(t)) return 'RUB';
+    if (/euro|eur|€/.test(t)) return 'EUR';
+    if (/usd|\$|dollar/.test(t)) return 'USD';
+    if (/gbp|£|pound/.test(t)) return 'GBP';
+    if (/gel|лари/.test(t)) return 'GEL';
+    if (/kzt|тенге/.test(t)) return 'KZT';
+    if (/try|лира/.test(t)) return 'TRY';
+    if (/byn|бел.*руб/.test(t)) return 'BYN';
+    if (/uah|грн|₴/.test(t)) return 'UAH';
+    return null;
 }
