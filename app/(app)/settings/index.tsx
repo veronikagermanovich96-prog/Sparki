@@ -232,7 +232,7 @@ export default function SettingsScreen() {
 
         const [{ data: hh }, { data: cats }, { data: accs }, { data: buds }] = await Promise.all([
             supabase.from('households').select('base_currency').eq('id', member.household_id).single(),
-            supabase.from('categories').select('*').or(`household_id.eq.${member.household_id},is_system.eq.true`).order('name'),
+            supabase.from('categories').select('*').eq('household_id', member.household_id).order('name'),
             supabase.from('accounts').select('*').eq('household_id', member.household_id).eq('is_deleted', false).order('sort_order').order('name'),
             supabase.from('budgets').select('*').eq('household_id', member.household_id),
         ]);

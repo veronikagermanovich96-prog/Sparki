@@ -212,7 +212,7 @@ export default function TransactionForm({
                 }
                 setCatUsage(counts);
             });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     }, [householdId]);
 
     // ── Initialize form when visibility or editingTx changes ─────────────────
@@ -445,6 +445,15 @@ export default function TransactionForm({
             } else {
                 const { data: { publicUrl } } = supabase.storage.from('receipts').getPublicUrl(data.path);
                 setReceiptUploadUrl(publicUrl);
+
+                // OCR: extract data from receipt
+                try {
+                    const { recognizeReceipt } = await import('@/lib/receiptOcr');
+                    const ocr = await recognizeReceipt(publicUrl);
+                    if (ocr.amount && !formAmount) setFormAmount(String(ocr.amount));
+                    if (ocr.date) setFormDate(ocr.date);
+                    if (ocr.merchant && !formNote) setFormNote(ocr.merchant);
+                } catch { /* OCR optional */ }
             }
         } catch (e: any) {
             Alert.alert(t('common.error'), e.message);
@@ -466,7 +475,7 @@ export default function TransactionForm({
     async function reloadCategories(hid: string) {
         const { data } = await supabase.from('categories')
             .select('id, name, icon, color, type, expense_type, is_system')
-            .or(`household_id.eq.${hid},household_id.is.null`).eq('is_hidden', false);
+            .eq('household_id', hid).eq('is_hidden', false);
         setLocalCategories(data ?? []);
         onCategoriesChanged?.(hid);
     }
@@ -684,7 +693,21 @@ export default function TransactionForm({
                                 <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: '700' }}>
                                     {editingTx ? t('transactionForm.editTitle') : t('transactionForm.newTitle')}
                                 </Text>
-                                <TouchableOpacity onPress={onClose} hitSlop={10}>
+                                <TouchableOpacity onPress={() => {
+                                    const hasData = !!(formAmount && parseFloat(formAmount) > 0) || !!formNote.trim();
+                                    if (hasData) {
+                                        Alert.alert(
+                                            t('transactionForm.discardTitle'),
+                                            t('transactionForm.discardMessage'),
+                                            [
+                                                { text: t('common.cancel'), style: 'cancel' },
+                                                { text: t('transactionForm.discardConfirm'), style: 'destructive', onPress: onClose },
+                                            ]
+                                        );
+                                    } else {
+                                        onClose();
+                                    }
+                                }} hitSlop={10}>
                                     <X color={colors.textMuted} size={22} />
                                 </TouchableOpacity>
                             </View>

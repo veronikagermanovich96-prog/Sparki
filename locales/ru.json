@@ -867,7 +867,10 @@
     ],
     "date": "ДАТА",
     "note": "ЗАМЕТКА",
-    "categoryName": "Название категории"
+    "categoryName": "Название категории",
+    "discardTitle": "Закрыть форму?",
+    "discardMessage": "Введённые данные не сохранятся",
+    "discardConfirm": "Закрыть"
   },
   "currencyPicker": {
     "title": "Валюта",

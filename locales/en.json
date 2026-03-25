@@ -868,7 +868,10 @@
     "dayN_many": "{{count}} days",
     "date": "DATE",
     "note": "NOTE",
-    "categoryName": "Category name"
+    "categoryName": "Category name",
+    "discardTitle": "Close form?",
+    "discardMessage": "Entered data will not be saved",
+    "discardConfirm": "Close"
   },
   "currencyPicker": {
     "title": "Currency",

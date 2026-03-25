@@ -7,20 +7,38 @@ import {
     ScrollView, Text, TextInput, TouchableOpacity, View,
     NativeModules,
 } from 'react-native';
-import { Check, Mic, MicOff, Pencil, RotateCcw, X } from 'lucide-react-native';
-// Conditional import: only load if native module is linked (crashes in Expo Go otherwise)
-let Voice: any = null;
-if (NativeModules.Voice) {
-    try { Voice = require('@react-native-voice/voice').default; } catch { /* not linked */ }
-}
-type SpeechResultsEvent = { value?: string[] };
-type SpeechErrorEvent = { error?: any };
+import {
+    Activity, ArrowRightLeft, Award, Banknote, Bike, BookOpen, Briefcase, Building2, Bus,
+    Car, Check, CircleDollarSign, Coffee, Coins, CreditCard, Droplets, Dumbbell,
+    Film, Flag, Flame, Fuel, Gift, Globe, GraduationCap, Heart, Home,
+    Landmark, MapPin, Mic, MicOff, Monitor, Music, Package, PawPrint, Pencil, Pill, Plane,
+    Receipt, RotateCcw, Scissors, Shirt, ShoppingBag, ShoppingCart, Sofa, Star,
+    Tag, Train, TrendingDown, TrendingUp, Trophy, Tv, Utensils, Wallet, Wifi, X, Zap,
+} from 'lucide-react-native';
+
+type IconComp = React.ComponentType<{ color: string; size: number }>;
+const ICON_MAP: Record<string, IconComp> = {
+    ShoppingCart, Coffee, Utensils, ShoppingBag, Car, Bus, Bike, Train, Plane, Fuel,
+    Home, Sofa, Zap, Wifi, Flame, Droplets, Heart, Dumbbell, Activity, Pill,
+    Film, Music, Tv, Monitor, Trophy, Star, Shirt, Tag, Gift, Scissors,
+    MapPin, Globe, BookOpen, GraduationCap, CreditCard, Wallet,
+    Coins, Banknote, Landmark, CircleDollarSign, TrendingUp, TrendingDown,
+    Briefcase, Building2, Receipt, Package, PawPrint, Award, Flag, ArrowRightLeft,
+};
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/context/ThemeContext';
 import { BaseBottomSheet } from '@/components/ui/BaseBottomSheet';
 import { supabase } from '@/lib/supabase';
 import { parseVoiceText, learnFromCorrection, type ParsedTransaction } from '@/lib/categoryMatcher';
 import type { Account, Category } from '@/types';
+// Conditional import: only load if native module is linked (crashes in Expo Go otherwise)
+let Voice: any = null;
+if (NativeModules.Voice) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    try { Voice = require('@react-native-voice/voice').default; } catch { /* not linked */ }
+}
+type SpeechResultsEvent = { value?: string[] };
+type SpeechErrorEvent = { error?: any };
 
 type ParsedTx = ParsedTransaction;
 
@@ -200,7 +218,8 @@ export default function VoiceInput({
         try {
             for (const tx of toSave) {
                 const cat = tx.category
-                    ?? categories.find(c => c.type === tx.type);
+                    ?? categories.find(c => c.type === tx.type)
+                    ?? categories[0];
 
                 if (!cat) continue;
 
@@ -208,17 +227,22 @@ export default function VoiceInput({
                 const account = accounts.find(a => a.id === accountId) ?? accounts[0];
                 const amount = Math.abs(tx.amount);
 
-                await supabase.from('transactions').insert({
+                const { error: insertErr } = await supabase.from('transactions').insert({
                     household_id: householdId,
                     account_id: accountId,
                     category_id: cat.id,
+                    user_id: user.id,
                     type: tx.type,
                     amount,
                     currency: tx.currency || baseCurrency,
                     date: tx.date,
                     note: tx.note || null,
-                    created_by: user.id,
                 });
+
+                if (insertErr) {
+                    console.warn('Insert error:', insertErr);
+                    continue;
+                }
 
                 const delta = tx.type === 'income' ? amount : -amount;
                 await supabase.from('accounts')
@@ -466,7 +490,7 @@ export default function VoiceInput({
                                         </Text>
 
                                         {/* Edit button */}
-                                        <TouchableOpacity onPress={() => setEditingIdx(editingIdx === idx ? null : idx)} style={{ padding: 4 }}>
+                                        <TouchableOpacity onPress={() => { setEditingIdx(editingIdx === idx ? null : idx); setShowCurrencyDrop(false); }} style={{ padding: 4 }}>
                                             <Pencil color={colors.textMuted} size={16} />
                                         </TouchableOpacity>
                                     </TouchableOpacity>
@@ -519,28 +543,32 @@ export default function VoiceInput({
                                                 <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 6 }}>
                                                     {t('transactionForm.category')}
                                                 </Text>
-                                                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                                                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                                                        {categories.filter(c => !c.is_hidden && (c.type === tx.type || c.type === 'expense')).map(cat => (
-                                                            <TouchableOpacity key={cat.id}
-                                                                onPress={() => {
-                                                                    setParsed(prev => prev.map((p, i) => i === idx ? { ...p, category: cat } : p));
-                                                                    learnFromCorrection(tx.note, cat.id);
-                                                                }}
-                                                                style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6,
-                                                                    backgroundColor: tx.category?.id === cat.id ? 'rgba(124,111,255,0.15)' : colors.bgTertiary,
-                                                                    borderWidth: 1.5, borderColor: tx.category?.id === cat.id ? '#7C6FFF' : 'transparent' }}>
-                                                                <Text style={{ fontSize: 16 }}>{cat.icon}</Text>
-                                                                {tx.category?.id === cat.id && (
-                                                                    <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: '600' }}>{cat.name}</Text>
-                                                                )}
-                                                                {tx.category?.id !== cat.id && (
-                                                                    <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{cat.name}</Text>
-                                                                )}
-                                                            </TouchableOpacity>
-                                                        ))}
-                                                    </View>
-                                                </ScrollView>
+                                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                                                    {categories
+                                                        .filter(c => !c.is_hidden && (c.type === tx.type || c.type === 'expense'))
+                                                        .sort((a, b) => {
+                                                            if (a.id === tx.category?.id) return -1;
+                                                            if (b.id === tx.category?.id) return 1;
+                                                            return 0;
+                                                        })
+                                                        .map(cat => {
+                                                            const active = tx.category?.id === cat.id;
+                                                            const Ic = cat.icon ? ICON_MAP[cat.icon] : null;
+                                                            return (
+                                                                <TouchableOpacity key={cat.id}
+                                                                    onPress={() => {
+                                                                        setParsed(prev => prev.map((p, i) => i === idx ? { ...p, category: cat } : p));
+                                                                        learnFromCorrection(tx.note, cat.id);
+                                                                    }}
+                                                                    style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6,
+                                                                        backgroundColor: active ? 'rgba(124,111,255,0.15)' : colors.bgTertiary,
+                                                                        borderWidth: 1.5, borderColor: active ? '#7C6FFF' : 'transparent' }}>
+                                                                    {Ic ? <Ic color={active ? '#fff' : (cat.color ?? '#6b7280')} size={14} /> : null}
+                                                                    <Text style={{ color: active ? colors.textPrimary : colors.textSecondary, fontSize: 13, fontWeight: active ? '600' : '400' }}>{cat.name}</Text>
+                                                                </TouchableOpacity>
+                                                            );
+                                                        })}
+                                                </View>
 
                                                 {/* Create new category */}
                                                 {!showNewCat ? (

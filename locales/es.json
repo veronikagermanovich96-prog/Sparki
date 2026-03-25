@@ -868,7 +868,10 @@
     "dayN_many": "{{count}} días",
     "date": "FECHA",
     "note": "NOTA",
-    "categoryName": "Nombre de categoría"
+    "categoryName": "Nombre de categoría",
+    "discardTitle": "¿Cerrar formulario?",
+    "discardMessage": "Los datos ingresados no se guardarán",
+    "discardConfirm": "Cerrar"
   },
   "currencyPicker": {
     "title": "Moneda",
@@ -902,6 +905,11 @@
     "noAccount": "No hay cuentas disponibles",
     "textFallback": "Micrófono no disponible. Escriba el texto:",
     "textPlaceholder": "Ej: café 350, taxi 200, salario 50000",
-    "parseText": "Analizar"
+    "parseText": "Analizar",
+    "amount": "Importe",
+    "currency": "Divisa",
+    "type": "Tipo",
+    "category": "Categoría",
+    "orType": "o tipo"
   }
 }

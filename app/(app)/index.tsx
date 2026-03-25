@@ -223,7 +223,7 @@ export default function Dashboard() {
                 .eq('household_id', member.household_id).eq('is_deleted', false)
                 .order('sort_order', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true }),
             supabase.from('categories').select('*')
-                .or(`household_id.eq.${member.household_id},is_system.eq.true`)
+                .eq('household_id', member.household_id)
                 .eq('is_hidden', false).order('name'),
             supabase.from('savings_goals')
                 .select('id, name, icon, color, target_amount, current_amount, currency, target_date, account_id')
@@ -960,7 +960,7 @@ export default function Dashboard() {
                 initialAccountId={txFormInitialAccId}
                 onCategoriesChanged={async (hid) => {
                     const { data } = await supabase.from('categories').select('*')
-                        .or(`household_id.eq.${hid},is_system.eq.true`)
+                        .eq('household_id', hid)
                         .eq('is_hidden', false).order('name');
                     setCategories(data ?? []);
                 }}

@@ -868,7 +868,10 @@
     "dayN_many": "{{count}} Tagen",
     "date": "DATUM",
     "note": "NOTIZ",
-    "categoryName": "Kategoriename"
+    "categoryName": "Kategoriename",
+    "discardTitle": "Formular schließen?",
+    "discardMessage": "Eingegebene Daten gehen verloren",
+    "discardConfirm": "Schließen"
   },
   "currencyPicker": {
     "title": "Währung",
@@ -902,6 +905,11 @@
     "noAccount": "Keine Konten verfügbar",
     "textFallback": "Mikrofon nicht verfügbar. Text eingeben:",
     "textPlaceholder": "Z.B.: Kaffee 350, Taxi 200, Gehalt 50000",
-    "parseText": "Analysieren"
+    "parseText": "Analysieren",
+    "amount": "Betrag",
+    "currency": "Währung",
+    "type": "Typ",
+    "category": "Kategorie",
+    "orType": "oder Typ"
   }
 }

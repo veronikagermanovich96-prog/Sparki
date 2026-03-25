@@ -167,7 +167,7 @@ export default function RecurringScreen() {
                 .order('created_at'),
             supabase.from('categories')
                 .select('*')
-                .or(`household_id.eq.${hid},is_system.eq.true`)
+                .eq('household_id', hid)
                 .eq('is_hidden', false)
                 .order('name'),
             supabase.from('recurring_payments')

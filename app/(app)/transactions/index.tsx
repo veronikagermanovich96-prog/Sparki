@@ -17,7 +17,7 @@ import {
 import { BaseBottomSheet } from '@/components/ui/BaseBottomSheet';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { endOfDay, format, startOfDay, startOfMonth, startOfWeek, startOfYear, subDays } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
@@ -116,7 +116,6 @@ function getPeriodRange(p: FilterPeriod, customFrom?: Date | null, customTo?: Da
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function TransactionsScreen() {
-    const router = useRouter();
     const { colors } = useTheme();
     const { t } = useTranslation();
 
@@ -181,7 +180,7 @@ export default function TransactionsScreen() {
             supabase.from('accounts').select('id, name, color, currency, balance')
                 .eq('household_id', hid).eq('is_deleted', false).order('created_at'),
             supabase.from('categories').select('id, name, slug, icon, color, type, expense_type, is_system')
-                .or(`household_id.eq.${hid},household_id.is.null`).eq('is_hidden', false),
+                .eq('household_id', hid).eq('is_hidden', false),
             supabase.from('households').select('base_currency').eq('id', hid).single(),
         ]);
 
@@ -239,7 +238,7 @@ export default function TransactionsScreen() {
     async function reloadCategories(hid: string) {
         const { data } = await supabase.from('categories')
             .select('id, name, icon, color, type, expense_type, is_system')
-            .or(`household_id.eq.${hid},household_id.is.null`).eq('is_hidden', false);
+            .eq('household_id', hid).eq('is_hidden', false);
         setCategories(data ?? []);
     }
 
@@ -614,7 +613,7 @@ export default function TransactionsScreen() {
                                             {secHeader(t('transactions.sectionCategory'))}
                                             <TouchableOpacity onPress={() => setCollapsedSections(prev => {
                                                 const next = new Set(prev);
-                                                next.has('category') ? next.delete('category') : next.add('category');
+                                                if (next.has('category')) next.delete('category'); else next.add('category');
                                                 return next;
                                             })} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
                                                 <Text style={{ color: filterCategoryId === null ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: '600' }}>
@@ -671,7 +670,7 @@ export default function TransactionsScreen() {
                                             {secHeader(t('transactions.sectionExpenseType'))}
                                             <TouchableOpacity onPress={() => setCollapsedSections(prev => {
                                                 const next = new Set(prev);
-                                                next.has('expType') ? next.delete('expType') : next.add('expType');
+                                                if (next.has('expType')) next.delete('expType'); else next.add('expType');
                                                 return next;
                                             })} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
                                                 <Text style={{ color: filterExpenseType === 'all' ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: '600' }}>
@@ -712,7 +711,7 @@ export default function TransactionsScreen() {
                                             {secHeader(t('transactions.sectionRecurrence'))}
                                             <TouchableOpacity onPress={() => setCollapsedSections(prev => {
                                                 const next = new Set(prev);
-                                                next.has('recurrence') ? next.delete('recurrence') : next.add('recurrence');
+                                                if (next.has('recurrence')) next.delete('recurrence'); else next.add('recurrence');
                                                 return next;
                                             })} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
                                                 <Text style={{ color: filterRecurring === 'all' ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: '600' }}>

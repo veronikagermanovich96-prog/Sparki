@@ -1444,7 +1444,7 @@ export default function AnalyticsScreen() {
             // 5) Categories (for expense_type filtering)
             supabase.from('categories')
                 .select('id, expense_type')
-                .or(`household_id.eq.${hid},is_system.eq.true`),
+                .eq('household_id', hid),
         ]);
 
         const getAmt = (t: { amount: number; amount_base: number | null }) => t.amount_base ?? t.amount;
@@ -4539,34 +4539,38 @@ export default function AnalyticsScreen() {
                                 </View>
                             </View>
 
-                            {/* ── 3. Сумма + валюта ── */}
+                            {/* ── 3. Сумма ── */}
                             <Text style={labelStyle}>{t('analytics.targetAmount')}</Text>
-                            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                                <TextInput
-                                    value={goalTarget}
-                                    onChangeText={setGoalTarget}
-                                    placeholder="0"
-                                    placeholderTextColor={colors.textDisabled}
-                                    keyboardType="decimal-pad"
-                                    style={[inputStyle, { flex: 1, marginBottom: 0 }]}
-                                />
-                                {/* Currency dropdown trigger */}
-                                <TouchableOpacity
-                                    onPress={() => setShowCurrencyDropdown(true)}
-                                    style={{
-                                        flexDirection: 'row', alignItems: 'center', gap: 6,
-                                        paddingHorizontal: 14, borderRadius: 12,
-                                        backgroundColor: 'rgba(255,255,255,0.06)',
-                                        borderWidth: 1.5,
-                                        borderColor: 'rgba(124,111,255,0.3)',
-                                        minWidth: 88,
-                                    }}
-                                >
-                                    <Text style={{ fontSize: 18 }}>{CURRENCIES.find(c => c.code === goalCurrency)?.flag}</Text>
-                                    <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '700' }}>{goalCurrency}</Text>
-                                    <Text style={{ color: colors.textMuted, fontSize: 11, marginLeft: 2 }}>▾</Text>
-                                </TouchableOpacity>
-                            </View>
+                            <TextInput
+                                value={goalTarget}
+                                onChangeText={setGoalTarget}
+                                placeholder="0.00"
+                                placeholderTextColor={colors.textDisabled}
+                                keyboardType="decimal-pad"
+                                style={[inputStyle, { marginBottom: 12 }]}
+                            />
+
+                            {/* ── Валюта ── */}
+                            <Text style={labelStyle}>{t('analytics.currency') ?? 'Валюта'}</Text>
+                            <TouchableOpacity
+                                onPress={() => setShowCurrencyDropdown(true)}
+                                style={{
+                                    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                                    paddingHorizontal: 14, paddingVertical: 14, borderRadius: 12, marginBottom: 16,
+                                    backgroundColor: colors.bgTertiary,
+                                    borderWidth: 1.5,
+                                    borderColor: colors.brand ?? '#7C6FFF',
+                                }}
+                            >
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                    <Text style={{ fontSize: 22 }}>{CURRENCIES.find(c => c.code === goalCurrency)?.flag}</Text>
+                                    <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '700' }}>{goalCurrency}</Text>
+                                    <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+                                        {CURRENCIES.find(c => c.code === goalCurrency)?.name ?? ''}
+                                    </Text>
+                                </View>
+                                <Text style={{ color: colors.textMuted, fontSize: 14 }}>▾</Text>
+                            </TouchableOpacity>
 
                             {/* ── Currency dropdown modal ── */}
                             <Modal visible={showCurrencyDropdown} transparent animationType="fade">

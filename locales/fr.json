@@ -868,7 +868,10 @@
     "dayN_many": "{{count}} jours",
     "date": "DATE",
     "note": "NOTE",
-    "categoryName": "Nom de la catégorie"
+    "categoryName": "Nom de la catégorie",
+    "discardTitle": "Fermer le formulaire?",
+    "discardMessage": "Les données saisies ne seront pas enregistrées",
+    "discardConfirm": "Fermer"
   },
   "currencyPicker": {
     "title": "Devise",
@@ -902,6 +905,11 @@
     "noAccount": "Aucun compte disponible",
     "textFallback": "Micro indisponible. Saisissez le texte :",
     "textPlaceholder": "Ex : café 350, taxi 200, salaire 50000",
-    "parseText": "Analyser"
+    "parseText": "Analyser",
+    "amount": "Montant",
+    "currency": "Devise",
+    "type": "Type",
+    "category": "Catégorie",
+    "orType": "ou type"
   }
 }

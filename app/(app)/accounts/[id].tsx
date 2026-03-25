@@ -161,7 +161,7 @@ export default function AccountDetailScreen() {
         const { data: cats } = await supabase
             .from('categories')
             .select('id, name, icon, color, type, expense_type, is_system')
-            .or(`household_id.eq.${member.household_id},is_system.eq.true`)
+            .eq('household_id', member.household_id)
             .eq('is_deleted', false)
             .order('sort_order');
         setCategories((cats as CategoryLight[]) ?? []);

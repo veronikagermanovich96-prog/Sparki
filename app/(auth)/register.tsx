@@ -1,9 +1,9 @@
-import { supabase } from '@/lib/supabase';
 import { seedDefaultCategories } from '@/lib/seedCategories';
+import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { Alert, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export default function Register() {
     const [email, setEmail] = useState('');
@@ -47,8 +47,13 @@ export default function Register() {
             await seedDefaultCategories(household.id);
         }
 
+        // Auto-login if signUp didn't create a session (email confirmation enabled)
+        if (!data.session) {
+            await supabase.auth.signInWithPassword({ email, password });
+        }
+
         setLoading(false);
-        router.replace('/(auth)/categories-quiz');
+        router.replace('/(app)' as any);
     }
 
     return (
