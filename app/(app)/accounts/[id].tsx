@@ -75,7 +75,7 @@ type TxWithCategory = Transaction & {
 };
 
 type AccountLight  = { id: string; name: string; color: string | null; currency: string; balance: number }; // eslint-disable-line @typescript-eslint/no-unused-vars
-type CategoryLight = { id: string; name: string; icon: string | null; color: string | null; type: 'income' | 'expense'; expense_type: string | null; is_system: boolean };
+type CategoryLight = { id: string; name: string; slug: string | null; icon: string | null; color: string | null; type: 'income' | 'expense'; expense_type: string | null; is_system: boolean };
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 

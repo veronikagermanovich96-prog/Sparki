@@ -56,7 +56,7 @@ const CURRENCY_LIST = CURRENCIES;
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type AccountLight  = { id: string; name: string; color: string | null; currency: string; balance: number };
-type CategoryLight = { id: string; name: string; icon: string | null; color: string | null; type: 'income' | 'expense'; expense_type: string | null; is_system: boolean };
+type CategoryLight = { id: string; name: string; slug: string | null; icon: string | null; color: string | null; type: 'income' | 'expense'; expense_type: string | null; is_system: boolean };
 type TagLight      = { id: string; name: string };
 type RecurFreq     = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
@@ -172,6 +172,8 @@ export default function TransactionForm({
     const [receiptUploadUrl, setReceiptUploadUrl] = useState<string | null>(null);
     const [uploadingReceipt, setUploadingReceipt] = useState(false);
     const [receiptPreview, setReceiptPreview] = useState(false);
+    const [receiptItems, setReceiptItems] = useState<Array<{ name: string; quantity: number; price: number; categorySlug: string | null; checked: boolean; categoryId: string | null }>>([]);
+    const [receiptCollapsed, setReceiptCollapsed] = useState<Set<string>>(new Set());
     const [saving,           setSaving]           = useState(false);
 
     // ── Tags ─────────────────────────────────────────────────────────────────
@@ -458,6 +460,18 @@ export default function TransactionForm({
                     if (ocr.currency) setFormCurrency(ocr.currency);
                     if (ocr.date) setFormDate(ocr.date);
                     if (ocr.merchant && !formNote) setFormNote(ocr.merchant);
+                    if (ocr.categorySlug && !formCategoryId) {
+                        const match = localCategories.find(c => c.slug === ocr.categorySlug);
+                        if (match) setFormCategoryId(match.id);
+                    }
+                    // Multi-item receipt
+                    if (ocr.items.length > 1) {
+                        setReceiptItems(ocr.items.map(item => ({
+                            ...item,
+                            checked: true,
+                            categoryId: localCategories.find(c => c.slug === item.categorySlug)?.id ?? formCategoryId ?? null,
+                        })));
+                    }
                 } catch { /* OCR optional */ }
             }
         } catch (e: any) {
@@ -479,7 +493,7 @@ export default function TransactionForm({
 
     async function reloadCategories(hid: string) {
         const { data } = await supabase.from('categories')
-            .select('id, name, icon, color, type, expense_type, is_system')
+            .select('id, name, slug, icon, color, type, expense_type, is_system')
             .eq('household_id', hid).eq('is_hidden', false);
         setLocalCategories(data ?? []);
         onCategoriesChanged?.(hid);
@@ -524,7 +538,38 @@ export default function TransactionForm({
     // ── Save ─────────────────────────────────────────────────────────────────
 
     async function saveForm() {
-        if (!formAmount || !formAccountId || !householdId) return;
+        if (!formAccountId || !householdId) return;
+
+        // Multi-item receipt: save each checked item as separate transaction
+        const checkedItems = receiptItems.filter(i => i.checked);
+        if (checkedItems.length > 1) {
+            setSaving(true);
+            const acc = accounts.find(a => a.id === formAccountId);
+            const rate = showRate && formRate ? parseFloat(formRate) : null;
+            let totalDelta = 0;
+            for (const item of checkedItems) {
+                const catId = item.categoryId || formCategoryId || null;
+                const amountBase = rate ? item.price * rate : item.price;
+                await supabase.from('transactions').insert({
+                    household_id: householdId, account_id: formAccountId,
+                    category_id: catId, user_id: userId, type: formType,
+                    amount: item.price, currency: formCurrency,
+                    amount_base: amountBase, exchange_rate: rate,
+                    note: item.name, date: formDate,
+                    receipt_url: receiptUploadUrl || null,
+                });
+                totalDelta += formType === 'income' ? item.price : -item.price;
+            }
+            if (acc) {
+                await supabase.from('accounts').update({ balance: acc.balance + totalDelta }).eq('id', acc.id);
+            }
+            setSaving(false);
+            setReceiptItems([]);
+            onSaved();
+            return;
+        }
+
+        if (!formAmount) return;
         const amount = parseFloat(formAmount);
         if (isNaN(amount) || amount <= 0) return;
         if (formType !== 'transfer' && !formCategoryId) return;
@@ -1152,6 +1197,96 @@ export default function TransactionForm({
                                         </TouchableOpacity>
                                     </View>
                                 )}
+
+                                {/* Receipt items — grouped by category */}
+                                {receiptItems.length > 1 && (() => {
+                                    // Group items by category
+                                    const groups: Record<string, { cat: CategoryLight | null; items: Array<typeof receiptItems[0] & { idx: number }> }> = {};
+                                    receiptItems.forEach((item, idx) => {
+                                        const cat = item.categoryId ? (localCategories.find(c => c.id === item.categoryId) ?? null) : null;
+                                        const key = cat?.name ?? 'Другое';
+                                        if (!groups[key]) groups[key] = { cat, items: [] };
+                                        groups[key].items.push({ ...item, idx });
+                                    });
+                                    const checkedTotal = receiptItems.filter(i => i.checked).reduce((s, i) => s + i.price, 0);
+                                    const checkedCount = receiptItems.filter(i => i.checked).length;
+
+                                    return (
+                                        <View style={{ backgroundColor: colors.bgSecondary, borderRadius: 16, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: colors.border }}>
+                                            {/* Header */}
+                                            <TouchableOpacity
+                                                onPress={() => setReceiptItems(prev => {
+                                                    const allChecked = prev.every(i => i.checked);
+                                                    return prev.map(i => ({ ...i, checked: !allChecked }));
+                                                })}
+                                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                                                <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '700' }}>
+                                                    {t('transactionForm.receiptItems') ?? 'Позиции чека'} ({checkedCount}/{receiptItems.length})
+                                                </Text>
+                                                <Text style={{ color: '#dc2626', fontSize: 15, fontWeight: '700' }}>
+                                                    {checkedTotal.toFixed(2)} {formCurrency}
+                                                </Text>
+                                            </TouchableOpacity>
+
+                                            {/* Category groups */}
+                                            {Object.entries(groups).map(([groupName, group]) => {
+                                                const Ic = group.cat?.icon ? CAT_ICONS[group.cat.icon] : null;
+                                                const groupTotal = group.items.filter(i => i.checked).reduce((s, i) => s + i.price, 0);
+                                                const collapsed = receiptCollapsed.has(groupName);
+                                                return (
+                                                    <View key={groupName} style={{ marginBottom: 10 }}>
+                                                        {/* Group header — accordion */}
+                                                        <TouchableOpacity
+                                                            onPress={() => setReceiptCollapsed(prev => {
+                                                                const next = new Set(prev);
+                                                                if (next.has(groupName)) next.delete(groupName); else next.add(groupName);
+                                                                return next;
+                                                            })}
+                                                            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                                                            {Ic && <Ic color={group.cat?.color ?? colors.textMuted} size={14} />}
+                                                            <Text style={{ color: colors.textSecondary, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', flex: 1 }}>
+                                                                {groupName} ({group.items.filter(i => i.checked).length})
+                                                            </Text>
+                                                            <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600', marginRight: 6 }}>
+                                                                {groupTotal.toFixed(2)}
+                                                            </Text>
+                                                            {collapsed
+                                                                ? <ChevronDown color={colors.textMuted} size={14} />
+                                                                : <ChevronDown color={colors.textMuted} size={14} style={{ transform: [{ rotate: '-90deg' }] }} />
+                                                            }
+                                                        </TouchableOpacity>
+
+                                                        {/* Items */}
+                                                        {!collapsed && group.items.map(item => (
+                                                            <TouchableOpacity key={item.idx}
+                                                                onPress={() => setReceiptItems(prev => prev.map((it, i) => i === item.idx ? { ...it, checked: !it.checked } : it))}
+                                                                style={{
+                                                                    flexDirection: 'row', alignItems: 'center', gap: 8,
+                                                                    paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, marginBottom: 3,
+                                                                    backgroundColor: item.checked ? 'rgba(124,111,255,0.06)' : 'transparent',
+                                                                }}>
+                                                                <View style={{
+                                                                    width: 18, height: 18, borderRadius: 5,
+                                                                    backgroundColor: item.checked ? '#7C6FFF' : 'transparent',
+                                                                    borderWidth: item.checked ? 0 : 1.5, borderColor: colors.textDisabled,
+                                                                    alignItems: 'center', justifyContent: 'center',
+                                                                }}>
+                                                                    {item.checked && <Check color="#fff" size={10} />}
+                                                                </View>
+                                                                <Text style={{ color: item.checked ? colors.textPrimary : colors.textDisabled, fontSize: 13, flex: 1 }} numberOfLines={1}>
+                                                                    {item.name}
+                                                                </Text>
+                                                                <Text style={{ color: item.checked ? '#dc2626' : colors.textDisabled, fontSize: 13, fontWeight: '600' }}>
+                                                                    {item.quantity > 1 ? `${item.quantity}× ` : ''}{item.price.toFixed(2)}
+                                                                </Text>
+                                                            </TouchableOpacity>
+                                                        ))}
+                                                    </View>
+                                                );
+                                            })}
+                                        </View>
+                                    );
+                                })()}
 
                                 {/* Save */}
                                 <TouchableOpacity onPress={saveForm}

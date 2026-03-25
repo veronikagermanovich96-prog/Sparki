@@ -93,7 +93,7 @@ interface TxRow {
 }
 
 type AccountLight   = { id: string; name: string; color: string | null; currency: string; balance: number };
-type CategoryLight  = { id: string; name: string; icon: string | null; color: string | null; type: 'income' | 'expense'; expense_type: string | null; is_system: boolean };
+type CategoryLight  = { id: string; name: string; slug: string | null; icon: string | null; color: string | null; type: 'income' | 'expense'; expense_type: string | null; is_system: boolean };
 type TagLight       = { id: string; name: string };
 
 type FilterType        = 'all' | 'income' | 'expense' | 'transfer';
@@ -237,7 +237,7 @@ export default function TransactionsScreen() {
 
     async function reloadCategories(hid: string) {
         const { data } = await supabase.from('categories')
-            .select('id, name, icon, color, type, expense_type, is_system')
+            .select('id, name, slug, icon, color, type, expense_type, is_system')
             .eq('household_id', hid).eq('is_hidden', false);
         setCategories(data ?? []);
     }
