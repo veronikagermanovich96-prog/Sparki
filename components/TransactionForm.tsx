@@ -1,7 +1,7 @@
 import {
     Activity, ArrowLeft, ArrowRightLeft, Award,
     Banknote, Bike, Bitcoin, BookOpen, Briefcase, Building2, Bus,
-    Camera, Car, Check, ChevronDown, CircleDollarSign, Coffee, Coins, CreditCard, Images,
+    Calculator, Camera, Car, Check, ChevronDown, CircleDollarSign, Coffee, Coins, CreditCard, Images,
     Droplets, Dumbbell, Film, Flag, Flame, Fuel, Gift, Globe, GraduationCap,
     Heart, Home, Landmark, MapPin, Monitor, Music,
     Package, PawPrint, Pencil, Pill, Plane, Plus, Receipt, Scissors,
@@ -182,6 +182,8 @@ export default function TransactionForm({
     const [formRate,       setFormRate]       = useState('');
     const [formDate,       setFormDate]       = useState('');
     const [formNote,       setFormNote]       = useState('');
+    const [showCalc,       setShowCalc]       = useState(false);
+    const [calcExpression, setCalcExpression] = useState('');
     const [formIsRecurring,    setFormIsRecurring]    = useState(false);
     const [formRecurFreq,      setFormRecurFreq]      = useState<RecurFreq>('monthly');
     const [formRecurWeekday,   setFormRecurWeekday]   = useState(0);
@@ -289,6 +291,8 @@ export default function TransactionForm({
             setReceiptUploadUrl(null);
             setSelectedTagId('');
         }
+        setShowCalc(false);
+        setCalcExpression('');
         setCategoryTags([]);
         setNewTagText('');
         setAddingTag(false);
@@ -585,6 +589,50 @@ export default function TransactionForm({
         ]);
     }
 
+    // ── Calculator ─────────────────────────────────────────────────────────
+
+    function evaluateExpression(expr: string): string {
+        if (!expr) return '0';
+        try {
+            let clean = expr.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-');
+            if (!/^[0-9+\-*/.() ]+$/.test(clean)) return '0';
+            // Remove trailing operator so "60+55+" evaluates as "60+55"
+            clean = clean.replace(/[+\-*/]+$/, '');
+            if (!clean) return '0';
+            const result = Function('"use strict"; return (' + clean + ')')();
+            if (!isFinite(result)) return '0';
+            return parseFloat(result.toFixed(2)).toString();
+        } catch { return '0'; }
+    }
+
+    function handleCalcButton(btn: string) {
+        if (btn === 'C') {
+            setCalcExpression('');
+        } else if (btn === '⌫') {
+            setCalcExpression(prev => prev.slice(0, -1));
+        } else if (btn === '=') {
+            const result = evaluateExpression(calcExpression);
+            if (result !== '?') {
+                setFormAmount(result);
+                setShowCalc(false);
+                setCalcExpression('');
+            }
+        } else if (btn === '±') {
+            setCalcExpression(prev => prev.startsWith('-') ? prev.slice(1) : '-' + prev);
+        } else if (btn === '%') {
+            const val = parseFloat(evaluateExpression(calcExpression));
+            if (!isNaN(val)) setCalcExpression(String(val / 100));
+        } else if (btn === '÷') {
+            setCalcExpression(prev => prev + '/');
+        } else if (btn === '×') {
+            setCalcExpression(prev => prev + '*');
+        } else if (btn === '−') {
+            setCalcExpression(prev => prev + '-');
+        } else {
+            setCalcExpression(prev => prev + btn);
+        }
+    }
+
     // ── Receipt save helper ─────────────────────────────────────────────────
 
     type CheckedItem = typeof receiptItems[0];
@@ -722,7 +770,6 @@ export default function TransactionForm({
             return;
         }
 
-        if (!formAmount) return;
         if (!formAmount) return;
         const amount = parseFloat(formAmount);
         if (isNaN(amount) || amount <= 0) return;
@@ -1057,6 +1104,15 @@ export default function TransactionForm({
                                         keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.textDisabled}
                                         style={{ flex: 1, backgroundColor: colors.bgTertiary, color: colors.textPrimary, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 24, fontWeight: '700' }}
                                     />
+                                    <TouchableOpacity
+                                        onPress={() => {
+                                            setCalcExpression(formAmount || '');
+                                            setShowCalc(true);
+                                        }}
+                                        activeOpacity={0.6}
+                                        style={{ alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgTertiary, borderRadius: 12, width: 52 }}>
+                                        <Calculator color={colors.textMuted} size={20} />
+                                    </TouchableOpacity>
                                     <TouchableOpacity
                                         onPress={() => setCurrencyOpen(v => !v)}
                                         activeOpacity={0.8}
@@ -1567,6 +1623,56 @@ export default function TransactionForm({
                                 );
                             })}
                         </ScrollView>
+                    </View>
+                </View>
+            )}
+
+            {/* Calculator overlay */}
+            {showCalc && (
+                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }}>
+                    <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }} activeOpacity={1} onPress={() => setShowCalc(false)} />
+                    <View style={{ backgroundColor: colors.bgSecondary, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40 }}>
+                        <View style={{ width: 40, height: 4, backgroundColor: colors.borderLight, borderRadius: 2, alignSelf: 'center', marginBottom: 16 }} />
+                        {/* Display */}
+                        <View style={{ backgroundColor: colors.bgTertiary, borderRadius: 12, padding: 16, marginBottom: 16, minHeight: 60, justifyContent: 'flex-end' }}>
+                            <Text style={{ color: colors.textMuted, fontSize: 14, textAlign: 'right' }}>
+                                {calcExpression.replace(/\*/g, '×').replace(/\//g, '÷').replace(/-/g, '−') || '0'}
+                            </Text>
+                            <Text style={{ color: colors.textPrimary, fontSize: 28, fontWeight: '700', textAlign: 'right' }}>
+                                {evaluateExpression(calcExpression)}
+                            </Text>
+                        </View>
+                        {/* Buttons */}
+                        {[
+                            ['C', '±', '%', '÷'],
+                            ['7', '8', '9', '×'],
+                            ['4', '5', '6', '−'],
+                            ['1', '2', '3', '+'],
+                            ['0', '.', '⌫', '='],
+                        ].map((row, ri) => (
+                            <View key={ri} style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                                {row.map(btn => (
+                                    <TouchableOpacity key={btn} onPress={() => handleCalcButton(btn)}
+                                        activeOpacity={0.6}
+                                        style={{
+                                            flex: 1, height: 56, borderRadius: 14,
+                                            alignItems: 'center', justifyContent: 'center',
+                                            backgroundColor:
+                                                btn === '=' ? '#7C6FFF' :
+                                                ['÷','×','−','+'].includes(btn) ? 'rgba(124,111,255,0.15)' :
+                                                ['C','±','%'].includes(btn) ? colors.bgTertiary :
+                                                colors.bgSecondary,
+                                        }}>
+                                        <Text style={{
+                                            fontSize: 20, fontWeight: '600',
+                                            color: btn === '=' ? '#fff' :
+                                                ['÷','×','−','+'].includes(btn) ? '#7C6FFF' :
+                                                colors.textPrimary,
+                                        }}>{btn}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        ))}
                     </View>
                 </View>
             )}

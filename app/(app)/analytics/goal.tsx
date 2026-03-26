@@ -204,7 +204,9 @@ export default function GoalScreen() {
     }
 
     async function confirmArchive() {
+        if (!householdId) return;
         setArchiving(true);
+        try {
 
         // Transfer funds if needed
         if (saved > 0 && deleteDestType !== 'none' && deleteDestId) {
@@ -247,6 +249,9 @@ export default function GoalScreen() {
             .update({ is_archived: true, is_active: false, current_amount: 0 })
             .eq('id', id);
 
+        } catch (e: any) {
+            Alert.alert(t('common.error'), e?.message ?? 'Unknown error');
+        }
         setArchiving(false);
         setShowArchiveSheet(false);
         router.back();
@@ -289,7 +294,8 @@ export default function GoalScreen() {
         try {
             // Update saved amount on the goal
             const newSaved = saved + amt;
-            await supabase.from('savings_goals').update({ current_amount: newSaved }).eq('id', id);
+            const { error: goalErr } = await supabase.from('savings_goals').update({ current_amount: newSaved }).eq('id', id);
+            if (goalErr) throw goalErr;
 
             // Deduct from account if selected
             if (topUpAccountId) {

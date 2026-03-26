@@ -96,11 +96,11 @@ function extractAmount(text: string): number | null {
         if (/итого к оплате|итог\b|total\b|к оплате/.test(lower)) {
             let m;
             let best = 0;
+            amountRegex.lastIndex = 0;
             while ((m = amountRegex.exec(line)) !== null) {
                 const val = parseAmount(m[1]);
                 if (val > best) best = val;
             }
-            amountRegex.lastIndex = 0;
             if (best > 0) return best;
         }
     }
@@ -112,11 +112,11 @@ function extractAmount(text: string): number | null {
         if (/всего|сумма|amount|subtotal/.test(lower)) {
             let m;
             let best = 0;
+            amountRegex.lastIndex = 0;
             while ((m = amountRegex.exec(line)) !== null) {
                 const val = parseAmount(m[1]);
                 if (val > best) best = val;
             }
-            amountRegex.lastIndex = 0;
             if (best > 0) return best;
         }
     }
@@ -141,7 +141,7 @@ function extractDate(text: string): string | null {
     if (match1) return `${match1[3]}-${match1[2]}-${match1[1]}`;
 
     // YYYY-MM-DD
-    const match2 = text.match(/(\d{4})-(\d{2})-(\d{2})/);
+    const match2 = text.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
     if (match2) return match2[0];
 
     // DD.MM.YY

@@ -22,7 +22,7 @@ import { BaseBottomSheet } from '@/components/ui/BaseBottomSheet';
 import {
     Activity, ArrowRightLeft, Award,
     Banknote, Bike, Bitcoin, BookOpen, Briefcase, Building2, Bus,
-    Camera, Car, ChevronLeft, ChevronRight, CircleDollarSign, Coffee, Coins, CreditCard,
+    Camera, Car, Check, ChevronLeft, ChevronRight, CircleDollarSign, Coffee, Coins, CreditCard,
     Droplets, Dumbbell, Film, Flag, Flame, Fuel, Gift, Globe, GraduationCap,
     Heart, Home, Landmark, Laptop, MapPin, Monitor, Music,
     Package, PawPrint, Pencil, Pill, Plane, Receipt, Scissors,
@@ -601,12 +601,13 @@ function ForecastLineChart({ data, selectedIndex, onSelect, currency: cur }: { d
 
 // ─── DonutChart ───────────────────────────────────────────────────────────────
 
-function DonutChart({ categories, totalAmount, currency: cur, active, onPress, visibleLegend, onMorePress, hiddenCount }: {
+function DonutChart({ categories, totalAmount, currency: cur, active, onPress, onCategoryPress, visibleLegend, onMorePress, hiddenCount }: {
     categories: CategoryItem[];
     totalAmount: number;
     currency: string;
     active: number | null;
     onPress: (i: number | null) => void;
+    onCategoryPress?: (cat: CategoryItem) => void;
     visibleLegend: CategoryItem[];
     onMorePress?: () => void;
     hiddenCount: number;
@@ -683,7 +684,7 @@ function DonutChart({ categories, totalAmount, currency: cur, active, onPress, v
                     const dimmed = active !== null && !isActive;
                     return (
                         <TouchableOpacity key={cat.id} activeOpacity={0.7}
-                            onPress={() => onPress(isActive ? null : catIdx)}
+                            onPress={() => onCategoryPress ? onCategoryPress(cat) : onPress(isActive ? null : catIdx)}
                             style={{ flexDirection: 'row', alignItems: 'center', gap: 8, opacity: dimmed ? 0.35 : 1 }}>
                             <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: cat.color + '26', alignItems: 'center', justifyContent: 'center' }}>
                                 <CategoryIcon iconName={cat.icon} color={cat.color} size={14} />
@@ -966,6 +967,19 @@ export default function AnalyticsScreen() {
     const [activeCategory, setActiveCategory] = useState<number | null>(null);
     const [catExpanded, setCatExpanded] = useState(false);
 
+    // Category detail sheet
+    const [selectedCategory, setSelectedCategory] = useState<{
+        id: string; name: string; icon: string | null; color: string | null;
+        amount: number; currency: string; percent: number;
+    } | null>(null);
+    const [categoryTxs, setCategoryTxs] = useState<any[]>([]);
+    const [categoryPrevAmount, setCategoryPrevAmount] = useState(0);
+    const [loadingCategoryTxs, setLoadingCategoryTxs] = useState(false);
+
+    // Watched categories
+    const [watchedCategoryIds, setWatchedCategoryIds] = useState<string[]>([]);
+    const [showAddWatchedSheet, setShowAddWatchedSheet] = useState(false);
+
     const [householdId, setHouseholdId] = useState<string | null>(null);
     const [currency, setCurrency] = useState('EUR');
 
@@ -981,6 +995,50 @@ export default function AnalyticsScreen() {
 
     const [forecastData, setForecastData] = useState<ForecastData | null>(null);
     const [goalsState, setGoalsState] = useState<GoalItem[]>([]);
+
+    // ── Watched categories ─────────────────────────────────────────────────
+
+    async function toggleWatchedCategory(id: string) {
+        const next = watchedCategoryIds.includes(id)
+            ? watchedCategoryIds.filter(c => c !== id)
+            : [...watchedCategoryIds, id];
+        setWatchedCategoryIds(next);
+        await AsyncStorage.setItem('watchedCategories', JSON.stringify(next));
+    }
+
+    // ── Category detail ───────────────────────────────────────────────────
+    async function openCategoryDetail(cat: { id: string; name: string; icon: string | null; color: string | null; amount: number; percent: number }) {
+        if (!householdId) return;
+        setSelectedCategory({ ...cat, currency });
+        setLoadingCategoryTxs(true);
+
+        const now = new Date();
+        const { start, end, prevStart, prevEnd } = getDateRange(catPeriod, now);
+
+        const [{ data: txs }, { data: prevTxs }] = await Promise.all([
+            supabase.from('transactions')
+                .select('id, amount, currency, date, note, type')
+                .eq('household_id', householdId)
+                .eq('category_id', cat.id)
+                .eq('type', 'expense')
+                .eq('is_deleted', false)
+                .gte('date', format(start, 'yyyy-MM-dd'))
+                .lte('date', format(end, 'yyyy-MM-dd'))
+                .order('date', { ascending: false }),
+            supabase.from('transactions')
+                .select('amount_base')
+                .eq('household_id', householdId)
+                .eq('category_id', cat.id)
+                .eq('type', 'expense')
+                .eq('is_deleted', false)
+                .gte('date', format(prevStart, 'yyyy-MM-dd'))
+                .lte('date', format(prevEnd, 'yyyy-MM-dd')),
+        ]);
+
+        setCategoryTxs(txs ?? []);
+        setCategoryPrevAmount((prevTxs ?? []).reduce((s: number, t: any) => s + (t.amount_base ?? 0), 0));
+        setLoadingCategoryTxs(false);
+    }
 
     // ── Day detail inline section ──────────────────────────────────────────
     type DayDetailTx = { name: string; icon: string; color: string; amount: number; isScheduled?: boolean };
@@ -1118,6 +1176,9 @@ export default function AnalyticsScreen() {
     useFocusEffect(useCallback(() => {
         loadHousehold();
         if (householdId) fetchForecast(householdId);
+        AsyncStorage.getItem('watchedCategories').then(val => {
+            if (val) try { setWatchedCategoryIds(JSON.parse(val)); } catch {}
+        });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [householdId]));
 
@@ -3027,7 +3088,7 @@ export default function AnalyticsScreen() {
                                         {/* Full category list with progress bars */}
                                         {catData.categories.map((cat, i, arr) => (
                                             <TouchableOpacity key={cat.id} activeOpacity={0.7}
-                                                onPress={() => router.push({ pathname: '/transactions', params: { category_id: cat.id, period: catPeriod } } as any)}
+                                                onPress={() => openCategoryDetail(cat)}
                                                 style={{
                                                     flexDirection: 'row', alignItems: 'center', gap: 12,
                                                     paddingVertical: 11,
@@ -3062,6 +3123,7 @@ export default function AnalyticsScreen() {
                                         currency={currency}
                                         active={activeCategory}
                                         onPress={setActiveCategory}
+                                        onCategoryPress={(cat) => openCategoryDetail(cat)}
                                         visibleLegend={catData.categories.slice(0, COLLAPSED_COUNT)}
                                         hiddenCount={hiddenCount}
                                         onMorePress={hiddenCount > 0 ? () => setCatExpanded(true) : undefined}
@@ -3072,6 +3134,56 @@ export default function AnalyticsScreen() {
                                     <Text style={{ fontSize: 12, color: colors.textDisabled }}>{t('analytics.noExpenses')}</Text>
                                 </View>
                             ) : null}
+                        </Card>
+
+                        {/* Watched categories */}
+                        <Card>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }}>{t('analytics.myCategories')}</Text>
+                                <TouchableOpacity onPress={() => setShowAddWatchedSheet(true)}
+                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.bgTertiary, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 }}>
+                                    <Text style={{ color: '#7C6FFF', fontSize: 12, fontWeight: '600' }}>+ {t('analytics.addCategory')}</Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            {(() => {
+                                const watched = (catData?.categories ?? []).filter(c => watchedCategoryIds.includes(c.id));
+                                if (watched.length === 0) return (
+                                    <TouchableOpacity onPress={() => setShowAddWatchedSheet(true)}
+                                        style={{ padding: 20, alignItems: 'center', borderWidth: 1.5, borderColor: colors.borderLight, borderStyle: 'dashed', borderRadius: 14 }}>
+                                        <Text style={{ color: colors.textMuted, fontSize: 13 }}>{t('analytics.addCategoryHint')}</Text>
+                                    </TouchableOpacity>
+                                );
+
+                                const prevData = overviewByPeriod[catPeriod === 'day' ? 'day' : catPeriod === 'week' ? 'week' : catPeriod === 'year' ? 'year' : 'month'];
+
+                                return watched.map((cat, idx) => {
+                                    const prevCat = prevData?.categories?.find(c => c.id === cat.id);
+                                    const prevAmt = prevCat?.amount ?? 0;
+                                    const diff = prevAmt > 0 ? ((cat.amount - prevAmt) / prevAmt) * 100 : null;
+                                    return (
+                                        <TouchableOpacity key={cat.id} activeOpacity={0.7}
+                                            onPress={() => openCategoryDetail(cat)}
+                                            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: idx < watched.length - 1 ? 1 : 0, borderBottomColor: 'rgba(255,255,255,0.04)' }}>
+                                            <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: cat.color + '22', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                                <CategoryIcon iconName={cat.icon} color={cat.color} size={18} />
+                                            </View>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '500' }}>{cat.name}</Text>
+                                                <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>{cat.percent.toFixed(1)}% {t('analytics.ofExpenses')}</Text>
+                                            </View>
+                                            <View style={{ alignItems: 'flex-end' }}>
+                                                <Text style={{ color: '#f87171', fontSize: 14, fontWeight: '700' }}>−{formatAmount(cat.amount, currency)}</Text>
+                                                {diff !== null && (
+                                                    <Text style={{ color: diff > 0 ? '#f87171' : '#22c55e', fontSize: 11, marginTop: 2 }}>
+                                                        {diff > 0 ? '↑' : '↓'}{Math.abs(diff).toFixed(0)}%
+                                                    </Text>
+                                                )}
+                                            </View>
+                                        </TouchableOpacity>
+                                    );
+                                });
+                            })()}
                         </Card>
                     </>
                 )}
@@ -5709,6 +5821,97 @@ export default function AnalyticsScreen() {
                                 {savingExtras ? `${t('common.save')}…` : t('common.save')}
                             </Text>
                         </TouchableOpacity>
+            </BaseBottomSheet>
+
+            {/* Add watched categories sheet */}
+            <BaseBottomSheet visible={showAddWatchedSheet} onClose={() => setShowAddWatchedSheet(false)} maxHeight="75%">
+                <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700', marginBottom: 16 }}>{t('analytics.selectCategories')}</Text>
+                {(overviewByPeriod[catPeriod]?.categories ?? []).map(cat => {
+                    const isWatched = watchedCategoryIds.includes(cat.id);
+                    return (
+                        <TouchableOpacity key={cat.id} onPress={() => toggleWatchedCategory(cat.id)}
+                            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' }}>
+                            <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: cat.color + '22', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                <CategoryIcon iconName={cat.icon} color={cat.color} size={18} />
+                            </View>
+                            <Text style={{ flex: 1, color: colors.textPrimary, fontSize: 15 }}>{cat.name}</Text>
+                            <Text style={{ color: colors.textMuted, fontSize: 12, marginRight: 12 }}>{formatAmount(cat.amount, currency)}</Text>
+                            <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: isWatched ? '#7C6FFF' : 'transparent', borderWidth: 2, borderColor: isWatched ? '#7C6FFF' : colors.borderLight, alignItems: 'center', justifyContent: 'center' }}>
+                                {isWatched && <Check color="#fff" size={14} />}
+                            </View>
+                        </TouchableOpacity>
+                    );
+                })}
+            </BaseBottomSheet>
+
+            {/* Category detail bottom sheet */}
+            <BaseBottomSheet visible={!!selectedCategory} onClose={() => setSelectedCategory(null)} maxHeight="85%">
+                {selectedCategory && (
+                    <>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+                            <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: (selectedCategory.color ?? '#888') + '22', alignItems: 'center', justifyContent: 'center' }}>
+                                <CategoryIcon iconName={selectedCategory.icon ?? 'ShoppingCart'} color={selectedCategory.color ?? '#888'} size={22} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: '700' }}>{selectedCategory.name}</Text>
+                                <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+                                    {selectedCategory.percent.toFixed(1)}% {t('analytics.ofExpenses')}
+                                </Text>
+                            </View>
+                            <Text style={{ color: '#f87171', fontSize: 18, fontWeight: '700' }}>
+                                −{formatAmount(selectedCategory.amount, selectedCategory.currency)}
+                            </Text>
+                        </View>
+
+                        {categoryPrevAmount > 0 && (
+                            <View style={{ backgroundColor: colors.bgTertiary, borderRadius: 12, padding: 14, marginBottom: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{t('analytics.prevPeriod')}</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                    <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600' }}>
+                                        {formatAmount(categoryPrevAmount, selectedCategory.currency)}
+                                    </Text>
+                                    {selectedCategory.amount > categoryPrevAmount ? (
+                                        <Text style={{ color: '#f87171', fontSize: 12 }}>
+                                            ↑ {(((selectedCategory.amount - categoryPrevAmount) / categoryPrevAmount) * 100).toFixed(0)}%
+                                        </Text>
+                                    ) : (
+                                        <Text style={{ color: '#22c55e', fontSize: 12 }}>
+                                            ↓ {(((categoryPrevAmount - selectedCategory.amount) / categoryPrevAmount) * 100).toFixed(0)}%
+                                        </Text>
+                                    )}
+                                </View>
+                            </View>
+                        )}
+
+                        <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.5, marginBottom: 10 }}>
+                            {t('analytics.transactionsLabel')}
+                        </Text>
+
+                        {loadingCategoryTxs ? (
+                            <ActivityIndicator color="#7C6FFF" style={{ marginVertical: 20 }} />
+                        ) : categoryTxs.length === 0 ? (
+                            <Text style={{ color: colors.textDisabled, fontSize: 14, textAlign: 'center', paddingVertical: 20 }}>
+                                {t('analytics.noTransactions')}
+                            </Text>
+                        ) : (
+                            categoryTxs.map((tx: any) => (
+                                <View key={tx.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={{ color: colors.textPrimary, fontSize: 14 }} numberOfLines={1}>
+                                            {tx.note || selectedCategory.name}
+                                        </Text>
+                                        <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>
+                                            {format(new Date(tx.date), 'd MMM', { locale: ru })}
+                                        </Text>
+                                    </View>
+                                    <Text style={{ color: '#f87171', fontSize: 14, fontWeight: '600' }}>
+                                        −{formatAmount(tx.amount, tx.currency)}
+                                    </Text>
+                                </View>
+                            ))
+                        )}
+                    </>
+                )}
             </BaseBottomSheet>
 
         </View>

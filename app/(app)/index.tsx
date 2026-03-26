@@ -6,6 +6,7 @@ import {
     Globe, Home, Landmark, Minus, Pencil, PiggyBank, Plus, Search,
     Smartphone, Trash2, TrendingDown, TrendingUp, Wallet, X,
 } from 'lucide-react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '@/context/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n';
@@ -151,6 +152,10 @@ export default function Dashboard() {
 
     // History
     const [historyAccount,  setHistoryAccount]  = useState<Account | null>(null);
+    const [historyPeriod,   setHistoryPeriod]   = useState<'week' | 'month' | 'year' | 'all' | 'custom'>('month');
+    const [historyCustomFrom, setHistoryCustomFrom] = useState<Date | null>(null);
+    const [historyCustomTo,   setHistoryCustomTo]   = useState<Date | null>(null);
+    const [historyPickerField, setHistoryPickerField] = useState<'from' | 'to' | null>(null);
     const [historyTx,       setHistoryTx]       = useState<TxWithCat[]>([]);
     const [loadingHistory,  setLoadingHistory]  = useState(false);
 
@@ -358,17 +363,53 @@ export default function Dashboard() {
     }
 
 
-    async function openHistory(account: Account) {
+    async function openHistory(account: Account, period: 'week' | 'month' | 'year' | 'all' = 'month') {
         setActionAccount(null);
         setHistoryAccount(account);
+        setHistoryPeriod(period);
         setLoadingHistory(true);
-        const { data } = await supabase
+        let q = supabase
             .from('transactions')
             .select('*, categories(name, icon, color)')
             .eq('account_id', account.id)
             .eq('is_deleted', false)
-            .order('date', { ascending: false })
-            .limit(60);
+            .order('date', { ascending: false });
+        if (period !== 'all') {
+            const now = new Date();
+            let from: Date;
+            if (period === 'week') from = startOfWeek(now, { weekStartsOn: 1 });
+            else if (period === 'month') from = startOfMonth(now);
+            else from = startOfYear(now);
+            q = q.gte('date', format(from, 'yyyy-MM-dd'));
+        }
+        const { data } = await q.limit(100);
+        setHistoryTx((data ?? []) as TxWithCat[]);
+        setLoadingHistory(false);
+    }
+
+    async function changeHistoryPeriod(period: 'week' | 'month' | 'year' | 'all' | 'custom', cFrom?: Date | null, cTo?: Date | null) {
+        if (!historyAccount) return;
+        setHistoryPeriod(period);
+        if (period === 'custom' && !cFrom) return; // wait for date picker
+        setLoadingHistory(true);
+        let q = supabase
+            .from('transactions')
+            .select('*, categories(name, icon, color)')
+            .eq('account_id', historyAccount.id)
+            .eq('is_deleted', false)
+            .order('date', { ascending: false });
+        if (period === 'custom') {
+            if (cFrom) q = q.gte('date', format(cFrom, 'yyyy-MM-dd'));
+            if (cTo) q = q.lte('date', format(cTo, 'yyyy-MM-dd'));
+        } else if (period !== 'all') {
+            const now = new Date();
+            let from: Date;
+            if (period === 'week') from = startOfWeek(now, { weekStartsOn: 1 });
+            else if (period === 'month') from = startOfMonth(now);
+            else from = startOfYear(now);
+            q = q.gte('date', format(from, 'yyyy-MM-dd'));
+        }
+        const { data } = await q.limit(100);
         setHistoryTx((data ?? []) as TxWithCat[]);
         setLoadingHistory(false);
     }
@@ -981,6 +1022,63 @@ export default function Dashboard() {
                     </View>
                     <TouchableOpacity onPress={() => setHistoryAccount(null)} hitSlop={8}><X color={colors.textMuted} size={22} /></TouchableOpacity>
                 </View>
+
+                {/* Period filter */}
+                <View style={{ flexDirection: 'row', gap: 6, marginBottom: historyPeriod === 'custom' ? 8 : 16, flexWrap: 'wrap' }}>
+                    {(['week', 'month', 'year', 'all', 'custom'] as const).map(p => (
+                        <TouchableOpacity key={p} onPress={() => {
+                            if (p === 'custom') {
+                                setHistoryCustomFrom(startOfMonth(new Date()));
+                                setHistoryCustomTo(new Date());
+                                changeHistoryPeriod('custom', startOfMonth(new Date()), new Date());
+                            } else {
+                                setHistoryPickerField(null);
+                                changeHistoryPeriod(p);
+                            }
+                        }}
+                            style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, alignItems: 'center',
+                                backgroundColor: historyPeriod === p ? '#7C6FFF' : colors.bgTertiary }}>
+                            <Text style={{ color: historyPeriod === p ? '#fff' : colors.textSecondary, fontSize: 12, fontWeight: '600' }}>
+                                {p === 'week' ? t('transactions.week') : p === 'month' ? t('transactions.month') : p === 'year' ? t('transactions.year') : p === 'all' ? t('transactions.allTime') : t('transactions.custom')}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+                {historyPeriod === 'custom' && (
+                    <View style={{ marginBottom: 16 }}>
+                        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                            <TouchableOpacity onPress={() => setHistoryPickerField(historyPickerField === 'from' ? null : 'from')}
+                                style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.bgTertiary, borderRadius: 10, paddingVertical: 10, borderWidth: 1.5, borderColor: historyPickerField === 'from' ? '#7C6FFF' : colors.borderLight }}>
+                                <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{t('transactions.from')}:</Text>
+                                <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: '600' }}>{historyCustomFrom ? format(historyCustomFrom, 'd MMM yyyy') : '—'}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => setHistoryPickerField(historyPickerField === 'to' ? null : 'to')}
+                                style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.bgTertiary, borderRadius: 10, paddingVertical: 10, borderWidth: 1.5, borderColor: historyPickerField === 'to' ? '#7C6FFF' : colors.borderLight }}>
+                                <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{t('transactions.to')}:</Text>
+                                <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: '600' }}>{historyCustomTo ? format(historyCustomTo, 'd MMM yyyy') : '—'}</Text>
+                            </TouchableOpacity>
+                        </View>
+                        {historyPickerField && (
+                            <View style={{ backgroundColor: colors.bgTertiary, borderRadius: 14, overflow: 'hidden' }}>
+                                <DateTimePicker
+                                    mode="date" display="inline" themeVariant="dark"
+                                    value={historyPickerField === 'from' ? (historyCustomFrom ?? new Date()) : (historyCustomTo ?? new Date())}
+                                    onChange={(_, date) => {
+                                        if (!date) return;
+                                        if (historyPickerField === 'from') {
+                                            setHistoryCustomFrom(date);
+                                            changeHistoryPeriod('custom', date, historyCustomTo);
+                                        } else {
+                                            setHistoryCustomTo(date);
+                                            changeHistoryPeriod('custom', historyCustomFrom, date);
+                                        }
+                                        setHistoryPickerField(null);
+                                    }}
+                                />
+                            </View>
+                        )}
+                    </View>
+                )}
 
                 {loadingHistory ? (
                     <ActivityIndicator color={colors.textPrimary} style={{ marginVertical: 40 }} />

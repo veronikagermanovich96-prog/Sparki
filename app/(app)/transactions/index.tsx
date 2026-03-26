@@ -254,7 +254,7 @@ export default function TransactionsScreen() {
     async function onFormSaved() {
         setFormVisible(false);
         setLoading(true);
-        await fetchTxs(householdId, filterType, filterPeriod, filterAccountId, filterCategoryId, filterExpenseType, customFrom, customTo);
+        await fetchTxs(householdId, filterType, filterPeriod, filterAccountId, filterCategoryId, filterExpenseType, customFrom, customTo, filterRecurring, filterTagId);
         setLoading(false);
     }
 
