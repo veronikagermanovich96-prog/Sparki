@@ -60,6 +60,32 @@ type CategoryLight = { id: string; name: string; slug: string | null; icon: stri
 type TagLight      = { id: string; name: string };
 type RecurFreq     = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
+// Slug → category name fragments for fallback matching when slug is missing in DB
+const SLUG_NAME_MAP: Record<string, RegExp> = {
+    food: /еда|продукт|groceries|food|lebensmittel|alimentation|alimentación/i,
+    cafe: /кафе|ресторан|cafe|restaurant|gaststätte/i,
+    transport: /транспорт|transport|verkehr|transporte/i,
+    health: /здоровь|health|gesundheit|santé|salud|аптек|pharma/i,
+    entertainment: /развлечен|entertainment|unterhaltung|divertissement|entretenimiento/i,
+    clothing: /одежд|обувь|clothing|kleidung|vêtements|ropa/i,
+    beauty: /красот|beauty|schönheit|beauté|belleza/i,
+    sport: /спорт|sport|fitness/i,
+};
+
+function matchCategory(cats: CategoryLight[], slug: string | null, fallbackId: string | null): string | null {
+    if (!slug) return fallbackId ?? null;
+    // 1. Try slug match
+    const bySlug = cats.find(c => c.slug === slug);
+    if (bySlug) return bySlug.id;
+    // 2. Try name-based match
+    const nameRe = SLUG_NAME_MAP[slug];
+    if (nameRe) {
+        const byName = cats.find(c => nameRe.test(c.name));
+        if (byName) return byName.id;
+    }
+    return fallbackId ?? null;
+}
+
 export interface EditingTx {
     id: string;
     type: 'income' | 'expense' | 'transfer';
@@ -174,6 +200,9 @@ export default function TransactionForm({
     const [receiptPreview, setReceiptPreview] = useState(false);
     const [receiptItems, setReceiptItems] = useState<Array<{ name: string; quantity: number; price: number; categorySlug: string | null; checked: boolean; categoryId: string | null }>>([]);
     const [receiptCollapsed, setReceiptCollapsed] = useState<Set<string>>(new Set());
+    const [editingReceiptItemIdx, setEditingReceiptItemIdx] = useState<number | null>(null);
+    const [receiptManualMode, setReceiptManualMode] = useState(false); // true = prices unknown, user enters category totals
+    const [receiptCategoryAmounts, setReceiptCategoryAmounts] = useState<Record<string, string>>({}); // catKey → amount string
     const [saving,           setSaving]           = useState(false);
 
     // ── Tags ─────────────────────────────────────────────────────────────────
@@ -458,21 +487,42 @@ export default function TransactionForm({
                     const ocr = await recognizeReceipt(publicUrl);
                     if (ocr.amount && (!formAmount || formAmount === '0' || formAmount === '0.00')) setFormAmount(String(ocr.amount));
                     if (ocr.currency) setFormCurrency(ocr.currency);
-                    if (ocr.date) setFormDate(ocr.date);
+                    if (ocr.date) {
+                        // Only use OCR date if it's within last 30 days
+                        const ocrDate = new Date(ocr.date);
+                        const daysAgo = (Date.now() - ocrDate.getTime()) / (1000 * 60 * 60 * 24);
+                        if (daysAgo <= 30 && daysAgo >= -1) setFormDate(ocr.date);
+                    }
                     if (ocr.merchant && !formNote) setFormNote(ocr.merchant);
                     if (ocr.categorySlug && !formCategoryId) {
-                        const match = localCategories.find(c => c.slug === ocr.categorySlug);
-                        if (match) setFormCategoryId(match.id);
+                        const matched = matchCategory(localCategories, ocr.categorySlug, null);
+                        if (matched) setFormCategoryId(matched);
                     }
                     // Multi-item receipt
                     if (ocr.items.length > 1) {
-                        setReceiptItems(ocr.items.map(item => ({
-                            ...item,
-                            checked: true,
-                            categoryId: localCategories.find(c => c.slug === item.categorySlug)?.id ?? formCategoryId ?? null,
-                        })));
+                        const itemsTotal = ocr.items.reduce((s, i) => s + i.price, 0);
+                        const receiptTotal = ocr.amount ?? 0;
+                        const pricesMatch = receiptTotal === 0 || (itemsTotal >= receiptTotal * 0.5 && itemsTotal <= receiptTotal * 1.2);
+
+                        if (!pricesMatch && receiptTotal > 0) {
+                            // Manual mode: prices unknown, user will enter category totals
+                            setReceiptManualMode(true);
+                            // Set price to 0 — user enters totals per category
+                            for (const item of ocr.items) item.price = 0;
+                        } else {
+                            setReceiptManualMode(false);
+                        }
+
+                        {
+                            const mapped = ocr.items.map(item => ({
+                                ...item,
+                                checked: true,
+                                categoryId: matchCategory(localCategories, item.categorySlug, formCategoryId),
+                            }));
+                            setReceiptItems(mapped);
+                        }
                     }
-                } catch { /* OCR optional */ }
+                } catch (ocrErr: any) { console.warn('[OCR failed]', ocrErr?.message ?? ocrErr); }
             }
         } catch (e: any) {
             Alert.alert(t('common.error'), e.message);
@@ -535,40 +585,144 @@ export default function TransactionForm({
         ]);
     }
 
+    // ── Receipt save helper ─────────────────────────────────────────────────
+
+    type CheckedItem = typeof receiptItems[0];
+
+    async function doReceiptSave(items: CheckedItem[], splitByCategory: boolean) {
+        setSaving(true);
+        try {
+            const acc = accounts.find(a => a.id === formAccountId);
+            const rate = showRate && formRate ? parseFloat(formRate) : null;
+
+            if (splitByCategory) {
+                // Group by category, one transaction per group
+                const groups = new Map<string, { catId: string | null; total: number; names: string[]; groupName: string }>();
+                for (const item of items) {
+                    const catId = item.categoryId || formCategoryId || null;
+                    const cat = catId ? localCategories.find(c => c.id === catId) : null;
+                    const groupName = cat?.name ?? t('transactionForm.otherCategory');
+                    const key = catId ?? '__none__';
+                    const g = groups.get(key) ?? { catId, total: 0, names: [], groupName };
+                    g.total += item.price;
+                    g.names.push(item.name);
+                    groups.set(key, g);
+                }
+
+                // In manual mode, use user-entered category amounts
+                if (receiptManualMode) {
+                    for (const [, group] of groups) {
+                        const userAmt = receiptCategoryAmounts[group.groupName];
+                        if (userAmt) {
+                            group.total = parseFloat(userAmt.replace(',', '.')) || 0;
+                        }
+                    }
+                }
+
+                // Proportionally adjust group totals so they sum to formAmount exactly
+                const receiptTotal = formAmount ? parseFloat(formAmount) : 0;
+                const rawTotal = [...groups.values()].reduce((s, g) => s + g.total, 0);
+                if (receiptTotal > 0 && rawTotal > 0 && Math.abs(rawTotal - receiptTotal) > 0.01) {
+                    const ratio = receiptTotal / rawTotal;
+                    let adjusted = 0;
+                    const entries = [...groups.entries()];
+                    for (let i = 0; i < entries.length; i++) {
+                        const [, g] = entries[i];
+                        if (i < entries.length - 1) {
+                            g.total = Math.round(g.total * ratio * 100) / 100;
+                            adjusted += g.total;
+                        } else {
+                            // Last group gets the remainder to avoid rounding errors
+                            g.total = Math.round((receiptTotal - adjusted) * 100) / 100;
+                        }
+                    }
+                }
+
+                let totalDelta = 0;
+                for (const [, group] of groups) {
+                    const amt = Math.round(group.total * 100) / 100;
+                    const amountBase = rate ? Math.round(amt * rate * 100) / 100 : amt;
+                    const note = group.names.length <= 3
+                        ? group.names.join(', ')
+                        : `${group.names.slice(0, 3).join(', ')} +${group.names.length - 3}`;
+                    const { error: txErr } = await supabase.from('transactions').insert({
+                        household_id: householdId, account_id: formAccountId,
+                        category_id: group.catId, user_id: userId, type: formType,
+                        amount: amt, currency: formCurrency,
+                        amount_base: amountBase, exchange_rate: rate,
+                        note, date: formDate,
+                        receipt_url: receiptUploadUrl || null,
+                        recurring_id: null, tag_id: null,
+                    });
+                    if (txErr) {
+                        Alert.alert(t('common.error'), txErr.message);
+                    } else {
+                        totalDelta += formType === 'income' ? amt : -amt;
+                    }
+                }
+                if (acc && totalDelta !== 0) {
+                    await supabase.from('accounts').update({
+                        balance: Math.round((acc.balance + totalDelta) * 100) / 100,
+                    }).eq('id', acc.id);
+                }
+            } else {
+                // Single transaction with total amount
+                const totalAmt = formAmount ? parseFloat(formAmount) : items.reduce((s, i) => s + i.price, 0);
+                const amt = Math.round(totalAmt * 100) / 100;
+                const amountBase = rate ? Math.round(amt * rate * 100) / 100 : amt;
+                const { error: txErr } = await supabase.from('transactions').insert({
+                    household_id: householdId, account_id: formAccountId,
+                    category_id: formCategoryId || null, user_id: userId, type: formType,
+                    amount: amt, currency: formCurrency,
+                    amount_base: amountBase, exchange_rate: rate,
+                    note: formNote.trim() || null, date: formDate,
+                    receipt_url: receiptUploadUrl || null,
+                    recurring_id: null, tag_id: null,
+                });
+                if (txErr) { Alert.alert(t('common.error'), txErr.message); }
+                else if (acc) {
+                    const delta = formType === 'income' ? amt : -amt;
+                    await supabase.from('accounts').update({
+                        balance: Math.round((acc.balance + delta) * 100) / 100,
+                    }).eq('id', acc.id);
+                }
+            }
+        } catch (e: any) {
+            Alert.alert(t('common.error'), e.message);
+        }
+        setSaving(false);
+        setReceiptItems([]);
+        onClose();
+        onSaved();
+    }
+
     // ── Save ─────────────────────────────────────────────────────────────────
 
     async function saveForm() {
         if (!formAccountId || !householdId) return;
 
-        // Multi-item receipt: save each checked item as separate transaction
+        // Receipt items: ask user about splitting by category
         const checkedItems = receiptItems.filter(i => i.checked);
-        if (checkedItems.length > 1) {
-            setSaving(true);
-            const acc = accounts.find(a => a.id === formAccountId);
-            const rate = showRate && formRate ? parseFloat(formRate) : null;
-            let totalDelta = 0;
-            for (const item of checkedItems) {
-                const catId = item.categoryId || formCategoryId || null;
-                const amountBase = rate ? item.price * rate : item.price;
-                await supabase.from('transactions').insert({
-                    household_id: householdId, account_id: formAccountId,
-                    category_id: catId, user_id: userId, type: formType,
-                    amount: item.price, currency: formCurrency,
-                    amount_base: amountBase, exchange_rate: rate,
-                    note: item.name, date: formDate,
-                    receipt_url: receiptUploadUrl || null,
-                });
-                totalDelta += formType === 'income' ? item.price : -item.price;
+        if (checkedItems.length > 0) {
+            const catIds = new Set(checkedItems.map(i => i.categoryId || formCategoryId || null));
+            if (catIds.size > 1) {
+                // Multiple categories — ask user
+                Alert.alert(
+                    t('transactionForm.splitByCategory'),
+                    t('transactionForm.splitByCategoryMsg'),
+                    [
+                        { text: t('transactionForm.saveAsOne'), onPress: () => doReceiptSave(checkedItems, false) },
+                        { text: t('transactionForm.splitSave'), onPress: () => doReceiptSave(checkedItems, true) },
+                    ],
+                    { cancelable: false },
+                );
+                return;
             }
-            if (acc) {
-                await supabase.from('accounts').update({ balance: acc.balance + totalDelta }).eq('id', acc.id);
-            }
-            setSaving(false);
-            setReceiptItems([]);
-            onSaved();
+            await doReceiptSave(checkedItems, false);
             return;
         }
 
+        if (!formAmount) return;
         if (!formAmount) return;
         const amount = parseFloat(formAmount);
         if (isNaN(amount) || amount <= 0) return;
@@ -631,7 +785,8 @@ export default function TransactionForm({
                     await supabase.from('accounts').update({ balance: acc.balance + revert + apply }).eq('id', acc.id);
                 }
             } else {
-                await supabase.from('transactions').insert(payload);
+                const { error: txErr } = await supabase.from('transactions').insert(payload);
+                if (txErr) { Alert.alert(t('common.error'), txErr.message); setSaving(false); return; }
                 if (acc) {
                     await supabase.from('accounts').update({
                         balance: formType === 'income' ? acc.balance + amount : acc.balance - amount,
@@ -1204,7 +1359,7 @@ export default function TransactionForm({
                                     const groups: Record<string, { cat: CategoryLight | null; items: Array<typeof receiptItems[0] & { idx: number }> }> = {};
                                     receiptItems.forEach((item, idx) => {
                                         const cat = item.categoryId ? (localCategories.find(c => c.id === item.categoryId) ?? null) : null;
-                                        const key = cat?.name ?? 'Другое';
+                                        const key = cat?.name ?? t('transactionForm.otherCategory');
                                         if (!groups[key]) groups[key] = { cat, items: [] };
                                         groups[key].items.push({ ...item, idx });
                                     });
@@ -1221,11 +1376,18 @@ export default function TransactionForm({
                                                 })}
                                                 style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                                                 <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '700' }}>
-                                                    {t('transactionForm.receiptItems') ?? 'Позиции чека'} ({checkedCount}/{receiptItems.length})
+                                                    {t('transactionForm.receiptItems')} ({checkedCount}/{receiptItems.length})
                                                 </Text>
-                                                <Text style={{ color: '#dc2626', fontSize: 15, fontWeight: '700' }}>
-                                                    {checkedTotal.toFixed(2)} {formCurrency}
-                                                </Text>
+                                                {!receiptManualMode && (
+                                                    <Text style={{ color: '#dc2626', fontSize: 15, fontWeight: '700' }}>
+                                                        {checkedTotal.toFixed(2)} {formCurrency}
+                                                    </Text>
+                                                )}
+                                                {receiptManualMode && (
+                                                    <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+                                                        {formAmount} {formCurrency}
+                                                    </Text>
+                                                )}
                                             </TouchableOpacity>
 
                                             {/* Category groups */}
@@ -1247,40 +1409,71 @@ export default function TransactionForm({
                                                             <Text style={{ color: colors.textSecondary, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', flex: 1 }}>
                                                                 {groupName} ({group.items.filter(i => i.checked).length})
                                                             </Text>
-                                                            <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600', marginRight: 6 }}>
-                                                                {groupTotal.toFixed(2)}
-                                                            </Text>
+                                                            {receiptManualMode ? (
+                                                                <TextInput
+                                                                    value={receiptCategoryAmounts[groupName] ?? ''}
+                                                                    onChangeText={v => setReceiptCategoryAmounts(prev => ({ ...prev, [groupName]: v.replace(/[^0-9.,]/g, '') }))}
+                                                                    placeholder="0.00"
+                                                                    placeholderTextColor={colors.textDisabled}
+                                                                    keyboardType="decimal-pad"
+                                                                    style={{ color: '#dc2626', fontSize: 13, fontWeight: '700', textAlign: 'right', minWidth: 70, backgroundColor: colors.bgTertiary, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, marginRight: 6 }}
+                                                                />
+                                                            ) : (
+                                                                <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600', marginRight: 6 }}>
+                                                                    {groupTotal.toFixed(2)}
+                                                                </Text>
+                                                            )}
                                                             {collapsed
-                                                                ? <ChevronDown color={colors.textMuted} size={14} />
-                                                                : <ChevronDown color={colors.textMuted} size={14} style={{ transform: [{ rotate: '-90deg' }] }} />
+                                                                ? <ChevronDown color={colors.textMuted} size={14} style={{ transform: [{ rotate: '-90deg' }] }} />
+                                                                : <ChevronDown color={colors.textMuted} size={14} />
                                                             }
                                                         </TouchableOpacity>
 
                                                         {/* Items */}
-                                                        {!collapsed && group.items.map(item => (
-                                                            <TouchableOpacity key={item.idx}
-                                                                onPress={() => setReceiptItems(prev => prev.map((it, i) => i === item.idx ? { ...it, checked: !it.checked } : it))}
-                                                                style={{
-                                                                    flexDirection: 'row', alignItems: 'center', gap: 8,
+                                                        {!collapsed && group.items.map(item => {
+                                                            const itemCat = item.categoryId ? localCategories.find(c => c.id === item.categoryId) : null;
+                                                            const ItemIc = itemCat?.icon ? CAT_ICONS[itemCat.icon] : null;
+                                                            return (
+                                                            <View key={item.idx} style={{
+                                                                    flexDirection: 'row', alignItems: 'center', gap: 6,
                                                                     paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, marginBottom: 3,
                                                                     backgroundColor: item.checked ? 'rgba(124,111,255,0.06)' : 'transparent',
                                                                 }}>
-                                                                <View style={{
-                                                                    width: 18, height: 18, borderRadius: 5,
-                                                                    backgroundColor: item.checked ? '#7C6FFF' : 'transparent',
-                                                                    borderWidth: item.checked ? 0 : 1.5, borderColor: colors.textDisabled,
-                                                                    alignItems: 'center', justifyContent: 'center',
-                                                                }}>
-                                                                    {item.checked && <Check color="#fff" size={10} />}
-                                                                </View>
-                                                                <Text style={{ color: item.checked ? colors.textPrimary : colors.textDisabled, fontSize: 13, flex: 1 }} numberOfLines={1}>
-                                                                    {item.name}
-                                                                </Text>
-                                                                <Text style={{ color: item.checked ? '#dc2626' : colors.textDisabled, fontSize: 13, fontWeight: '600' }}>
-                                                                    {item.quantity > 1 ? `${item.quantity}× ` : ''}{item.price.toFixed(2)}
-                                                                </Text>
-                                                            </TouchableOpacity>
-                                                        ))}
+                                                                {/* Checkbox */}
+                                                                <TouchableOpacity
+                                                                    onPress={() => setReceiptItems(prev => prev.map((it, i) => i === item.idx ? { ...it, checked: !it.checked } : it))}
+                                                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                                                                    <View style={{
+                                                                        width: 18, height: 18, borderRadius: 5,
+                                                                        backgroundColor: item.checked ? '#7C6FFF' : 'transparent',
+                                                                        borderWidth: item.checked ? 0 : 1.5, borderColor: colors.textDisabled,
+                                                                        alignItems: 'center', justifyContent: 'center',
+                                                                    }}>
+                                                                        {item.checked && <Check color="#fff" size={10} />}
+                                                                    </View>
+                                                                    <Text style={{ color: item.checked ? colors.textPrimary : colors.textDisabled, fontSize: 13, flex: 1 }} numberOfLines={1}>
+                                                                        {item.name}
+                                                                    </Text>
+                                                                </TouchableOpacity>
+                                                                {!receiptManualMode && (
+                                                                    <Text style={{ color: item.checked ? '#dc2626' : colors.textDisabled, fontSize: 13, fontWeight: '600', minWidth: 50, textAlign: 'right' }}>
+                                                                        {item.quantity > 1 ? `${item.quantity}× ` : ''}{item.price.toFixed(2)}
+                                                                    </Text>
+                                                                )}
+                                                                {/* Category icon button */}
+                                                                <TouchableOpacity
+                                                                    onPress={() => setEditingReceiptItemIdx(item.idx)}
+                                                                    hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
+                                                                    style={{
+                                                                        width: 26, height: 26, borderRadius: 7,
+                                                                        backgroundColor: colors.bgTertiary,
+                                                                        alignItems: 'center', justifyContent: 'center',
+                                                                    }}>
+                                                                    <Pencil color={colors.textMuted} size={12} />
+                                                                </TouchableOpacity>
+                                                            </View>
+                                                            );
+                                                        })}
                                                     </View>
                                                 );
                                             })}
@@ -1335,6 +1528,48 @@ export default function TransactionForm({
                     </View>
                 )}
             </View>
+
+            {/* Receipt item category picker */}
+            {editingReceiptItemIdx !== null && (
+                <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, zIndex: 900 }}>
+                    <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' }} activeOpacity={1} onPress={() => setEditingReceiptItemIdx(null)} />
+                    <View style={{ backgroundColor: colors.bgSecondary, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 40, maxHeight: '60%' }}>
+                        <View style={{ width: 40, height: 4, backgroundColor: colors.borderLight, borderRadius: 2, alignSelf: 'center', marginBottom: 12 }} />
+                        <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '700', marginBottom: 4 }} numberOfLines={1}>
+                            {receiptItems[editingReceiptItemIdx]?.name}
+                        </Text>
+                        <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 14 }}>
+                            {t('transactionForm.chooseCategory')}
+                        </Text>
+                        <ScrollView showsVerticalScrollIndicator={false}>
+                            {localCategories.filter(c => c.type === 'expense' && !('is_hidden' in c && (c as any).is_hidden)).map(cat => {
+                                const CIc = cat.icon ? CAT_ICONS[cat.icon] : null;
+                                const isActive = receiptItems[editingReceiptItemIdx]?.categoryId === cat.id;
+                                return (
+                                    <TouchableOpacity key={cat.id}
+                                        onPress={() => {
+                                            setReceiptItems(prev => prev.map((it, i) => i === editingReceiptItemIdx ? { ...it, categoryId: cat.id } : it));
+                                            setEditingReceiptItemIdx(null);
+                                        }}
+                                        style={{
+                                            flexDirection: 'row', alignItems: 'center', gap: 12,
+                                            paddingVertical: 12, paddingHorizontal: 10, borderRadius: 12, marginBottom: 2,
+                                            backgroundColor: isActive ? 'rgba(124,111,255,0.1)' : 'transparent',
+                                        }}>
+                                        <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: (cat.color ?? '#888') + '22', alignItems: 'center', justifyContent: 'center' }}>
+                                            {CIc ? <CIc color={cat.color ?? colors.textMuted} size={16} /> : <ShoppingCart color={colors.textMuted} size={16} />}
+                                        </View>
+                                        <Text style={{ color: isActive ? '#7C6FFF' : colors.textPrimary, fontSize: 14, fontWeight: isActive ? '600' : '400', flex: 1 }}>
+                                            {cat.name}
+                                        </Text>
+                                        {isActive && <Check color="#7C6FFF" size={16} />}
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </ScrollView>
+                    </View>
+                </View>
+            )}
 
             {/* Receipt fullscreen preview overlay */}
             {receiptPreview && receiptUri && (

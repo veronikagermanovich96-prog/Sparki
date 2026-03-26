@@ -23,6 +23,7 @@ import { ru } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
 import { formatAmount } from '@/constants/currencies';
 import TransactionForm from '@/components/TransactionForm';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n';
@@ -118,6 +119,7 @@ function getPeriodRange(p: FilterPeriod, customFrom?: Date | null, customTo?: Da
 export default function TransactionsScreen() {
     const { colors } = useTheme();
     const { t } = useTranslation();
+    const insets = useSafeAreaInsets();
 
     // ── Data ─────────────────────────────────────────────────────────────────
     const [txs,        setTxs]        = useState<TxRow[]>([]);
@@ -401,7 +403,7 @@ export default function TransactionsScreen() {
         <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
 
             {/* Header */}
-            <View style={{ paddingTop: 60, paddingBottom: 12, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ paddingTop: insets.top + 16, paddingBottom: 12, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Text style={{ color: colors.textPrimary, fontSize: 24, fontWeight: '700' }}>{t('transactions.title')}</Text>
                 <TouchableOpacity onPress={() => { setSearchVisible(v => !v); if (searchVisible) setSearch(''); }} style={{ padding: 4 }}>
                     {searchVisible ? <X color={colors.textSecondary} size={22} /> : <Search color={colors.textSecondary} size={22} />}

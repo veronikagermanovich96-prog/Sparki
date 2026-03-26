@@ -23,25 +23,42 @@ export interface OcrResult {
 const OCR_API_URL = 'https://api.ocr.space/parse/imageurl';
 const OCR_API_KEY = 'K85403682388957'; // Free tier key
 
+async function callOcrApi(imageUrl: string, language: string, engine: string): Promise<string> {
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
+        const params = new URLSearchParams({
+            apikey: OCR_API_KEY, url: imageUrl, language,
+            isOverlayRequired: 'false', detectOrientation: 'true', scale: 'true', OCREngine: engine,
+        });
+        const res = await fetch(`${OCR_API_URL}?${params.toString()}`, { signal: controller.signal });
+        clearTimeout(timeout);
+        const json = await res.json();
+        return json?.ParsedResults?.[0]?.ParsedText ?? '';
+    } catch { return ''; }
+}
+
 export async function recognizeReceipt(imageUrl: string): Promise<OcrResult> {
     try {
-        const params = new URLSearchParams({
-            apikey: OCR_API_KEY,
-            url: imageUrl,
-            language: 'rus',
-            isOverlayRequired: 'false',
-            detectOrientation: 'true',
-            scale: 'true',
-            OCREngine: '2',
-        });
+        // Try Engine 2 (better for Russian) first
+        let text = await callOcrApi(imageUrl, 'rus', '2');
 
-        const res = await fetch(`${OCR_API_URL}?${params.toString()}`);
-        const json = await res.json();
+        let items = text ? parseLineItems(text) : [];
 
-        const text = json?.ParsedResults?.[0]?.ParsedText ?? '';
+        // If no items found, retry with Engine 1 + English (better for UK/US tabular receipts)
+        if (items.length <= 1 && text) {
+            const text2 = await callOcrApi(imageUrl, 'eng', '1');
+            if (text2) {
+                const items2 = parseLineItems(text2);
+                if (items2.length > items.length) {
+                    items = items2;
+                    text = text2;
+                }
+            }
+        }
+
         if (!text) return { amount: null, currency: null, date: null, merchant: null, categorySlug: null, items: [], rawText: '' };
 
-        const items = parseLineItems(text);
         return {
             amount: extractAmount(text),
             currency: extractCurrency(text),
@@ -156,94 +173,192 @@ function extractMerchant(text: string): string | null {
 // ── Line item parsing ────────────────────────────────────────────────────────
 
 function parseLineItems(text: string): ReceiptItem[] {
-    const lines = text.split('\n');
-    const items: ReceiptItem[] = [];
-
-    // Pre-process: merge price-only lines with previous, but stop at НДС/скидка
-    const merged: string[] = [];
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        const lower = line.toLowerCase();
-        // Skip standalone НДС, скидка, discount lines
-        if (/^ндс|^нпс|^pdv|^mwst|^tva|^скидк|^знижк|^discount|^rabatt/.test(lower)) continue;
-        // If line is just a price or "=price" or "* qty", attach to previous
-        if (/^[*×xх]\s*\d|^=\s*\d|^\d[\d\s]*[.,]\d{2}\s*[А-Яа-яA-Za-z]?\s*$/.test(line) && merged.length > 0) {
-            merged[merged.length - 1] += ' ' + line;
+    // Pre-process: merge broken lines ("=49.\n99" → "=49.99")
+    const rawLines = text.split('\n').map(l => l.trim());
+    const lines: string[] = [];
+    for (let i = 0; i < rawLines.length; i++) {
+        const line = rawLines[i];
+        if (/=\s*\d+[.,]\s*$/.test(line) && i + 1 < rawLines.length && /^\d{2}\s*$/.test(rawLines[i + 1])) {
+            lines.push(line + rawLines[i + 1].trim());
+            i++;
         } else {
-            merged.push(line);
+            lines.push(line);
         }
     }
 
-    for (let i = 0; i < merged.length; i++) {
-        const line = merged[i].trim();
-        if (!line || line.length < 3) continue;
+    const totalAmount = extractAmount(text);
 
-        // Skip header/footer lines
-        const lower = line.toLowerCase();
-        if (/итого|итог|total|gesamt|somme|всего|к оплате|ндс|pdv|mwst|tva|iva|готівка|решта|сума|сдача|касс|чек|терминал|оператор|карт|mastercard|visa|безналич|наличн|оплата|одобрено|место расчет|автомат|офд|инн|огрн|фн:|фп:|сайт|www\.|\.ru|\.ua|\.com|\.de|\.fr|\.es|адрес|info|subtotal|zwischensumme|sous-total|change|wechselgeld|monnaie|cambio/.test(lower)) continue;
+    // Detect if receipt uses "=price" format (Russian) or "Name  Price" format (Western)
+    const hasEqPrices = lines.some(l => /=\s*\d+[.,]\d{2}/.test(l) && !/скидк|discount/i.test(l));
 
-        // Pattern: price at end of line, or "=price" pattern
-        const priceMatch = line.match(/(\d[\d\s]*[.,]\d{2})\s*[А-Яа-яA-Za-z]?\s*$/)
-            ?? line.match(/=\s*(\d[\d\s]*[.,]\d{2})/);
-        if (!priceMatch) continue;
+    // ── Junk line filter (shared) ──
+    function isJunkLine(line: string): boolean {
+        if (!line || line.length < 4) return true;
+        if (!/[A-Za-zА-Яа-яЁё]{2,}/.test(line)) return true;
+        if (/^[*×=_]|^ндс|^нпс|^скидк|^знижк|^discount|^: \d/i.test(line)) return true;
+        if (/итого|итог|total|subtotal|всего|к оплате|gesamt|summe|somme/i.test(line)) return true;
+        if (/безналич|наличн|банковск|visa|mastercard|карта|клиент|терминал|мерчант|одобрен|авториз|ссылк|рекоменд|recommend/i.test(line)) return true;
+        if (/^ООО|^ОАО|^ЗАО|^ИП\s|^ТОО|^ул\.|^пр\.|^дом\s|^литера|^город|^г\.\s/i.test(line)) return true;
+        if (/Санкт-Петербург|Москва|Андреева|КАССА|London|Paris|Berlin/i.test(line)) return true;
+        if (/^«|^»|^"|О'КЕЙ|ОКЕЙ|ВНИМАНИЕ|КОПИЯ|НА ПРОДАЖУ|В КАТЕГОРИИ|ЛУЧШАЯ ЦЕНА|БАНКОВСКИЕ/i.test(line)) return true;
+        if (/средн|пакет майка|скилка|скідка|Tahti|HARTIKAINEN|Оплата|Комиссия|Введен ПИН/i.test(line)) return true;
+        if (/^[0-9A-Fa-f]{20,}$/.test(line)) return true;
+        if (/^изана|Сумма \(Руб\)/i.test(line)) return true;
+        if (/^\d+$/.test(line) || /^\d[\d\s]*[.,]\d{2}\s*$/.test(line)) return true;
+        if (/tax\b|vat\b|ндс\b|mwst|tva\b|iva\b|change\b|cash\b|card\b|payment|balance|saving|clubcard|bonus/i.test(line)) return true;
+        if (/tel\b|phone|www\.|\.com|\.co\.|\.ru|\.de|\.fr|\.es|fax|email/i.test(line)) return true;
+        if (/ФН:|ФД:|ФП:|ИНН|ОГРН|БИН|ЄДРПОУ/i.test(line)) return true;
+        return false;
+    }
 
-        const price = parseFloat(priceMatch[1].replace(/\s/g, '').replace(',', '.'));
-        if (price <= 0 || price > 500000) continue;
+    interface ParsedItem { name: string; price: number; }
+    const parsed: ParsedItem[] = [];
 
-        // Extract name (everything before the price)
-        let name = line.slice(0, priceMatch.index).replace(/[.\s]+$/, '').trim();
+    if (hasEqPrices) {
+        // ── Russian "=price" format ──
+        const itemNameLines: number[] = [];
+        for (let i = 0; i < lines.length; i++) {
+            if (isJunkLine(lines[i])) continue;
+            const hasPrice = /\d+[.,]\d{2}/.test(lines[i]);
+            const hasItemNumber = /^\d+\s+[A-Za-zА-Яа-яЁё]/.test(lines[i]);
+            if (!hasPrice && !hasItemNumber) {
+                const wordCount = lines[i].replace(/^\d+\s+/, '').split(/\s+/).length;
+                if (wordCount <= 1) continue;
+            }
+            itemNameLines.push(i);
+        }
 
-        // Check for quantity line above: "3.000 X" or "1.312 X"
-        let quantity = 1;
-        if (i > 0) {
-            const prevLine = merged[i - 1]?.trim() ?? '';
-            const qtyMatch = prevLine.match(/^(\d+[.,]\d+)\s*[xXхХ*×]/i);
-            if (qtyMatch) {
-                quantity = parseFloat(qtyMatch[1].replace(',', '.'));
+        interface EqPrice { lineIdx: number; price: number; }
+        const eqPrices: EqPrice[] = [];
+        for (let i = 0; i < lines.length; i++) {
+            const eqMatch = lines[i].match(/=\s*(\d[\d\s]*[.,]\d{2})/);
+            if (!eqMatch) continue;
+            if (/скидк|знижк|discount/i.test(lines[i])) continue;
+            const p = parseFloat(eqMatch[1].replace(/\s/g, '').replace(',', '.'));
+            if (p <= 0 || p > 50000) continue;
+            if (totalAmount && Math.abs(p - totalAmount) < 1) continue;
+            eqPrices.push({ lineIdx: i, price: p });
+        }
+
+        const usedEq = new Set<number>();
+        for (const nameLineIdx of itemNameLines) {
+            const eq = eqPrices.find(e => !usedEq.has(e.lineIdx) && e.lineIdx > nameLineIdx && e.lineIdx <= nameLineIdx + 10);
+            if (!eq) continue;
+            usedEq.add(eq.lineIdx);
+            let name = lines[nameLineIdx]
+                .replace(/^\d+\s+/, '')
+                .replace(/\s+\d[\d\s]*[.,]\d{2}\s*$/, '')
+                .replace(/\s+\d+\s*$/, '')
+                .replace(/\s+[A-ZА-ЯЁa-zа-яё]{1,2}\s*$/, '')
+                .trim();
+            if (name.length < 3) continue;
+            parsed.push({ name, price: eq.price });
+        }
+    }
+
+    // ── Universal format: try multiple strategies ──
+    if (parsed.length === 0) {
+        // Strategy A: "Name  Price" on same line (US/some EU receipts)
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (isJunkLine(line)) continue;
+
+            let m = line.match(/^(.+?)\s{2,}[£$€]?(\d{1,6}[.,]\d{2})\s*[A-Z]?\s*$/);
+            if (!m) m = line.match(/^(.{3,}?)\s+(\d{1,6}[.,]\d{2})\s*$/);
+            if (!m) continue;
+
+            const price = parseFloat(m[2].replace(',', '.'));
+            if (price <= 0 || price > 50000) continue;
+            if (totalAmount && price > totalAmount * 1.05) continue;
+
+            let name = m[1].replace(/^\d+\s+/, '').replace(/\s+\d+\s*$/, '').replace(/^[A-Z]\s+/, '').trim();
+            if (name.length < 3 || !/[A-Za-zА-Яа-яЁё]{2,}/.test(name)) continue;
+            if (/^-/.test(m[2]) || /-\s*\d/.test(line)) continue;
+
+            parsed.push({ name, price });
+        }
+    }
+
+    // Strategy B: Names and prices in separate columns/blocks (UK receipts via OCR)
+    // OCR often splits 2-column receipts into name block + price block
+    if (parsed.length === 0) {
+        // Collect item-name lines (have 3+ letters, not junk, no price)
+        const nameLines: string[] = [];
+        // Collect standalone price lines
+        const priceLines: number[] = [];
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (!line) continue;
+
+            // Is this a standalone price? Must have decimal point (1.68, 0.58, .58)
+            const priceClean = line.replace(/^[oO]\s*/, '').replace(/^[£$€E]\s*/, '').replace(/\s+/g, '');
+            const pm = priceClean.match(/^(\d{0,4}\.\d{2})$/);
+            if (pm) {
+                const p = parseFloat(pm[1]);
+                if (p > 0 && p < 10000 && (!totalAmount || p <= totalAmount * 1.05)) {
+                    priceLines.push(p);
+                    continue;
+                }
+            }
+
+            // Is this an item name?
+            if (isJunkLine(line)) continue;
+            if (/^\d+[.,]\d{2}$/.test(line)) continue; // bare price
+            if (/^V\s/.test(line) || /^[A-Z&/]{2,}/.test(line) || /[A-Za-z]{3,}/.test(line)) {
+                let name = line
+                    .replace(/^V\s+/, '')       // remove "V " prefix (VAT indicator)
+                    .replace(/^\d+\s+/, '')
+                    .trim();
+                if (name.length >= 3 && /[A-Za-zА-Яа-яЁё]{2,}/.test(name)) {
+                    // Skip footer/header lines
+                    if (/items\b|balance|visa|debit|change|cardholder|copy|contactless|sale|please|amount|total|gbp|eur|usd|verification|receipt|records|auth|code|ref|aid|app seq|account|registration|result|token|guaranteed|committed|quality|thank|shopping/i.test(name)) continue;
+                    if (/waitrose|tesco|sainsbury|lidl|aldi|rewe|carrefour|walmart/i.test(name)) continue;
+                    if (/www\.|\.com|\.co\./i.test(name)) continue;
+                    if (/^\*+/.test(name) || /^\d{2}\/\d{2}\/\d{4}/.test(name)) continue;
+                    if (/^mywaitrose|^mycard|^clubcard/i.test(name)) continue;
+                    if (/tower|bank\s|street|road|avenue|south\sbank|north|east|west/i.test(name) && /\d{3,}/.test(name)) continue;
+                    if (/detai|commi\s*tted|qual\s*i\s*ty|istration/i.test(name)) continue;
+                    nameLines.push(name);
+                }
             }
         }
-        // Also check inline quantity: "1 x 4 199,00"
-        const inlineQty = name.match(/(\d+)\s*[xXхХ*×]\s*[\d\s.,]+$/);
-        if (inlineQty) {
-            quantity = parseInt(inlineQty[1]);
-            name = name.slice(0, inlineQty.index).trim();
+
+        // Pair names with prices (by order)
+        const pairCount = Math.min(nameLines.length, priceLines.length);
+        if (pairCount >= 2) {
+            for (let i = 0; i < pairCount; i++) {
+                parsed.push({ name: nameLines[i], price: priceLines[i] });
+            }
         }
-
-        // Clean up name
-        name = name.replace(/^\d+\s+/, ''); // Remove leading item number
-        name = name.replace(/\s*[*×]\s*\d.*$/, ''); // Remove "* 1 =118.30" suffix
-        name = name.replace(/\s*=\s*\d.*$/, ''); // Remove "= 118.30" suffix
-        name = name.replace(/\s+\d[\d\s]*[.,]\d{2}\s*$/, ''); // Remove trailing price from name "Coca-Cola 39.99"
-        name = name.replace(/\s+\d+\s*$/, ''); // Remove trailing numbers "ананас 1"
-        name = name.trim();
-        if (name.length < 4) continue;
-
-        // Skip if name is just numbers
-        if (/^\d+$/.test(name)) continue;
-
-        // Skip discounts / refunds
-        if (/скидк|знижк|discount|rabatt|remise|descuento|бонус|bonus/i.test(name)) continue;
-
-        // Skip junk lines
-        if (/^[*_×=\s\d.,]+$/.test(name)) continue; // "* =", "0.786 ="
-        if (name.length < 4) continue; // "Ко", "средн"
-        if (/^[A-Z]+\/[A-Z]+$/.test(name)) continue; // HARTIKAINEN/JARI
-        if (/безналич|наличн|банковск|visa|mastercard|карта|клиент|терминал|мерчант|одобрен|пин-код|авториз|ссылк|рекоменд|recommend/i.test(name)) continue;
-        // Skip if price is unreasonably high (likely concatenated numbers)
-        if (price > 100000) continue;
-
-        const categorySlug = detectItemCategory(name);
-        items.push({ name, quantity, price, categorySlug });
     }
 
-    // Deduplicate by name (keep first occurrence)
-    const seen = new Set<string>();
-    const unique = items.filter(item => {
-        const key = item.name.toLowerCase().slice(0, 20);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
+    // Assign categories
+    const items: ReceiptItem[] = parsed.map(p => ({
+        name: p.name,
+        quantity: 1,
+        price: p.price,
+        categorySlug: detectItemCategory(p.name),
+    }));
+
+    // Merge duplicates: same name → sum prices, increase quantity
+    const seen = new Map<string, number>();
+    const unique: ReceiptItem[] = [];
+    for (const item of items) {
+        const normalized = item.name.toLowerCase()
+            .replace(/^напиток\s+/i, '')
+            .replace(/^шок\.\s*/i, 'шоколадный ')
+            .replace(/\s+/g, ' ')
+            .slice(0, 18);
+        if (seen.has(normalized)) {
+            const idx = seen.get(normalized)!;
+            unique[idx].price += item.price;
+            unique[idx].quantity += 1;
+        } else {
+            seen.set(normalized, unique.length);
+            unique.push({ ...item });
+        }
+    }
 
     return unique;
 }
@@ -252,7 +367,7 @@ function detectItemCategory(itemName: string): string | null {
     const t = itemName.toLowerCase();
 
     // ── Meat / Fish (ru/uk/en/de/fr/es) ──
-    if (/курят|куряч|м'яс|мясо|свинин|говядин|фарш|колбас|сосиск|ветчин|бекон|шинк/.test(t)) return 'food';
+    if (/курят|куряч|м'яс|мясо|свинин|говядин|фарш|колбас|сосиск|ветчин|бекон|шинк|ребрышк|свиные|свиных/.test(t)) return 'food';
     if (/chicken|beef|pork|sausage|bacon|ham|meat|turkey|lamb/.test(t)) return 'food';
     if (/hähnchen|rind|schwein|wurst|schinken|fleisch|lamm/.test(t)) return 'food';
     if (/poulet|boeuf|porc|saucisse|jambon|viande|agneau/.test(t)) return 'food';
@@ -304,9 +419,9 @@ function detectItemCategory(itemName: string): string | null {
     if (/conserva|frijol|maíz|champiñón|guisante/.test(t)) return 'food';
 
     // ── Drinks / Sweets ──
-    if (/вода\b|сік|сок|напій|напиток|чай\b|кава|кофе|какао|компот|лимонад/.test(t)) return 'food';
+    if (/вода\b|сік|сок|напій|напиток|пивн|пиво|чай\b|кава|кофе|какао|компот|лимонад|смесь/.test(t)) return 'food';
     if (/печиво|печенье|шоколад|цукерк|конфет|торт|тістечк|пирожн|морозив|мороженое/.test(t)) return 'food';
-    if (/water|juice|tea\b|coffee|cocoa|soda|cola|chocolate|candy|ice cream|cookie/.test(t)) return 'food';
+    if (/water|juice|tea\b|coffee|cocoa|soda|cola|chocolate|candy|ice cream|cookie|nutberry|mix|nut/.test(t)) return 'food';
     if (/wasser|saft|tee\b|kaffee|kakao|schokolade|bonbon|eis/.test(t)) return 'food';
     if (/eau|jus|thé\b|café|cacao|chocolat|bonbon|glace/.test(t)) return 'food';
     if (/agua|zumo|té\b|café|cacao|chocolate|caramelo|helado/.test(t)) return 'food';
@@ -390,14 +505,22 @@ function detectCategory(text: string): string | null {
 
 function extractCurrency(text: string): string | null {
     const t = text.toLowerCase();
-    if (/руб|rub|₽/.test(t)) return 'RUB';
-    if (/euro|eur|€/.test(t)) return 'EUR';
-    if (/usd|\$|dollar/.test(t)) return 'USD';
+    // Check explicit currency codes first (most reliable)
+    if (/gbp\d|£\d/.test(t)) return 'GBP';
+    if (/rub\b|руб|₽/.test(t)) return 'RUB';
+    if (/usd\d|\$\d|dollar/.test(t)) return 'USD';
+    if (/eur\d|€\d|euro\b/.test(t)) return 'EUR';
     if (/gbp|£|pound/.test(t)) return 'GBP';
+    if (/eur|€/.test(t)) return 'EUR';
+    if (/usd|\$/.test(t)) return 'USD';
     if (/gel|лари/.test(t)) return 'GEL';
     if (/kzt|тенге/.test(t)) return 'KZT';
-    if (/try|лира/.test(t)) return 'TRY';
+    if (/try\b|лира/.test(t)) return 'TRY';
     if (/byn|бел.*руб/.test(t)) return 'BYN';
     if (/uah|грн|₴/.test(t)) return 'UAH';
+    if (/chf|франк/.test(t)) return 'CHF';
+    if (/pln|злот|zł/.test(t)) return 'PLN';
+    if (/czk|крон|kč/.test(t)) return 'CZK';
+    if (/sek|крон/.test(t)) return 'SEK';
     return null;
 }

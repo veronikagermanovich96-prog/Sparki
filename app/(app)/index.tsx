@@ -1,9 +1,9 @@
 import {
     ArrowRightLeft,
     Banknote, Bitcoin, Briefcase, Building2, Car,
-    Check, CircleDollarSign, Clock, Coins, CreditCard,
+    Check, ChevronDown, CircleDollarSign, Clock, Coins, CreditCard,
     Eye, EyeOff,
-    Globe, Home, Landmark, Minus, Pencil, PiggyBank, Plus,
+    Globe, Home, Landmark, Minus, Pencil, PiggyBank, Plus, Search,
     Smartphone, Trash2, TrendingDown, TrendingUp, Wallet, X,
 } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
@@ -21,7 +21,7 @@ import {
     startOfDay, startOfMonth, startOfWeek, startOfYear,
 } from 'date-fns';
 import { supabase } from '@/lib/supabase';
-import { formatAmount } from '@/constants/currencies';
+import { formatAmount, CURRENCIES as CURRENCY_LIST } from '@/constants/currencies';
 import { Account, Category, RecurringPayment, Transaction } from '@/types';
 import { IconArray, DotData } from '@/components/icon-array/IconArray';
 import TransactionForm from '@/components/TransactionForm';
@@ -165,6 +165,9 @@ export default function Dashboard() {
     const [goalColor,       setGoalColor]       = useState('#22c55e');
     const [goalAccId,       setGoalAccId]       = useState('');
     const [goalInitialDeposit, setGoalInitialDeposit] = useState('');
+    const [goalCurrency, setGoalCurrency] = useState('');
+    const [goalCurrencyOpen, setGoalCurrencyOpen] = useState(false);
+    const [goalCurrencySearch, setGoalCurrencySearch] = useState('');
     const [savingGoal,      setSavingGoal]      = useState(false);
     // Goal action sheet
     const [goalSheet,       setGoalSheet]       = useState<GoalItem | null>(null);
@@ -381,11 +384,12 @@ export default function Dashboard() {
             setGoalDate(goal.targetDate ?? '');
             setGoalColor(goal.color);
             setGoalAccId(goal.accountId);
+            setGoalCurrency(goal.currency);
             setGoalInitialDeposit('');
         } else {
             setEditingGoal(null);
             setGoalName(''); setGoalIcon('🎯'); setGoalTarget(''); setGoalDate('');
-            setGoalColor('#22c55e'); setGoalAccId(''); setGoalInitialDeposit('');
+            setGoalColor('#22c55e'); setGoalAccId(''); setGoalCurrency(accounts[0]?.currency ?? 'USD'); setGoalInitialDeposit('');
         }
         setGoalFormVisible(true);
     }
@@ -423,7 +427,7 @@ export default function Dashboard() {
                 icon:          goalIcon,
                 color:         goalColor,
                 target_amount: target,
-                currency:      acc?.currency ?? currency,
+                currency:      goalCurrency || acc?.currency || currency,
                 target_date:   targetDate,
             };
 
@@ -464,7 +468,7 @@ export default function Dashboard() {
                 color:         goalColor,
                 target_amount: target,
                 current_amount: initialAmt > 0 ? initialAmt : 0,
-                currency:      acc?.currency ?? currency,
+                currency:      goalCurrency || acc?.currency || currency,
                 target_date:   targetDate,
                 is_active:     true,
                 is_archived:   false,
@@ -1174,17 +1178,65 @@ export default function Dashboard() {
                                 </View>
                             </View>
 
-                            {/* 3. Целевая сумма */}
+                            {/* 3. Целевая сумма + валюта */}
                             <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 6 }}>{t('dashboard.targetAmount')}</Text>
-                            <TextInput value={goalTarget} onChangeText={setGoalTarget}
-                                keyboardType="numeric" placeholder="0.00" placeholderTextColor={colors.textDisabled}
-                                style={{ backgroundColor: colors.bgTertiary, color: colors.textPrimary, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, marginBottom: 16, fontSize: 22, fontWeight: 'bold' }} />
+                            <View style={{ flexDirection: 'row', gap: 8, marginBottom: goalCurrencyOpen ? 8 : 16 }}>
+                                <TextInput value={goalTarget} onChangeText={setGoalTarget}
+                                    keyboardType="numeric" placeholder="0.00" placeholderTextColor={colors.textDisabled}
+                                    style={{ flex: 1, backgroundColor: colors.bgTertiary, color: colors.textPrimary, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 22, fontWeight: 'bold' }} />
+                                <TouchableOpacity onPress={() => { setGoalCurrencyOpen(v => !v); setGoalCurrencySearch(''); }}
+                                    activeOpacity={0.8}
+                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, borderRadius: 12, backgroundColor: colors.bgTertiary, borderWidth: 1.5, borderColor: goalCurrencyOpen ? '#2563eb' : colors.borderLight, minWidth: 82 }}>
+                                    <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '700' }}>{goalCurrency || 'USD'}</Text>
+                                    <ChevronDown color={colors.textMuted} size={15} style={{ transform: [{ rotate: goalCurrencyOpen ? '180deg' : '0deg' }] }} />
+                                </TouchableOpacity>
+                            </View>
+                            {goalCurrencyOpen && (() => {
+                                const q = goalCurrencySearch.trim().toLowerCase();
+                                const vis = q
+                                    ? CURRENCY_LIST.filter(c => c.code.toLowerCase().includes(q) || c.name.toLowerCase().includes(q))
+                                    : CURRENCY_LIST;
+                                return (
+                                    <View style={{ backgroundColor: colors.bgTertiary, borderRadius: 14, marginBottom: 16, borderWidth: 1, borderColor: colors.borderLight, overflow: 'hidden', maxHeight: 260 }}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.borderLight }}>
+                                            <Search color={colors.textDisabled} size={15} />
+                                            <TextInput
+                                                value={goalCurrencySearch} onChangeText={setGoalCurrencySearch}
+                                                placeholder={t('transactionForm.searchCurrency')}
+                                                placeholderTextColor={colors.textDisabled} autoFocus
+                                                style={{ flex: 1, color: colors.textPrimary, fontSize: 14, padding: 0 }}
+                                            />
+                                            {goalCurrencySearch.length > 0 && (
+                                                <TouchableOpacity onPress={() => setGoalCurrencySearch('')} hitSlop={8}>
+                                                    <X color={colors.textDisabled} size={14} />
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
+                                        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                                            {vis.length === 0 ? (
+                                                <Text style={{ color: colors.textDisabled, fontSize: 14, textAlign: 'center', paddingVertical: 20 }}>{t('common.nothingFound')}</Text>
+                                            ) : vis.map((c, i) => (
+                                                <TouchableOpacity key={c.code}
+                                                    onPress={() => { setGoalCurrency(c.code); setGoalCurrencyOpen(false); setGoalCurrencySearch(''); }}
+                                                    activeOpacity={0.7}
+                                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: i < vis.length - 1 ? 1 : 0, borderBottomColor: colors.borderLight, backgroundColor: (goalCurrency || 'USD') === c.code ? '#172554' : 'transparent' }}>
+                                                    <View>
+                                                        <Text style={{ color: (goalCurrency || 'USD') === c.code ? '#fff' : '#e5e7eb', fontSize: 14, fontWeight: (goalCurrency || 'USD') === c.code ? '700' : '500' }}>{c.code}</Text>
+                                                        <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 1 }}>{c.name}</Text>
+                                                    </View>
+                                                    {(goalCurrency || 'USD') === c.code && <Check color="#2563eb" size={16} />}
+                                                </TouchableOpacity>
+                                            ))}
+                                        </ScrollView>
+                                    </View>
+                                );
+                            })()}
 
                             {/* 4. Списывать со счёта */}
                             <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 10 }}>{t('dashboard.debitAccount')}</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
                                 {accounts.map(acc => (
-                                    <TouchableOpacity key={acc.id} onPress={() => setGoalAccId(acc.id)}
+                                    <TouchableOpacity key={acc.id} onPress={() => { setGoalAccId(acc.id); setGoalCurrency(acc.currency); }}
                                         style={{ paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, marginRight: 8, borderWidth: 1.5, borderColor: goalAccId === acc.id ? '#2563eb' : colors.borderLight, backgroundColor: goalAccId === acc.id ? '#172554' : colors.bgTertiary }}>
                                         <Text style={{ color: goalAccId === acc.id ? colors.textPrimary : colors.textSecondary, fontSize: 13 }} numberOfLines={1}>{acc.name}</Text>
                                         <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>{formatAmount(acc.balance, acc.currency)}</Text>
