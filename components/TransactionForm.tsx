@@ -1,7 +1,7 @@
 import {
-    Activity, ArrowLeft, ArrowRightLeft, Award,
+    Activity, ArrowDownRight, ArrowLeft, ArrowRightLeft, ArrowUpRight, Award,
     Banknote, Bike, Bitcoin, BookOpen, Briefcase, Building2, Bus,
-    Bell, Calculator, Calendar, Camera, Car, Check, ChevronDown, CircleDollarSign, Coffee, Coins, CreditCard, Images,
+    Bell, Calculator, Calendar, Camera, Car, Check, ChevronDown, CircleDollarSign, Clock, Coffee, Coins, CreditCard, Images,
     Droplets, Dumbbell, Film, Flag, Flame, Fuel, Gift, Globe, GraduationCap,
     Heart, Home, Landmark, MapPin, Monitor, Music,
     Package, PawPrint, Pencil, Pill, Plane, Plus, Receipt, Scissors,
@@ -854,6 +854,25 @@ export default function TransactionForm({
     // ── Numpad ────────────────────────────────────────────────────────────────
 
     const [activePanel, setActivePanel] = useState<'numpad' | 'calendar' | 'note' | 'recurring' | 'receipt'>('numpad');
+    const [formView, setFormView] = useState<'form' | 'history'>('form');
+    const [historyTxs, setHistoryTxs] = useState<any[]>([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+
+    // Load history when switching to history view
+    async function loadHistory() {
+        if (!formAccountId || !householdId) return;
+        setLoadingHistory(true);
+        const { data } = await supabase
+            .from('transactions')
+            .select('id, amount, currency, date, note, type, category_id, categories(name, icon, color)')
+            .eq('account_id', formAccountId)
+            .eq('household_id', householdId)
+            .eq('is_deleted', false)
+            .order('date', { ascending: false })
+            .limit(50);
+        setHistoryTxs(data ?? []);
+        setLoadingHistory(false);
+    }
 
     function handleNumpadKey(key: string) {
         if (key === '⌫') {
@@ -947,23 +966,6 @@ export default function TransactionForm({
                 /* ═══ Main form ═══ */
                 <View style={{ flex: 1 }}>
 
-                    {/* ── Top bar ── */}
-                    <View style={{ paddingTop: 52, paddingHorizontal: 16, paddingBottom: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <TouchableOpacity onPress={onClose}
-                            style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: colors.bgTertiary }}>
-                            <Text style={{ color: colors.textSecondary, fontSize: 14, fontFamily: fonts.body }}>{t('common.cancel')}</Text>
-                        </TouchableOpacity>
-                        <Text style={{ color: colors.textPrimary, fontSize: 16, fontFamily: fonts.heading }}>
-                            {editingTx ? t('transactionForm.editTitle') : t('transactionForm.newTitle')}
-                        </Text>
-                        <TouchableOpacity onPress={saveForm} disabled={saving || !formAmount || (formType !== 'transfer' && !formCategoryId)}
-                            style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: saving || !formAmount ? colors.bgTertiary : '#7C6FFF' }}>
-                            <Text style={{ color: saving || !formAmount ? colors.textDisabled : '#fff', fontSize: 14, fontFamily: fonts.bodySemiBold }}>
-                                {saving ? '...' : t('common.save')}
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-
                     {/* ── Accounts ── */}
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}
                         style={{ flexGrow: 0 }}
@@ -997,6 +999,61 @@ export default function TransactionForm({
                             </TouchableOpacity>
                         ))}
                     </ScrollView>
+
+                    {/* ═══ HISTORY VIEW ═══ */}
+                    {formView === 'history' ? (
+                        <View style={{ flex: 1, paddingHorizontal: 16 }}>
+                            {loadingHistory ? (
+                                <ActivityIndicator color="#7C6FFF" style={{ marginTop: 40 }} />
+                            ) : historyTxs.length === 0 ? (
+                                <Text style={{ color: colors.textDisabled, textAlign: 'center', marginTop: 40, fontSize: 14, fontFamily: fonts.body }}>{t('dashboard.noTransactions')}</Text>
+                            ) : (
+                                <ScrollView showsVerticalScrollIndicator={false}>
+                                    {(() => {
+                                        // Group by date
+                                        const groups: Record<string, typeof historyTxs> = {};
+                                        for (const tx of historyTxs) {
+                                            const d = tx.date;
+                                            if (!groups[d]) groups[d] = [];
+                                            groups[d].push(tx);
+                                        }
+                                        return Object.entries(groups).map(([date, txs]) => (
+                                            <View key={date}>
+                                                <Text style={{ color: colors.textMuted, fontSize: 13, fontFamily: fonts.bodySemiBold, marginTop: 16, marginBottom: 8 }}>
+                                                    {format(new Date(date + 'T00:00:00'), 'MMMM d', { locale: ru })}
+                                                </Text>
+                                                {txs.map((tx: any) => {
+                                                    const isIncome = tx.type === 'income';
+                                                    const isTransfer = tx.type === 'transfer';
+                                                    const cat = tx.categories;
+                                                    const CatIc = cat?.icon ? CAT_ICONS[cat.icon] : null;
+                                                    const amtColor = isIncome ? '#22c55e' : isTransfer ? '#60a5fa' : '#f87171';
+                                                    const prefix = isIncome ? '+' : '-';
+                                                    return (
+                                                        <View key={tx.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' }}>
+                                                            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: (cat?.color ?? '#888') + '22', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                                                {CatIc ? <CatIc color={cat?.color ?? colors.textMuted} size={18} /> : (
+                                                                    isIncome ? <ArrowUpRight color="#22c55e" size={18} /> :
+                                                                    isTransfer ? <ArrowRightLeft color="#60a5fa" size={18} /> :
+                                                                    <ArrowDownRight color="#f87171" size={18} />
+                                                                )}
+                                                            </View>
+                                                            <View style={{ flex: 1 }}>
+                                                                <Text style={{ color: colors.textPrimary, fontSize: 15, fontFamily: fonts.bodyMedium }}>{tx.note || cat?.name || tx.type}</Text>
+                                                                <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>{cat?.name ?? ''}</Text>
+                                                            </View>
+                                                            <Text style={{ color: amtColor, fontSize: 15, fontFamily: fonts.bodyBold }}>{prefix}{formatAmount(tx.amount, tx.currency)}</Text>
+                                                        </View>
+                                                    );
+                                                })}
+                                            </View>
+                                        ));
+                                    })()}
+                                </ScrollView>
+                            )}
+                        </View>
+                    ) : (
+                    <>
 
                     {/* ── Amount display ── */}
                     <TouchableOpacity onPress={() => setCurrencyOpen(true)} activeOpacity={0.8} style={{ alignItems: 'center', paddingVertical: 12 }}>
@@ -1203,30 +1260,57 @@ export default function TransactionForm({
                         </TouchableOpacity>
                     </View>
 
-                    {/* ── Type tabs ── */}
-                    <View style={{ flexDirection: 'row', marginHorizontal: 12, marginBottom: 30, padding: 3, borderRadius: 20, backgroundColor: colors.bgTertiary, borderWidth: 1, borderColor: colors.borderLight }}>
-                        {[
-                            { type: null as 'income' | 'expense' | 'transfer' | null, label: t('transactionForm.history'), col: '#a78bfa' },
-                            { type: 'income' as const, label: t('transactionForm.income'), col: '#22c55e' },
-                            { type: 'expense' as const, label: t('transactionForm.expense'), col: '#f87171' },
-                            { type: 'transfer' as const, label: t('transactionForm.transfer'), col: '#60a5fa' },
-                        ].map((item, idx) => {
-                            const sel = item.type !== null && formType === item.type;
-                            return (
-                                <TouchableOpacity key={idx} onPress={() => {
-                                    if (item.type === null) { onClose(); return; }
-                                    setFormType(item.type);
-                                    if (item.type === 'transfer') setFormToAccId(accounts.find(a => a.id !== formAccountId)?.id ?? '');
-                                }}
-                                    style={{ flex: 1, paddingVertical: 10, borderRadius: 18, alignItems: 'center',
-                                        backgroundColor: sel ? item.col + '22' : 'transparent' }}>
-                                    <Text style={{ color: sel ? item.col : item.type === null ? '#a78bfa' : colors.textMuted, fontSize: 12, fontFamily: sel ? fonts.bodySemiBold : fonts.body }}>{item.label}</Text>
-                                </TouchableOpacity>
-                            );
-                        })}
+                    </View>{/* end bottom section */}
+
+                    </>
+                    )}
+
+                    {/* ── Bottom nav bar ── */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingBottom: 30, paddingTop: 8, gap: 6 }}>
+                        {/* Close button */}
+                        <TouchableOpacity onPress={onClose}
+                            style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1.5, borderColor: colors.borderLight, alignItems: 'center', justifyContent: 'center' }}>
+                            <X color={colors.textMuted} size={20} />
+                        </TouchableOpacity>
+
+                        {/* Nav pill */}
+                        <View style={{ flex: 1, flexDirection: 'row', padding: 3, borderRadius: 22, backgroundColor: colors.bgTertiary, borderWidth: 1, borderColor: colors.borderLight }}>
+                            {/* History */}
+                            <TouchableOpacity onPress={() => { setFormView('history'); loadHistory(); }}
+                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, flex: 1, paddingVertical: 10, borderRadius: 20,
+                                    backgroundColor: formView === 'history' ? 'rgba(124,111,255,0.12)' : 'transparent' }}>
+                                <Clock color={formView === 'history' ? '#a78bfa' : colors.textMuted} size={14} />
+                                <Text style={{ color: formView === 'history' ? '#a78bfa' : colors.textMuted, fontSize: 12, fontFamily: fonts.bodySemiBold }}>{t('transactionForm.history')}</Text>
+                            </TouchableOpacity>
+                            {/* Income */}
+                            <TouchableOpacity onPress={() => { setFormView('form'); setFormType('income'); }}
+                                style={{ alignItems: 'center', justifyContent: 'center', flex: 0.6, paddingVertical: 10, borderRadius: 20,
+                                    backgroundColor: formView === 'form' && formType === 'income' ? '#22c55e22' : 'transparent' }}>
+                                <ArrowUpRight color={formView === 'form' && formType === 'income' ? '#22c55e' : '#22c55e80'} size={18} />
+                            </TouchableOpacity>
+                            {/* Expense */}
+                            <TouchableOpacity onPress={() => { setFormView('form'); setFormType('expense'); }}
+                                style={{ alignItems: 'center', justifyContent: 'center', flex: 0.6, paddingVertical: 10, borderRadius: 20,
+                                    backgroundColor: formView === 'form' && formType === 'expense' ? '#f8717122' : 'transparent' }}>
+                                <ArrowDownRight color={formView === 'form' && formType === 'expense' ? '#f87171' : '#f8717180'} size={18} />
+                            </TouchableOpacity>
+                            {/* Transfer */}
+                            <TouchableOpacity onPress={() => { setFormView('form'); setFormType('transfer'); setFormToAccId(accounts.find(a => a.id !== formAccountId)?.id ?? ''); }}
+                                style={{ alignItems: 'center', justifyContent: 'center', flex: 0.6, paddingVertical: 10, borderRadius: 20,
+                                    backgroundColor: formView === 'form' && formType === 'transfer' ? '#60a5fa22' : 'transparent' }}>
+                                <ArrowRightLeft color={formView === 'form' && formType === 'transfer' ? '#60a5fa' : '#60a5fa80'} size={18} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Confirm/Save button */}
+                        <TouchableOpacity onPress={saveForm}
+                            disabled={formView === 'history' || saving || !formAmount || (formType !== 'transfer' && !formCategoryId) || !formAccountId}
+                            style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
+                                backgroundColor: formView === 'history' || !formAmount ? colors.bgTertiary : '#555' }}>
+                            <Check color={formView === 'history' || !formAmount ? colors.textDisabled : '#fff'} size={20} />
+                        </TouchableOpacity>
                     </View>
 
-                    </View>{/* end bottom section */}
                 </View>
             )}
 
