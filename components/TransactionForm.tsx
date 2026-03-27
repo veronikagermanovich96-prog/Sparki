@@ -947,7 +947,6 @@ export default function TransactionForm({
         { key: 'cal', id: 'calendar', Icon: Calendar },
         { key: 'note', id: 'note', Icon: Pencil },
         { key: 'recur', id: 'recurring', Icon: RefreshCw },
-        { key: 'bell', id: 'recurring', Icon: Bell },
         { key: 'cam', id: 'receipt', Icon: Camera },
     ];
 
@@ -1154,13 +1153,16 @@ export default function TransactionForm({
 
                     {/* ── Toolbar ── */}
                     <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 6, borderTopWidth: 1, borderTopColor: colors.bgTertiary }}>
-                        {toolbarIcons.map(({ key, id, Icon }) => (
-                            <TouchableOpacity key={key}
-                                onPress={() => { Keyboard.dismiss(); setActivePanel(activePanel === id ? 'numpad' : id); }}
-                                style={{ padding: 8, borderRadius: 10, backgroundColor: activePanel === id ? 'rgba(124,111,255,0.12)' : 'transparent' }}>
-                                <Icon color={activePanel === id ? '#7C6FFF' : colors.textMuted} size={20} />
-                            </TouchableOpacity>
-                        ))}
+                        {toolbarIcons.map(({ key, id, Icon }) => {
+                            const isActive = id !== 'numpad' && activePanel === id;
+                            return (
+                                <TouchableOpacity key={key}
+                                    onPress={() => { Keyboard.dismiss(); setActivePanel(activePanel === id || id === 'numpad' ? 'numpad' : id); }}
+                                    style={{ padding: 8, borderRadius: 10, backgroundColor: isActive ? 'rgba(124,111,255,0.12)' : 'transparent' }}>
+                                    <Icon color={isActive ? '#7C6FFF' : colors.textMuted} size={20} />
+                                </TouchableOpacity>
+                            );
+                        })}
                     </View>
 
                     {/* ── Bottom panel ── */}

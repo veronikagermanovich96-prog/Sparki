@@ -823,6 +823,7 @@
     "notePlaceholder": "Необязательно…",
     "deleteCategory": "Удалить «{{name}}»?",
     "categoryDeleted": "«{{name}}» удалена",
+    "recurring": "Рекуррентный платёж",
     "deleteCategoryMsg": "Транзакции с этой категорией останутся.",
     "noCameraAccess": "Нет доступа к камере",
     "noCameraMsg": "Разрешите доступ в настройках",
