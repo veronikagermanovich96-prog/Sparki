@@ -323,6 +323,8 @@ export default function TransactionForm({
         setShowCalc(false);
         setCalcExpression('');
         setShowDatePicker(false);
+        setActivePanel('numpad');
+        setFormView('form');
         setCategoryTags([]);
         setNewTagText('');
         setAddingTag(false);
@@ -1009,7 +1011,7 @@ export default function TransactionForm({
                 </View>
             ) : (
                 /* ═══ Main form ═══ */
-                <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
                     {/* ── Grabber ── */}
                     <View style={{ alignItems: 'center', paddingTop: 50, paddingBottom: 8 }}>
@@ -1120,7 +1122,7 @@ export default function TransactionForm({
                     </TouchableOpacity>
 
                     {/* ── Bottom section ── */}
-                    <View>
+                    <View style={{ marginTop: 'auto' }}>
 
                     {/* ── Category section ── */}
                     {formType !== 'transfer' && (
