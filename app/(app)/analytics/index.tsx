@@ -1056,7 +1056,7 @@ export default function AnalyticsScreen() {
     const [extraCategories, setExtraCategories] = useState<ExtraCategory[]>([]);
     const [showExtrasModal, setShowExtrasModal] = useState(false);
     const [extraDraft, setExtraDraft] = useState<Record<string, DraftEntry>>({});
-    const [allCategories] = useState<CatWithTags[]>([]);
+    const [allCategories, setAllCategories] = useState<CatWithTags[]>([]);
     const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
     const [savingExtras, setSavingExtras] = useState(false);
 
@@ -1191,9 +1191,20 @@ export default function AnalyticsScreen() {
             .eq('user_id', user.id)
             .single();
         if (member) {
-            setHouseholdId(member.household_id as string);
+            const hid = member.household_id as string;
+            setHouseholdId(hid);
             const hh = member.households as unknown as { base_currency: string } | null;
             if (hh?.base_currency) setCurrency(hh.base_currency);
+
+            // Load all expense categories
+            const { data: cats } = await supabase
+                .from('categories')
+                .select('id, name, icon, color, category_tags(id, name)')
+                .eq('household_id', hid)
+                .eq('type', 'expense')
+                .eq('is_hidden', false)
+                .order('name');
+            if (cats) setAllCategories(cats.map((c: any) => ({ id: c.id, name: c.name, icon: c.icon ?? 'ShoppingCart', color: c.color ?? '#888', tags: c.category_tags ?? [] })));
         }
     }
 
@@ -5826,8 +5837,9 @@ export default function AnalyticsScreen() {
             {/* Add watched categories sheet */}
             <BaseBottomSheet visible={showAddWatchedSheet} onClose={() => setShowAddWatchedSheet(false)} maxHeight="75%">
                 <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700', marginBottom: 16 }}>{t('analytics.selectCategories')}</Text>
-                {(overviewByPeriod[catPeriod]?.categories ?? []).map(cat => {
+                {allCategories.map(cat => {
                     const isWatched = watchedCategoryIds.includes(cat.id);
+                    const catWithExpenses = overviewByPeriod[catPeriod]?.categories?.find(c => c.id === cat.id);
                     return (
                         <TouchableOpacity key={cat.id} onPress={() => toggleWatchedCategory(cat.id)}
                             style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' }}>
@@ -5835,13 +5847,17 @@ export default function AnalyticsScreen() {
                                 <CategoryIcon iconName={cat.icon} color={cat.color} size={18} />
                             </View>
                             <Text style={{ flex: 1, color: colors.textPrimary, fontSize: 15 }}>{cat.name}</Text>
-                            <Text style={{ color: colors.textMuted, fontSize: 12, marginRight: 12 }}>{formatAmount(cat.amount, currency)}</Text>
+                            {catWithExpenses && <Text style={{ color: colors.textMuted, fontSize: 12, marginRight: 12 }}>{formatAmount(catWithExpenses.amount, currency)}</Text>}
                             <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: isWatched ? '#7C6FFF' : 'transparent', borderWidth: 2, borderColor: isWatched ? '#7C6FFF' : colors.borderLight, alignItems: 'center', justifyContent: 'center' }}>
                                 {isWatched && <Check color="#fff" size={14} />}
                             </View>
                         </TouchableOpacity>
                     );
                 })}
+                <TouchableOpacity onPress={() => setShowAddWatchedSheet(false)}
+                    style={{ marginTop: 20, paddingVertical: 14, borderRadius: 14, backgroundColor: '#7C6FFF', alignItems: 'center' }}>
+                    <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{t('common.done')}</Text>
+                </TouchableOpacity>
             </BaseBottomSheet>
 
             {/* Category detail bottom sheet */}

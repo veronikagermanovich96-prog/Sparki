@@ -1,7 +1,7 @@
 import {
     Activity, ArrowLeft, ArrowRightLeft, Award,
     Banknote, Bike, Bitcoin, BookOpen, Briefcase, Building2, Bus,
-    Calculator, Camera, Car, Check, ChevronDown, CircleDollarSign, Coffee, Coins, CreditCard, Images,
+    Calculator, Calendar, Camera, Car, Check, ChevronDown, CircleDollarSign, Coffee, Coins, CreditCard, Images,
     Droplets, Dumbbell, Film, Flag, Flame, Fuel, Gift, Globe, GraduationCap,
     Heart, Home, Landmark, MapPin, Monitor, Music,
     Package, PawPrint, Pencil, Pill, Plane, Plus, Receipt, Scissors,
@@ -183,6 +183,7 @@ export default function TransactionForm({
     const [formDate,       setFormDate]       = useState('');
     const [formNote,       setFormNote]       = useState('');
     const [showCalc,       setShowCalc]       = useState(false);
+    const [showDatePicker, setShowDatePicker] = useState(false);
     const [calcExpression, setCalcExpression] = useState('');
     const [formIsRecurring,    setFormIsRecurring]    = useState(false);
     const [formRecurFreq,      setFormRecurFreq]      = useState<RecurFreq>('monthly');
@@ -293,6 +294,7 @@ export default function TransactionForm({
         }
         setShowCalc(false);
         setCalcExpression('');
+        setShowDatePicker(false);
         setCategoryTags([]);
         setNewTagText('');
         setAddingTag(false);
@@ -1200,10 +1202,26 @@ export default function TransactionForm({
 
                                 {/* Date */}
                                 <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 8 }}>{t('transactionForm.dateLabel')}</Text>
-                                <TextInput value={formDate} onChangeText={setFormDate}
-                                    keyboardType="numeric" placeholder={t('transactionForm.datePlaceholder')} placeholderTextColor={colors.textDisabled}
-                                    style={{ backgroundColor: colors.bgTertiary, color: colors.textPrimary, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 16, fontSize: 15, letterSpacing: 1 }}
-                                />
+                                <TouchableOpacity onPress={() => setShowDatePicker(v => !v)} activeOpacity={0.8}
+                                    style={{ backgroundColor: colors.bgTertiary, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, marginBottom: showDatePicker ? 8 : 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <Text style={{ color: colors.textPrimary, fontSize: 15 }}>
+                                        {formDate ? format(new Date(formDate + 'T00:00:00'), 'd MMMM yyyy', { locale: ru }) : t('transactionForm.datePlaceholder')}
+                                    </Text>
+                                    <Calendar color={colors.textMuted} size={18} />
+                                </TouchableOpacity>
+                                {showDatePicker && (
+                                    <View style={{ backgroundColor: colors.bgTertiary, borderRadius: 14, overflow: 'hidden', marginBottom: 16 }}>
+                                        <DateTimePicker
+                                            mode="date" display="inline" themeVariant="dark"
+                                            value={formDate ? new Date(formDate + 'T00:00:00') : new Date()}
+                                            maximumDate={new Date()}
+                                            onChange={(_, date) => {
+                                                if (date) setFormDate(format(date, 'yyyy-MM-dd'));
+                                                setShowDatePicker(false);
+                                            }}
+                                        />
+                                    </View>
+                                )}
 
                                 {/* Note */}
                                 <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 8 }}>{t('transactionForm.noteLabel')}</Text>

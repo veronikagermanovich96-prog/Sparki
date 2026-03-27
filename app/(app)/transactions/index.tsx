@@ -403,7 +403,7 @@ export default function TransactionsScreen() {
         <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
 
             {/* Header */}
-            <View style={{ paddingTop: insets.top + 16, paddingBottom: 12, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ paddingTop: insets.top + 6, paddingBottom: 12, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Text style={{ color: colors.textPrimary, fontSize: 24, fontWeight: '700' }}>{t('transactions.title')}</Text>
                 <TouchableOpacity onPress={() => { setSearchVisible(v => !v); if (searchVisible) setSearch(''); }} style={{ padding: 4 }}>
                     {searchVisible ? <X color={colors.textSecondary} size={22} /> : <Search color={colors.textSecondary} size={22} />}
@@ -422,7 +422,7 @@ export default function TransactionsScreen() {
 
             {/* Row 1 — Type filter */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                style={{ flexGrow: 0, paddingBottom: 6 }}
+                style={{ flexGrow: 0, paddingBottom: 6, minHeight: 36 }}
                 contentContainerStyle={{ paddingHorizontal: 12, gap: 6, alignItems: 'center' }}>
                 {typeFilters.map(f => (
                     <TouchableOpacity key={f.value} onPress={() => setFilterType(f.value)}
