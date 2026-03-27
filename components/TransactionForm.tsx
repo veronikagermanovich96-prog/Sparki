@@ -6,7 +6,7 @@ import {
     Heart, Home, Landmark, MapPin, Monitor, Music,
     Package, PawPrint, Pencil, Pill, Plane, Plus, Receipt, Scissors,
     Delete, RefreshCw, Search, ShoppingBag, ShoppingCart, Shirt, Sofa, Star,
-    Tag, Train, TrendingDown, TrendingUp, Trophy, Tv, Utensils,
+    Tag, Train, Trash2, TrendingDown, TrendingUp, Trophy, Tv, Utensils,
     Wallet, Wifi, X, Zap,
 } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
@@ -943,7 +943,7 @@ export default function TransactionForm({
     ];
 
     const toolbarIcons: { key: string; id: 'numpad' | 'calendar' | 'note' | 'recurring' | 'receipt'; Icon: React.ComponentType<{color: string; size: number}> }[] = [
-        { key: 'tag', id: 'numpad', Icon: Tag },
+        { key: 'calc', id: 'numpad', Icon: Calculator },
         { key: 'cal', id: 'calendar', Icon: Calendar },
         { key: 'note', id: 'note', Icon: Pencil },
         { key: 'recur', id: 'recurring', Icon: RefreshCw },
@@ -1100,9 +1100,8 @@ export default function TransactionForm({
                     ) : (
                     <>
 
-                    {/* ── Amount display (centered) ── */}
-                    <View style={{ flex: 1, justifyContent: 'center' }}>
-                    <TouchableOpacity onPress={() => setCurrencyOpen(true)} activeOpacity={0.8} style={{ alignItems: 'center', paddingVertical: 12 }}>
+                    {/* ── Amount display ── */}
+                    <TouchableOpacity onPress={() => setCurrencyOpen(true)} activeOpacity={0.8} style={{ alignItems: 'center', paddingVertical: 16 }}>
                         <Text adjustsFontSizeToFit numberOfLines={1} style={{ color: colors.textPrimary, fontSize: 48, fontFamily: fonts.heading, textAlign: 'center', maxWidth: '95%' }}>
                             {hasExpr ? formAmount.replace(/\*/g, '×').replace(/\//g, '÷').replace(/-/g, '−') : (formAmount || '0')}
                             {' '}<Text style={{ fontSize: 28, color: colors.textSecondary }}>{formCurrency}</Text>
@@ -1115,10 +1114,8 @@ export default function TransactionForm({
                         )}
                     </TouchableOpacity>
 
-                    </View>{/* end centered amount area */}
-
                     {/* ── Bottom section ── */}
-                    <View>
+                    <View style={{ marginTop: 'auto' }}>
 
                     {/* ── Category section ── */}
                     {formType !== 'transfer' && (
@@ -1154,10 +1151,10 @@ export default function TransactionForm({
                     {/* ── Toolbar ── */}
                     <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 6, borderTopWidth: 1, borderTopColor: colors.bgTertiary }}>
                         {toolbarIcons.map(({ key, id, Icon }) => {
-                            const isActive = id !== 'numpad' && activePanel === id;
+                            const isActive = activePanel === id;
                             return (
                                 <TouchableOpacity key={key}
-                                    onPress={() => { Keyboard.dismiss(); setActivePanel(activePanel === id || id === 'numpad' ? 'numpad' : id); }}
+                                    onPress={() => { Keyboard.dismiss(); setActivePanel(activePanel === id ? 'numpad' : id); }}
                                     style={{ padding: 8, borderRadius: 10, backgroundColor: isActive ? 'rgba(124,111,255,0.12)' : 'transparent' }}>
                                     <Icon color={isActive ? '#7C6FFF' : colors.textMuted} size={20} />
                                 </TouchableOpacity>
@@ -1283,12 +1280,81 @@ export default function TransactionForm({
                                         </TouchableOpacity>
                                     </View>
                                 )}
-                                {/* Receipt items would go here if present */}
-                                {receiptItems.length > 1 && (
-                                    <Text style={{ color: colors.textMuted, fontSize: 13, textAlign: 'center' }}>
-                                        {t('transactionForm.receiptItems')}: {receiptItems.filter(i => i.checked).length}/{receiptItems.length}
-                                    </Text>
-                                )}
+                                {/* Receipt items grouped by category */}
+                                {receiptItems.length > 1 && (() => {
+                                    const groups: Record<string, { cat: typeof localCategories[0] | null; items: Array<typeof receiptItems[0] & { idx: number }> }> = {};
+                                    receiptItems.forEach((item, idx) => {
+                                        const cat = item.categoryId ? localCategories.find(c => c.id === item.categoryId) ?? null : null;
+                                        const key = cat?.name ?? t('transactionForm.otherCategory');
+                                        if (!groups[key]) groups[key] = { cat, items: [] };
+                                        groups[key].items.push({ ...item, idx });
+                                    });
+                                    const checkedCount = receiptItems.filter(i => i.checked).length;
+                                    return (
+                                        <View style={{ backgroundColor: colors.bgTertiary, borderRadius: 14, padding: 12, marginTop: 8 }}>
+                                            <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: fonts.bodySemiBold, marginBottom: 10 }}>
+                                                {t('transactionForm.receiptItems')} ({checkedCount}/{receiptItems.length})
+                                            </Text>
+                                            {Object.entries(groups).map(([groupName, group]) => {
+                                                const Ic = group.cat?.icon ? CAT_ICONS[group.cat.icon] : null;
+                                                return (
+                                                    <View key={groupName} style={{ marginBottom: 8 }}>
+                                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                                                            {Ic && <Ic color={group.cat?.color ?? colors.textMuted} size={13} />}
+                                                            <Text style={{ color: colors.textSecondary, fontSize: 11, fontFamily: fonts.bodySemiBold, textTransform: 'uppercase' }}>
+                                                                {groupName} ({group.items.filter(i => i.checked).length})
+                                                            </Text>
+                                                        </View>
+                                                        {group.items.map(item => {
+                                                            const isEditing = editingReceiptItemIdx === item.idx;
+                                                            return (
+                                                            <View key={item.idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                                                                <TouchableOpacity activeOpacity={0.7}
+                                                                    onPress={() => setEditingReceiptItemIdx(isEditing ? null : item.idx)}
+                                                                    style={{
+                                                                        flex: 1, paddingVertical: 8, paddingHorizontal: 10,
+                                                                        backgroundColor: isEditing ? 'rgba(124,111,255,0.08)' : 'rgba(255,255,255,0.03)',
+                                                                        borderRadius: 10,
+                                                                    }}>
+                                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                                                        <Text style={{ color: colors.textPrimary, fontSize: 13, flex: 1, fontFamily: fonts.body }} numberOfLines={1}>{item.name}</Text>
+                                                                        {!receiptManualMode && item.price > 0 && (
+                                                                            <Text style={{ color: '#f87171', fontSize: 12, fontFamily: fonts.bodyBold }}>{item.price.toFixed(2)}</Text>
+                                                                        )}
+                                                                    </View>
+                                                                    {/* Category badges */}
+                                                                    {isEditing && (
+                                                                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }} contentContainerStyle={{ gap: 4 }}>
+                                                                            {localCategories.filter(c => c.type === 'expense').map(cat => {
+                                                                                const sel = item.categoryId === cat.id;
+                                                                                return (
+                                                                                    <TouchableOpacity key={cat.id}
+                                                                                        onPress={() => { setReceiptItems(prev => prev.map((it, i) => i === item.idx ? { ...it, categoryId: cat.id } : it)); setEditingReceiptItemIdx(null); }}
+                                                                                        style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+                                                                                            backgroundColor: sel ? '#7C6FFF' : 'rgba(255,255,255,0.06)' }}>
+                                                                                        <Text style={{ color: sel ? '#fff' : colors.textSecondary, fontSize: 11, fontFamily: sel ? fonts.bodySemiBold : fonts.body }}>{cat.name}</Text>
+                                                                                    </TouchableOpacity>
+                                                                                );
+                                                                            })}
+                                                                        </ScrollView>
+                                                                    )}
+                                                                </TouchableOpacity>
+                                                                {/* Delete button outside the card */}
+                                                                {isEditing && (
+                                                                    <TouchableOpacity onPress={() => { setReceiptItems(prev => prev.filter((_, i) => i !== item.idx)); setEditingReceiptItemIdx(null); }}
+                                                                        style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: 'rgba(239,68,68,0.3)', alignItems: 'center', justifyContent: 'center' }}>
+                                                                        <Trash2 color="#ef4444" size={16} />
+                                                                    </TouchableOpacity>
+                                                                )}
+                                                            </View>
+                                                            );
+                                                        })}
+                                                    </View>
+                                                );
+                                            })}
+                                        </View>
+                                    );
+                                })()}
                             </ScrollView>
                         )}
 
