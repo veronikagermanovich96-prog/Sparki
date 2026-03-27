@@ -313,6 +313,11 @@ export default function TransactionForm({
             setFormRecurOverrideDate(null);
             setReceiptUri(null);
             setReceiptUploadUrl(null);
+            setReceiptItems([]);
+            setReceiptManualMode(false);
+            setReceiptCategoryAmounts({});
+            setEditingReceiptItemIdx(null);
+            setReceiptCollapsed(new Set());
             setSelectedTagId('');
         }
         setShowCalc(false);
@@ -1004,7 +1009,7 @@ export default function TransactionForm({
                 </View>
             ) : (
                 /* ═══ Main form ═══ */
-                <View style={{ flex: 1 }}>
+                <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
                     {/* ── Grabber ── */}
                     <View style={{ alignItems: 'center', paddingTop: 50, paddingBottom: 8 }}>
@@ -1115,7 +1120,7 @@ export default function TransactionForm({
                     </TouchableOpacity>
 
                     {/* ── Bottom section ── */}
-                    <View style={{ marginTop: 'auto' }}>
+                    <View>
 
                     {/* ── Category section ── */}
                     {formType !== 'transfer' && (
@@ -1292,20 +1297,35 @@ export default function TransactionForm({
                                     const checkedCount = receiptItems.filter(i => i.checked).length;
                                     return (
                                         <View style={{ backgroundColor: colors.bgTertiary, borderRadius: 14, padding: 12, marginTop: 8 }}>
-                                            <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: fonts.bodySemiBold, marginBottom: 10 }}>
-                                                {t('transactionForm.receiptItems')} ({checkedCount}/{receiptItems.length})
-                                            </Text>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                                                {(receiptUri || receiptUploadUrl) && (
+                                                    <TouchableOpacity onPress={() => setReceiptPreview(true)}>
+                                                        <Image source={{ uri: receiptUri ?? receiptUploadUrl! }} style={{ width: 36, height: 36, borderRadius: 8 }} resizeMode="cover" />
+                                                    </TouchableOpacity>
+                                                )}
+                                                <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: fonts.bodySemiBold, flex: 1 }}>
+                                                    {t('transactionForm.receiptItems')} ({checkedCount}/{receiptItems.length})
+                                                </Text>
+                                            </View>
                                             {Object.entries(groups).map(([groupName, group]) => {
                                                 const Ic = group.cat?.icon ? CAT_ICONS[group.cat.icon] : null;
+                                                const collapsed = receiptCollapsed.has(groupName);
                                                 return (
                                                     <View key={groupName} style={{ marginBottom: 8 }}>
-                                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                                                        <TouchableOpacity
+                                                            onPress={() => setReceiptCollapsed(prev => {
+                                                                const next = new Set(prev);
+                                                                if (next.has(groupName)) next.delete(groupName); else next.add(groupName);
+                                                                return next;
+                                                            })}
+                                                            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6 }}>
                                                             {Ic && <Ic color={group.cat?.color ?? colors.textMuted} size={13} />}
-                                                            <Text style={{ color: colors.textSecondary, fontSize: 11, fontFamily: fonts.bodySemiBold, textTransform: 'uppercase' }}>
-                                                                {groupName} ({group.items.filter(i => i.checked).length})
+                                                            <Text style={{ color: colors.textSecondary, fontSize: 11, fontFamily: fonts.bodySemiBold, textTransform: 'uppercase', flex: 1 }}>
+                                                                {groupName} ({group.items.length})
                                                             </Text>
-                                                        </View>
-                                                        {group.items.map(item => {
+                                                            <ChevronDown color={colors.textMuted} size={14} style={{ transform: [{ rotate: collapsed ? '-90deg' : '0deg' }] }} />
+                                                        </TouchableOpacity>
+                                                        {!collapsed && group.items.map(item => {
                                                             const isEditing = editingReceiptItemIdx === item.idx;
                                                             return (
                                                             <View key={item.idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 }}>
@@ -1438,7 +1458,7 @@ export default function TransactionForm({
                         </TouchableOpacity>
                     </View>
 
-                </View>
+                </ScrollView>
             )}
 
             {/* ── Receipt preview overlay ── */}
