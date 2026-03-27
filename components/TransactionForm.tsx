@@ -973,8 +973,8 @@ export default function TransactionForm({
                             return (
                             <TouchableOpacity key={acc.id}
                                 onPress={() => { setFormAccountId(acc.id); setFormCurrency(acc.currency); }}>
-                                <Text style={{ color: colors.textPrimary, fontSize: 16, fontFamily: sel ? fonts.heading : fonts.body, opacity: sel ? 1 : 0.5 }}>{acc.name}</Text>
-                                <Text style={{ color: colors.textMuted, fontSize: 12, opacity: sel ? 1 : 0.4 }}>{formatAmount(acc.balance, acc.currency)}</Text>
+                                <Text style={{ color: colors.textPrimary, fontSize: 30, fontFamily: fonts.headingRegular, opacity: sel ? 1 : 0.55 }}>{acc.name}</Text>
+                                <Text style={{ color: colors.textMuted, fontSize: 15, fontFamily: fonts.body, opacity: sel ? 0.7 : 0.4 }}>{formatAmount(acc.balance, acc.currency)}</Text>
                             </TouchableOpacity>
                             );
                         })}
