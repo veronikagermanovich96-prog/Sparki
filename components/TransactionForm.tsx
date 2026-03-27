@@ -169,7 +169,7 @@ export default function TransactionForm({
     onCategoriesChanged,
 }: TransactionFormProps) {
 
-    const { colors } = useTheme();
+    const { colors, fonts } = useTheme();
     const { t } = useTranslation();
 
     // ── Form state ───────────────────────────────────────────────────────────
@@ -945,7 +945,7 @@ export default function TransactionForm({
                         /* ══ Transaction form ══ */
                         <>
                             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                                <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: '700' }}>
+                                <Text style={{ color: colors.textPrimary, fontSize: 18, fontFamily: fonts.heading }}>
                                     {editingTx ? t('transactionForm.editTitle') : t('transactionForm.newTitle')}
                                 </Text>
                                 <TouchableOpacity onPress={() => {
@@ -984,7 +984,7 @@ export default function TransactionForm({
                                 </View>
 
                                 {/* Account */}
-                                <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 8 }}>{formType === 'transfer' ? t('transactionForm.fromAccount') : t('transactionForm.account')}</Text>
+                                <Text style={{ color: colors.textMuted, fontSize: 12, fontFamily: fonts.bodyMedium, marginBottom: 8 }}>{formType === 'transfer' ? t('transactionForm.fromAccount') : t('transactionForm.account')}</Text>
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={{ marginBottom: 16 }}>
                                     {accounts.map(acc => (
                                         <TouchableOpacity key={acc.id} onPress={() => onAccountChange(acc.id)} activeOpacity={0.8}
@@ -1014,7 +1014,7 @@ export default function TransactionForm({
                                 {/* Category */}
                                 {formType !== 'transfer' && (
                                     <>
-                                        <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 8 }}>{t('transactionForm.category')}</Text>
+                                        <Text style={{ color: colors.textMuted, fontSize: 12, fontFamily: fonts.bodyMedium, marginBottom: 8 }}>{t('transactionForm.category')}</Text>
                                         <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={{ marginBottom: 16 }}>
                                             {formCats.map(cat => {
                                                 const active  = formCategoryId === cat.id;
@@ -1100,11 +1100,11 @@ export default function TransactionForm({
                                 )}
 
                                 {/* Amount + Currency */}
-                                <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 8 }}>{t('transactionForm.amount')}</Text>
+                                <Text style={{ color: colors.textMuted, fontSize: 12, fontFamily: fonts.bodyMedium, marginBottom: 8 }}>{t('transactionForm.amount')}</Text>
                                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 8 }}>
                                     <TextInput value={formAmount} onChangeText={setFormAmount}
                                         keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.textDisabled}
-                                        style={{ flex: 1, backgroundColor: colors.bgTertiary, color: colors.textPrimary, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 24, fontWeight: '700' }}
+                                        style={{ flex: 1, backgroundColor: colors.bgTertiary, color: colors.textPrimary, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 24, fontFamily: fonts.heading }}
                                     />
                                     <TouchableOpacity
                                         onPress={() => {

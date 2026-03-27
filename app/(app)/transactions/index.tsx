@@ -117,7 +117,7 @@ function getPeriodRange(p: FilterPeriod, customFrom?: Date | null, customTo?: Da
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function TransactionsScreen() {
-    const { colors } = useTheme();
+    const { colors, fonts } = useTheme();
     const { t } = useTranslation();
     const insets = useSafeAreaInsets();
 
@@ -324,7 +324,7 @@ export default function TransactionsScreen() {
                     </View>
                     <View style={{ flex: 1, marginLeft: 12 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '500' }}>{item.category_name}</Text>
+                            <Text style={{ color: colors.textPrimary, fontSize: 15, fontFamily: fonts.bodyMedium }}>{item.category_name}</Text>
                             {item.tag_name && (
                                 <View style={{ backgroundColor: '#172554', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 }}>
                                     <Text style={{ color: '#60a5fa', fontSize: 11 }}>{item.tag_name}</Text>
@@ -336,7 +336,7 @@ export default function TransactionsScreen() {
                         </Text>
                     </View>
                     <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={{ color: amountColor, fontSize: 15, fontWeight: '600' }}>
+                        <Text style={{ color: amountColor, fontSize: 15, fontFamily: fonts.bodyBold }}>
                             {prefix}{formatAmount(item.amount, item.currency)}
                         </Text>
                         {(item.recurring_id || item.receipt_url) && (
@@ -359,13 +359,13 @@ export default function TransactionsScreen() {
         const transfers    = section.data.filter(t => t.type === 'transfer').length;
         return (
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 7, backgroundColor: colors.bgTertiary }}>
-                <Text style={{ color: colors.textSecondary, fontSize: 12, textTransform: 'capitalize', fontWeight: '500' }}>{label}</Text>
+                <Text style={{ color: colors.textSecondary, fontSize: 12, textTransform: 'capitalize', fontFamily: fonts.bodySemiBold }}>{label}</Text>
                 <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                     {filterType === 'transfer'
                         ? <Text style={{ color: colors.textMuted, fontSize: 12 }}>{t('transactions.transferCount', { count: transfers })}</Text>
                         : <>
-                            {totalExpense > 0 && <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '600' }}>−{formatAmount(totalExpense, cur)}</Text>}
-                            {totalIncome  > 0 && <Text style={{ color: '#22c55e', fontSize: 12, fontWeight: '600' }}>+{formatAmount(totalIncome, cur)}</Text>}
+                            {totalExpense > 0 && <Text style={{ color: '#ef4444', fontSize: 12, fontFamily: fonts.bodySemiBold }}>−{formatAmount(totalExpense, cur)}</Text>}
+                            {totalIncome  > 0 && <Text style={{ color: '#22c55e', fontSize: 12, fontFamily: fonts.bodySemiBold }}>+{formatAmount(totalIncome, cur)}</Text>}
                           </>
                     }
                 </View>
@@ -404,7 +404,7 @@ export default function TransactionsScreen() {
 
             {/* Header */}
             <View style={{ paddingTop: insets.top + 6, paddingBottom: 12, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Text style={{ color: colors.textPrimary, fontSize: 24, fontWeight: '700' }}>{t('transactions.title')}</Text>
+                <Text style={{ color: colors.textPrimary, fontSize: 24, fontFamily: fonts.heading }}>{t('transactions.title')}</Text>
                 <TouchableOpacity onPress={() => { setSearchVisible(v => !v); if (searchVisible) setSearch(''); }} style={{ padding: 4 }}>
                     {searchVisible ? <X color={colors.textSecondary} size={22} /> : <Search color={colors.textSecondary} size={22} />}
                 </TouchableOpacity>

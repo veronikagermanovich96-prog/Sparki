@@ -957,7 +957,7 @@ const inputStyle = {
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function AnalyticsScreen() {
-    const { colors } = useTheme();
+    const { colors, fonts } = useTheme();
     const { t } = useTranslation();
     const router = useRouter();
     const [tab, setTab] = useState<AnalyticsTab>('overview');
@@ -2952,7 +2952,7 @@ export default function AnalyticsScreen() {
                 <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={{ marginRight: 12 }}>
                     <ChevronLeft color="#fff" size={24} />
                 </TouchableOpacity>
-                <Text style={{ fontSize: 24, fontWeight: '800', color: colors.textPrimary, flex: 1 }}>{t('analytics.title')}</Text>
+                <Text style={{ fontSize: 24, fontFamily: fonts.heading, color: colors.textPrimary, flex: 1 }}>{t('analytics.title')}</Text>
             </View>
 
             {/* Tab bar */}
@@ -2962,7 +2962,7 @@ export default function AnalyticsScreen() {
                         paddingHorizontal: 16, paddingVertical: 8, borderRadius: 30,
                         backgroundColor: tab === t.id ? '#7C6FFF' : 'transparent',
                     }}>
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: tab === t.id ? '#ffffff' : colors.textMuted }}>
+                        <Text style={{ fontSize: 13, fontFamily: fonts.bodySemiBold, color: tab === t.id ? '#ffffff' : colors.textMuted }}>
                             {t.label}
                         </Text>
                     </TouchableOpacity>
@@ -2977,7 +2977,7 @@ export default function AnalyticsScreen() {
                         {/* Summary card */}
                         <Card>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }}>{t('analytics.summary')}</Text>
+                                <Text style={{ fontSize: 14, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>{t('analytics.summary')}</Text>
                                 <PeriodPills value={summaryPeriod} onChange={setSummaryPeriod} />
                             </View>
                             {fetchingPeriods.has(summaryPeriod) && !summaryData ? <Spinner /> : summaryData ? (
@@ -2985,7 +2985,7 @@ export default function AnalyticsScreen() {
                                     <View style={{ flexDirection: 'row', gap: 16, marginBottom: 16 }}>
                                         <View style={{ flex: 1 }}>
                                             <Text style={{ fontSize: 10, color: colors.textMuted, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('analytics.income')}</Text>
-                                            <Text style={{ fontSize: 20, fontWeight: '800', color: '#4FFFB0' }}>
+                                            <Text style={{ fontSize: 20, fontFamily: fonts.heading, color: '#4FFFB0' }}>
                                                 +{formatAmount(summaryData.income, currency)}
                                             </Text>
                                             {summaryData.prevIncome > 0 && (
@@ -2996,7 +2996,7 @@ export default function AnalyticsScreen() {
                                         </View>
                                         <View style={{ flex: 1 }}>
                                             <Text style={{ fontSize: 10, color: colors.textMuted, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('analytics.expenses')}</Text>
-                                            <Text style={{ fontSize: 20, fontWeight: '800', color: '#FF6B6B' }}>
+                                            <Text style={{ fontSize: 20, fontFamily: fonts.heading, color: '#FF6B6B' }}>
                                                 −{formatAmount(summaryData.expenses, currency)}
                                             </Text>
                                             {summaryData.prevExpenses > 0 && (
@@ -3056,7 +3056,7 @@ export default function AnalyticsScreen() {
                         {/* Bar chart */}
                         <Card>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }}>{t('analytics.dynamics')}</Text>
+                                <Text style={{ fontSize: 14, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>{t('analytics.dynamics')}</Text>
                                 <PeriodPills value={chartPeriod} onChange={setChartPeriod} />
                             </View>
                             {fetchingPeriods.has(chartPeriod) && !chartData ? <Spinner /> : chartData ? (
@@ -3079,7 +3079,7 @@ export default function AnalyticsScreen() {
                         {/* Donut + Categories */}
                         <Card>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }}>{t('analytics.expenses')}</Text>
+                                <Text style={{ fontSize: 14, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>{t('analytics.expenses')}</Text>
                                 <PeriodPills value={catPeriod} onChange={setCatPeriod} />
                             </View>
                             {fetchingPeriods.has(catPeriod) && !catData ? <Spinner /> : catData && catData.categories.length > 0 ? (() => {
@@ -3150,7 +3150,7 @@ export default function AnalyticsScreen() {
                         {/* Watched categories */}
                         <Card>
                             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }}>{t('analytics.myCategories')}</Text>
+                                <Text style={{ fontSize: 14, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>{t('analytics.myCategories')}</Text>
                                 <TouchableOpacity onPress={() => setShowAddWatchedSheet(true)}
                                     style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.bgTertiary, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 }}>
                                     <Text style={{ color: '#7C6FFF', fontSize: 12, fontWeight: '600' }}>+ {t('analytics.addCategory')}</Text>

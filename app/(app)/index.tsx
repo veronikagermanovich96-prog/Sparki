@@ -113,7 +113,7 @@ type GoalItem     = { id: string; name: string; icon: string; color: string; tar
 
 export default function Dashboard() {
 
-    const { colors } = useTheme();
+    const { colors, fonts } = useTheme();
     const { t } = useTranslation();
 
     // ── Core state ──────────────────────────────────────────────────────────────
@@ -702,7 +702,7 @@ export default function Dashboard() {
                         <ActivityIndicator color={colors.textPrimary} style={{ alignSelf: 'flex-start', marginVertical: 10 }} />
                     ) : (
                         <>
-                            <Text style={{ color: colors.textPrimary, fontSize: 44, fontWeight: 'bold', marginBottom: 4 }}>
+                            <Text style={{ color: colors.textPrimary, fontSize: 44, fontFamily: fonts.heading, marginBottom: 4 }}>
                                 {hidden ? '••••••' : formatAmount(activeBalance, currency)}
                             </Text>
                             <Text style={{ color: colors.textMuted, fontSize: 13 }}>
@@ -712,7 +712,7 @@ export default function Dashboard() {
                     )}
 
                     {/* Account cards */}
-                    <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '600', marginTop: 20, marginBottom: 12 }}>{t('dashboard.accounts')}</Text>
+                    <Text style={{ color: colors.textPrimary, fontSize: 16, fontFamily: fonts.bodySemiBold, marginTop: 20, marginBottom: 12 }}>{t('dashboard.accounts')}</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}
                         keyboardShouldPersistTaps="handled"
                         style={{ marginHorizontal: -24, paddingHorizontal: 24 }}>
@@ -741,7 +741,7 @@ export default function Dashboard() {
                                                 : <Eye color={colors.textMuted} size={16} />}
                                         </TouchableOpacity>
                                     </View>
-                                    <Text style={{ color: colors.textPrimary, fontWeight: 'bold', marginTop: 16, marginBottom: 4 }} numberOfLines={1}>
+                                    <Text style={{ color: colors.textPrimary, fontFamily: fonts.bodyMedium, marginTop: 16, marginBottom: 4 }} numberOfLines={1}>
                                         {account.name}
                                     </Text>
                                     <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
@@ -768,7 +768,7 @@ export default function Dashboard() {
                                 activeOpacity={0.7}
                                 style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}
                             >
-                                <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '600' }}>{t('dashboard.analytics')}</Text>
+                                <Text style={{ color: colors.textPrimary, fontSize: 16, fontFamily: fonts.bodySemiBold }}>{t('dashboard.analytics')}</Text>
                                 <Text style={{ color: '#3b82f6', fontSize: 13 }}>{t('dashboard.moreDetails')}</Text>
                             </TouchableOpacity>
 
@@ -802,7 +802,7 @@ export default function Dashboard() {
                                 </View>
                                 <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 }}>
                                     <Text style={{ fontSize: 10, color: colors.textMuted, marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('dashboard.netBalance')}</Text>
-                                    <Text style={{ fontSize: 20, fontWeight: '800', color: periodSummary.net >= 0 ? '#4FFFB0' : '#FF6B6B' }}>
+                                    <Text style={{ fontSize: 20, fontFamily: fonts.heading, color: periodSummary.net >= 0 ? '#4FFFB0' : '#FF6B6B' }}>
                                         {periodSummary.net >= 0 ? '+' : '−'}{formatAmount(Math.abs(periodSummary.net), currency)}
                                     </Text>
                                 </View>
@@ -814,7 +814,7 @@ export default function Dashboard() {
 
                 {/* ── Icon Array (Расходы) ── */}
                 <View style={{ marginBottom: 40 }}>
-                    <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '600', marginBottom: 14 }}>{t('dashboard.expenses')}</Text>
+                    <Text style={{ color: colors.textPrimary, fontSize: 16, fontFamily: fonts.bodySemiBold, marginBottom: 14 }}>{t('dashboard.expenses')}</Text>
 
                     <View style={{ flexDirection: 'row', backgroundColor: colors.bgSecondary, borderRadius: 12, padding: 4, marginBottom: 24 }}>
                         {(['week', 'month', 'quarter', 'year'] as Period[]).map(p => (
@@ -892,7 +892,7 @@ export default function Dashboard() {
                 {/* ── Savings goals ── */}
                 <View style={{ marginBottom: 48 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                        <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '600' }}>{t('dashboard.savingsGoals')}</Text>
+                        <Text style={{ color: colors.textPrimary, fontSize: 16, fontFamily: fonts.bodySemiBold }}>{t('dashboard.savingsGoals')}</Text>
                         <TouchableOpacity onPress={() => openGoalForm()} hitSlop={8}
                             style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.bgTertiary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }}>
                             <Plus color={colors.textSecondary} size={14} />

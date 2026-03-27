@@ -1,8 +1,10 @@
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useFonts } from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
 import '@/lib/i18n';
 import '../global.css';
@@ -12,9 +14,26 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { ThemeProvider } from '@/context/ThemeContext';
 
+SplashScreen.preventAutoHideAsync();
+
 export default function RootLayout() {
   const _colorScheme = useColorScheme(); // eslint-disable-line @typescript-eslint/no-unused-vars
   const { session, setSession, isLoading, setIsLoading } = useAuthStore();
+
+  const [fontsLoaded] = useFonts({
+    'Charter': require('../assets/fonts/Charter-Roman.ttf'),
+    'Charter-Bold': require('../assets/fonts/Charter-Bold.ttf'),
+    'Charter-Black': require('../assets/fonts/Charter-Black.ttf'),
+    'Charter-Italic': require('../assets/fonts/Charter-Italic.ttf'),
+    'Geist': require('../assets/fonts/Geist-Regular.ttf'),
+    'Geist-Medium': require('../assets/fonts/Geist-Medium.ttf'),
+    'Geist-SemiBold': require('../assets/fonts/Geist-SemiBold.ttf'),
+    'Geist-Bold': require('../assets/fonts/Geist-Bold.ttf'),
+  });
+
+  const onLayoutReady = useCallback(async () => {
+    if (fontsLoaded && !isLoading) await SplashScreen.hideAsync();
+  }, [fontsLoaded, isLoading]);
   const segments = useSegments();
   const router = useRouter();
 
@@ -44,9 +63,11 @@ export default function RootLayout() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, isLoading, segments]);
 
+  if (!fontsLoaded) return null;
+
   return (
     <ThemeProvider>
-      <GestureHandlerRootView style={{ flex: 1 }}>
+      <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayoutReady}>
         <Slot />
         {isLoading && (
           <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center' }}>
