@@ -824,6 +824,7 @@
     "notePlaceholder": "Facultatif…",
     "deleteCategory": "Supprimer « {{name}} » ?",
     "recurring": "Paiement récurrent",
+    "toAccount": "Vers",
     "freq_daily": "Jour",
     "freq_weekly": "Semaine",
     "freq_monthly": "Mois",

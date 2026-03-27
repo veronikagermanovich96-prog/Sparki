@@ -1032,24 +1032,6 @@ export default function TransactionForm({
                             </TouchableOpacity>
                             );
                         })}
-                        {formType === 'transfer' && formToAccId && (
-                            <View style={{ justifyContent: 'center', paddingHorizontal: 8 }}>
-                                <ArrowRightLeft color={colors.textMuted} size={18} />
-                            </View>
-                        )}
-                        {formType === 'transfer' && accounts.filter(a => a.id !== formAccountId).map(acc => (
-                            <TouchableOpacity key={'to-' + acc.id}
-                                onPress={() => setFormToAccId(acc.id)}
-                                style={{
-                                    paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12,
-                                    backgroundColor: formToAccId === acc.id ? '#2563eb22' : colors.bgTertiary,
-                                    borderWidth: formToAccId === acc.id ? 1.5 : 0,
-                                    borderColor: '#2563eb',
-                                }}>
-                                <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: fonts.bodyMedium }}>{acc.name}</Text>
-                                <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>{formatAmount(acc.balance, acc.currency)}</Text>
-                            </TouchableOpacity>
-                        ))}
                     </ScrollView>
 
                     {/* ═══ HISTORY VIEW ═══ */}
@@ -1107,8 +1089,29 @@ export default function TransactionForm({
                     ) : (
                     <>
 
+                    {/* ── Transfer: To account ── */}
+                    {formType === 'transfer' && (
+                        <View style={{ paddingHorizontal: 20, paddingVertical: 6 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                                <ArrowRightLeft color="#60a5fa" size={16} />
+                                <Text style={{ color: '#60a5fa', fontSize: 13, fontFamily: fonts.bodySemiBold }}>{t('transactionForm.toAccount')}</Text>
+                            </View>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 16 }}>
+                                {accounts.filter(a => a.id !== formAccountId).map(acc => {
+                                    const sel = formToAccId === acc.id;
+                                    return (
+                                        <TouchableOpacity key={acc.id} onPress={() => setFormToAccId(acc.id)}>
+                                            <Text style={{ color: '#60a5fa', fontSize: 22, fontFamily: fonts.headingRegular, opacity: sel ? 1 : 0.35 }}>{acc.name}</Text>
+                                            <Text style={{ color: colors.textMuted, fontSize: 12, opacity: sel ? 0.7 : 0.25 }}>{formatAmount(acc.balance, acc.currency)}</Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </ScrollView>
+                        </View>
+                    )}
+
                     {/* ── Amount display ── */}
-                    <TouchableOpacity onPress={() => setCurrencyOpen(true)} activeOpacity={0.8} style={{ alignItems: 'center', paddingVertical: 16 }}>
+                    <TouchableOpacity onPress={() => setCurrencyOpen(true)} activeOpacity={0.8} style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
                         <Text adjustsFontSizeToFit numberOfLines={1} style={{ color: colors.textPrimary, fontSize: 48, fontFamily: fonts.heading, textAlign: 'center', maxWidth: '95%' }}>
                             {hasExpr ? formAmount.replace(/\*/g, '×').replace(/\//g, '÷').replace(/-/g, '−') : (formAmount || '0')}
                             {' '}<Text style={{ fontSize: 28, color: colors.textSecondary }}>{formCurrency}</Text>

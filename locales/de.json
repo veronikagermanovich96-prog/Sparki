@@ -824,6 +824,7 @@
     "notePlaceholder": "Optional…",
     "deleteCategory": "«{{name}}» löschen?",
     "recurring": "Wiederkehrende Zahlung",
+    "toAccount": "An",
     "freq_daily": "Tag",
     "freq_weekly": "Woche",
     "freq_monthly": "Monat",

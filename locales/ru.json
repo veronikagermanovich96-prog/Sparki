@@ -824,6 +824,7 @@
     "deleteCategory": "Удалить «{{name}}»?",
     "categoryDeleted": "«{{name}}» удалена",
     "recurring": "Рекуррентный платёж",
+    "toAccount": "Куда",
     "freq_daily": "День",
     "freq_weekly": "Неделя",
     "freq_monthly": "Месяц",
