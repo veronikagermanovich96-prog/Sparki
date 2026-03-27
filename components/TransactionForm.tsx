@@ -208,6 +208,7 @@ export default function TransactionForm({
     const [receiptManualMode, setReceiptManualMode] = useState(false); // true = prices unknown, user enters category totals
     const [receiptCategoryAmounts, setReceiptCategoryAmounts] = useState<Record<string, string>>({}); // catKey → amount string
     const [saving,           setSaving]           = useState(false);
+    const [undoDelete, setUndoDelete] = useState<{ cat: CategoryLight; timer: ReturnType<typeof setTimeout> } | null>(null);
 
     // ── Tags ─────────────────────────────────────────────────────────────────
     const [categoryTags,   setCategoryTags]   = useState<TagLight[]>([]);
@@ -314,9 +315,7 @@ export default function TransactionForm({
         const filtered = localCategories.filter(c => c.type === (formType === 'transfer' ? 'expense' : formType));
         const hasUsage = Object.keys(catUsage).length > 0;
         return filtered.sort((a, b) => {
-            // Selected category always first
-            if (a.id === formCategoryId) return -1;
-            if (b.id === formCategoryId) return 1;
+            // Keep stable order — don't move selected to first
             // Then by usage frequency
             const usageA = catUsage[a.id] || 0;
             const usageB = catUsage[b.id] || 0;
@@ -578,18 +577,33 @@ export default function TransactionForm({
         setCatFormVisible(false);
     }
 
-    async function deleteCategory(cat: CategoryLight) {
-        Alert.alert(t('transactionForm.deleteCategory', { name: cat.name }), t('transactionForm.deleteCategoryMsg'), [
-            { text: t('common.cancel'), style: 'cancel' },
-            {
-                text: t('common.delete'), style: 'destructive',
-                onPress: async () => {
-                    await supabase.from('categories').update({ is_hidden: true }).eq('id', cat.id);
-                    await reloadCategories(householdId);
-                    if (formCategoryId === cat.id) setFormCategoryId('');
-                },
-            },
-        ]);
+    function deleteCategory(cat: CategoryLight) {
+        // Soft delete — hide from list, show undo snackbar
+        if (undoDelete) {
+            // Finalize previous pending delete
+            clearTimeout(undoDelete.timer);
+            supabase.from('categories').update({ is_hidden: true }).eq('id', undoDelete.cat.id).then(() => reloadCategories(householdId));
+        }
+        // Hide locally immediately
+        setLocalCategories(prev => prev.filter(c => c.id !== cat.id));
+        if (formCategoryId === cat.id) setFormCategoryId('');
+
+        const timer = setTimeout(async () => {
+            // Actually delete after 5 seconds if not undone
+            await supabase.from('categories').update({ is_hidden: true }).eq('id', cat.id);
+            await reloadCategories(householdId);
+            setUndoDelete(null);
+        }, 5000);
+
+        setUndoDelete({ cat, timer });
+    }
+
+    function undoCategoryDelete() {
+        if (!undoDelete) return;
+        clearTimeout(undoDelete.timer);
+        // Restore locally
+        setLocalCategories(prev => [...prev, undoDelete.cat]);
+        setUndoDelete(null);
     }
 
     // ── Calculator ─────────────────────────────────────────────────────────
@@ -968,7 +982,7 @@ export default function TransactionForm({
 
                     {/* ── Accounts ── */}
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                        style={{ flexGrow: 0 }}
+                        style={{ flexGrow: 0, marginTop: 52 }}
                         contentContainerStyle={{ paddingHorizontal: 20, gap: 20, paddingVertical: 8 }}>
                         {accounts.map(acc => {
                             const sel = formAccountId === acc.id;
@@ -1070,38 +1084,39 @@ export default function TransactionForm({
                         )}
                     </TouchableOpacity>
 
+                    {/* ── Bottom section ── */}
+                    <View style={{ marginTop: 'auto' }}>
+
                     {/* ── Category section ── */}
                     {formType !== 'transfer' && (
-                        <View style={{ marginBottom: 4 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 6 }}>
-                                <Text style={{ color: colors.textPrimary, fontSize: 13, fontFamily: fonts.bodySemiBold }}>{t('transactionForm.category')}</Text>
+                        <View style={{ marginBottom: 6, paddingHorizontal: 16 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: fonts.bodySemiBold }}>{t('transactionForm.category')}</Text>
                                 <TouchableOpacity onPress={openCatForm}
-                                    style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.bgTertiary, alignItems: 'center', justifyContent: 'center' }}>
-                                    <Plus color={colors.textMuted} size={14} />
+                                    style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.bgTertiary, alignItems: 'center', justifyContent: 'center' }}>
+                                    <Plus color={colors.textMuted} size={16} />
                                 </TouchableOpacity>
                             </View>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                                contentContainerStyle={{ paddingHorizontal: 16, gap: 6 }}>
-                                {formCats.slice(0, 16).map(cat => {
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                                {formCats.slice(0, 12).map(cat => {
                                     const sel = formCategoryId === cat.id;
-                                    const Ic = cat.icon ? CAT_ICONS[cat.icon] : null;
                                     return (
                                         <TouchableOpacity key={cat.id} onPress={() => onCatSelect(cat.id)}
                                             onLongPress={() => deleteCategory(cat)}
-                                            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10,
-                                                backgroundColor: sel ? (cat.color ?? '#7C6FFF') + '22' : 'transparent',
-                                                borderWidth: sel ? 1.5 : 0, borderColor: cat.color ?? '#7C6FFF' }}>
-                                            {Ic && <Ic color={sel ? (cat.color ?? '#7C6FFF') : colors.textMuted} size={13} />}
-                                            <Text style={{ color: sel ? colors.textPrimary : colors.textSecondary, fontSize: 13, fontFamily: sel ? fonts.bodySemiBold : fonts.body }}>{cat.name}</Text>
+                                            style={{ paddingHorizontal: 8, paddingVertical: 5 }}>
+                                            <Text style={{ color: sel ? '#fff' : colors.textSecondary, fontSize: 14, fontFamily: sel ? fonts.bodySemiBold : fonts.body }}>{cat.name}</Text>
                                         </TouchableOpacity>
                                     );
                                 })}
-                            </ScrollView>
+                            </View>
+                            {formCats.length > 12 && (
+                                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 4, marginTop: 6 }}>
+                                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' }} />
+                                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.3)' }} />
+                                </View>
+                            )}
                         </View>
                     )}
-
-                    {/* ── Bottom section (pushed to bottom) ── */}
-                    <View style={{ marginTop: 'auto' }}>
 
                     {/* ── Toolbar ── */}
                     <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 6, borderTopWidth: 1, borderTopColor: colors.bgTertiary }}>
@@ -1245,24 +1260,22 @@ export default function TransactionForm({
 
                     </View>
 
-                    {/* ── Save button ── */}
-                    <View style={{ paddingHorizontal: 12, paddingVertical: 6 }}>
-                        <TouchableOpacity onPress={saveForm}
-                            disabled={saving || !formAmount || (formType !== 'transfer' && !formCategoryId) || !formAccountId}
-                            style={{
-                                paddingVertical: 14, borderRadius: 14, alignItems: 'center',
-                                backgroundColor: saving || !formAmount || (formType !== 'transfer' && !formCategoryId) || !formAccountId
-                                    ? colors.borderLight : '#fff',
-                            }}>
-                            {saving ? <ActivityIndicator color="#000" /> : (
-                                <Text style={{ color: '#000', fontFamily: fonts.bodyBold, fontSize: 16 }}>{t('common.save')}</Text>
-                            )}
-                        </TouchableOpacity>
-                    </View>
 
                     </View>{/* end bottom section */}
 
                     </>
+                    )}
+
+                    {/* ── Undo snackbar ── */}
+                    {undoDelete && (
+                        <View style={{ marginHorizontal: 12, marginBottom: 8, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 14, backgroundColor: colors.bgTertiary, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <Text style={{ color: colors.textPrimary, fontSize: 13, fontFamily: fonts.body, flex: 1 }}>
+                                {t('transactionForm.categoryDeleted', { name: undoDelete.cat.name })}
+                            </Text>
+                            <TouchableOpacity onPress={undoCategoryDelete} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, backgroundColor: '#7C6FFF' }}>
+                                <Text style={{ color: '#fff', fontSize: 13, fontFamily: fonts.bodySemiBold }}>{t('common.undo')}</Text>
+                            </TouchableOpacity>
+                        </View>
                     )}
 
                     {/* ── Bottom nav bar ── */}
