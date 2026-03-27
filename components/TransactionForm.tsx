@@ -15,9 +15,9 @@ import {
     Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CustomCalendar } from '@/components/ui/CustomCalendar';
 import { ru } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
 import { formatAmount, CURRENCIES } from '@/constants/currencies';
@@ -158,6 +158,27 @@ function calcNextDate(
     if (d > today) return format(d, 'yyyy-MM-dd');
     const dimNext = new Date(y + 1, yearMonth, 0).getDate();
     return format(new Date(y + 1, yearMonth - 1, Math.min(yearDay, dimNext)), 'yyyy-MM-dd');
+}
+
+// ─── Undo Timer Bar ──────────────────────────────────────────────────────────
+
+function UndoTimer({ duration }: { duration: number }) {
+    const [progress, setProgress] = useState(1);
+    useEffect(() => {
+        const start = Date.now();
+        const interval = setInterval(() => {
+            const elapsed = Date.now() - start;
+            const remaining = Math.max(0, 1 - elapsed / duration);
+            setProgress(remaining);
+            if (remaining <= 0) clearInterval(interval);
+        }, 50);
+        return () => clearInterval(interval);
+    }, [duration]);
+    return (
+        <View style={{ height: 3, backgroundColor: 'rgba(255,255,255,0.05)' }}>
+            <View style={{ height: 3, backgroundColor: '#7C6FFF', width: `${progress * 100}%`, borderRadius: 2 }} />
+        </View>
+    );
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -578,24 +599,30 @@ export default function TransactionForm({
     }
 
     function deleteCategory(cat: CategoryLight) {
-        // Soft delete — hide from list, show undo snackbar
-        if (undoDelete) {
-            // Finalize previous pending delete
-            clearTimeout(undoDelete.timer);
-            supabase.from('categories').update({ is_hidden: true }).eq('id', undoDelete.cat.id).then(() => reloadCategories(householdId));
-        }
-        // Hide locally immediately
-        setLocalCategories(prev => prev.filter(c => c.id !== cat.id));
-        if (formCategoryId === cat.id) setFormCategoryId('');
+        Alert.alert(t('transactionForm.deleteCategory', { name: cat.name }), t('transactionForm.deleteCategoryMsg'), [
+            { text: t('common.cancel'), style: 'cancel' },
+            {
+                text: t('common.delete'), style: 'destructive',
+                onPress: () => {
+                    // Finalize previous pending delete
+                    if (undoDelete) {
+                        clearTimeout(undoDelete.timer);
+                        supabase.from('categories').update({ is_hidden: true }).eq('id', undoDelete.cat.id).then(() => reloadCategories(householdId));
+                    }
+                    // Hide locally immediately
+                    setLocalCategories(prev => prev.filter(c => c.id !== cat.id));
+                    if (formCategoryId === cat.id) setFormCategoryId('');
 
-        const timer = setTimeout(async () => {
-            // Actually delete after 5 seconds if not undone
-            await supabase.from('categories').update({ is_hidden: true }).eq('id', cat.id);
-            await reloadCategories(householdId);
-            setUndoDelete(null);
-        }, 5000);
+                    const timer = setTimeout(async () => {
+                        await supabase.from('categories').update({ is_hidden: true }).eq('id', cat.id);
+                        await reloadCategories(householdId);
+                        setUndoDelete(null);
+                    }, 5000);
 
-        setUndoDelete({ cat, timer });
+                    setUndoDelete({ cat, timer });
+                },
+            },
+        ]);
     }
 
     function undoCategoryDelete() {
@@ -980,9 +1007,14 @@ export default function TransactionForm({
                 /* ═══ Main form ═══ */
                 <View style={{ flex: 1 }}>
 
+                    {/* ── Grabber ── */}
+                    <View style={{ alignItems: 'center', paddingTop: 50, paddingBottom: 8 }}>
+                        <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)' }} />
+                    </View>
+
                     {/* ── Accounts ── */}
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                        style={{ flexGrow: 0, marginTop: 52 }}
+                        style={{ flexGrow: 0 }}
                         contentContainerStyle={{ paddingHorizontal: 20, gap: 20, paddingVertical: 8 }}>
                         {accounts.map(acc => {
                             const sel = formAccountId === acc.id;
@@ -1069,10 +1101,10 @@ export default function TransactionForm({
                     ) : (
                     <>
 
-                    {/* ── Amount display ── */}
+                    {/* ── Amount display (centered) ── */}
+                    <View style={{ flex: 1, justifyContent: 'center' }}>
                     <TouchableOpacity onPress={() => setCurrencyOpen(true)} activeOpacity={0.8} style={{ alignItems: 'center', paddingVertical: 12 }}>
-                        <View style={{ height: 2, width: '90%', backgroundColor: typeColor, opacity: 0.3, marginBottom: 10, borderRadius: 1 }} />
-                        <Text style={{ color: colors.textPrimary, fontSize: 38, fontFamily: fonts.heading, textAlign: 'center' }}>
+                        <Text adjustsFontSizeToFit numberOfLines={1} style={{ color: colors.textPrimary, fontSize: 48, fontFamily: fonts.heading, textAlign: 'center', maxWidth: '95%' }}>
                             {hasExpr ? formAmount.replace(/\*/g, '×').replace(/\//g, '÷').replace(/-/g, '−') : (formAmount || '0')}
                             {' '}<Text style={{ fontSize: 28, color: colors.textSecondary }}>{formCurrency}</Text>
                         </Text>
@@ -1084,8 +1116,10 @@ export default function TransactionForm({
                         )}
                     </TouchableOpacity>
 
+                    </View>{/* end centered amount area */}
+
                     {/* ── Bottom section ── */}
-                    <View style={{ marginTop: 'auto' }}>
+                    <View>
 
                     {/* ── Category section ── */}
                     {formType !== 'transfer' && (
@@ -1156,13 +1190,11 @@ export default function TransactionForm({
 
                         {/* Calendar */}
                         {activePanel === 'calendar' && (
-                            <View style={{ backgroundColor: colors.bgTertiary, borderRadius: 14, overflow: 'hidden' }}>
-                                <DateTimePicker mode="date" display="inline" themeVariant="dark"
-                                    value={formDate ? new Date(formDate + 'T00:00:00') : new Date()}
-                                    maximumDate={new Date()}
-                                    onChange={(_, date) => { if (date) setFormDate(format(date, 'yyyy-MM-dd')); setActivePanel('numpad'); }}
-                                />
-                            </View>
+                            <CustomCalendar
+                                value={formDate ? new Date(formDate + 'T00:00:00') : new Date()}
+                                maximumDate={new Date()}
+                                onChange={(date) => { setFormDate(format(date, 'yyyy-MM-dd')); setActivePanel('numpad'); }}
+                            />
                         )}
 
                         {/* Note */}
@@ -1268,59 +1300,73 @@ export default function TransactionForm({
 
                     {/* ── Undo snackbar ── */}
                     {undoDelete && (
-                        <View style={{ marginHorizontal: 12, marginBottom: 8, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 14, backgroundColor: colors.bgTertiary, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Text style={{ color: colors.textPrimary, fontSize: 13, fontFamily: fonts.body, flex: 1 }}>
-                                {t('transactionForm.categoryDeleted', { name: undoDelete.cat.name })}
-                            </Text>
-                            <TouchableOpacity onPress={undoCategoryDelete} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, backgroundColor: '#7C6FFF' }}>
-                                <Text style={{ color: '#fff', fontSize: 13, fontFamily: fonts.bodySemiBold }}>{t('common.undo')}</Text>
-                            </TouchableOpacity>
+                        <View style={{ marginHorizontal: 12, marginBottom: 8, borderRadius: 14, backgroundColor: colors.bgTertiary, overflow: 'hidden' }}>
+                            <View style={{ paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Text style={{ color: colors.textPrimary, fontSize: 13, fontFamily: fonts.body, flex: 1 }}>
+                                    {t('transactionForm.categoryDeleted', { name: undoDelete.cat.name })}
+                                </Text>
+                                <TouchableOpacity onPress={undoCategoryDelete} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, backgroundColor: '#7C6FFF' }}>
+                                    <Text style={{ color: '#fff', fontSize: 13, fontFamily: fonts.bodySemiBold }}>{t('common.undo')}</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <UndoTimer duration={5000} />
                         </View>
                     )}
 
                     {/* ── Bottom nav bar ── */}
-                    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingBottom: 30, paddingTop: 8, gap: 6 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingBottom: 34, paddingTop: 8, gap: 8 }}>
                         {/* Close button */}
                         <TouchableOpacity onPress={onClose}
-                            style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1.5, borderColor: colors.borderLight, alignItems: 'center', justifyContent: 'center' }}>
-                            <X color={colors.textMuted} size={20} />
+                            style={{ width: 48, height: 48, borderRadius: 24, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' }}>
+                            <X color={colors.textMuted} size={18} />
                         </TouchableOpacity>
 
                         {/* Nav pill */}
-                        <View style={{ flex: 1, flexDirection: 'row', padding: 3, borderRadius: 22, backgroundColor: colors.bgTertiary, borderWidth: 1, borderColor: colors.borderLight }}>
+                        <View style={{ flex: 1, flexDirection: 'row', padding: 4, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.06)' }}>
                             {/* History */}
+                            {(() => { const sel = formView === 'history'; return (
                             <TouchableOpacity onPress={() => { setFormView('history'); loadHistory(); }}
-                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, flex: 1, paddingVertical: 10, borderRadius: 20,
-                                    backgroundColor: formView === 'history' ? 'rgba(124,111,255,0.12)' : 'transparent' }}>
-                                <Clock color={formView === 'history' ? '#a78bfa' : colors.textMuted} size={14} />
-                                <Text style={{ color: formView === 'history' ? '#a78bfa' : colors.textMuted, fontSize: 12, fontFamily: fonts.bodySemiBold }}>{t('transactionForm.history')}</Text>
+                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: sel ? 6 : 0, flex: sel ? 1.2 : 0.6, paddingVertical: 12, borderRadius: 22,
+                                    backgroundColor: sel ? 'rgba(255,255,255,0.08)' : 'transparent' }}>
+                                <Clock color={sel ? '#93c5fd' : 'rgba(255,255,255,0.4)'} size={18} />
+                                {sel && <Text style={{ color: '#93c5fd', fontSize: 13, fontFamily: fonts.bodySemiBold }}>{t('transactionForm.history')}</Text>}
                             </TouchableOpacity>
+                            ); })()}
                             {/* Income */}
+                            {(() => { const sel = formView === 'form' && formType === 'income'; return (
                             <TouchableOpacity onPress={() => { setFormView('form'); setFormType('income'); }}
-                                style={{ alignItems: 'center', justifyContent: 'center', flex: 0.6, paddingVertical: 10, borderRadius: 20,
-                                    backgroundColor: formView === 'form' && formType === 'income' ? '#22c55e22' : 'transparent' }}>
-                                <ArrowUpRight color={formView === 'form' && formType === 'income' ? '#22c55e' : '#22c55e80'} size={18} />
+                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: sel ? 5 : 0, flex: sel ? 1 : 0.6, paddingVertical: 12, borderRadius: 22,
+                                    backgroundColor: sel ? 'rgba(34,197,94,0.15)' : 'transparent' }}>
+                                <ArrowUpRight color={sel ? '#22c55e' : 'rgba(34,197,94,0.5)'} size={20} />
+                                {sel && <Text style={{ color: '#22c55e', fontSize: 12, fontFamily: fonts.bodySemiBold }}>{t('transactionForm.income')}</Text>}
                             </TouchableOpacity>
+                            ); })()}
                             {/* Expense */}
+                            {(() => { const sel = formView === 'form' && formType === 'expense'; return (
                             <TouchableOpacity onPress={() => { setFormView('form'); setFormType('expense'); }}
-                                style={{ alignItems: 'center', justifyContent: 'center', flex: 0.6, paddingVertical: 10, borderRadius: 20,
-                                    backgroundColor: formView === 'form' && formType === 'expense' ? '#f8717122' : 'transparent' }}>
-                                <ArrowDownRight color={formView === 'form' && formType === 'expense' ? '#f87171' : '#f8717180'} size={18} />
+                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: sel ? 5 : 0, flex: sel ? 1 : 0.6, paddingVertical: 12, borderRadius: 22,
+                                    backgroundColor: sel ? 'rgba(239,68,68,0.15)' : 'transparent' }}>
+                                <ArrowDownRight color={sel ? '#ef4444' : 'rgba(239,68,68,0.5)'} size={20} />
+                                {sel && <Text style={{ color: '#ef4444', fontSize: 12, fontFamily: fonts.bodySemiBold }}>{t('transactionForm.expense')}</Text>}
                             </TouchableOpacity>
+                            ); })()}
                             {/* Transfer */}
+                            {(() => { const sel = formView === 'form' && formType === 'transfer'; return (
                             <TouchableOpacity onPress={() => { setFormView('form'); setFormType('transfer'); setFormToAccId(accounts.find(a => a.id !== formAccountId)?.id ?? ''); }}
-                                style={{ alignItems: 'center', justifyContent: 'center', flex: 0.6, paddingVertical: 10, borderRadius: 20,
-                                    backgroundColor: formView === 'form' && formType === 'transfer' ? '#60a5fa22' : 'transparent' }}>
-                                <ArrowRightLeft color={formView === 'form' && formType === 'transfer' ? '#60a5fa' : '#60a5fa80'} size={18} />
+                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: sel ? 5 : 0, flex: sel ? 1 : 0.6, paddingVertical: 12, borderRadius: 22,
+                                    backgroundColor: sel ? 'rgba(148,163,184,0.15)' : 'transparent' }}>
+                                <ArrowRightLeft color={sel ? '#94a3b8' : 'rgba(148,163,184,0.4)'} size={20} />
+                                {sel && <Text style={{ color: '#94a3b8', fontSize: 12, fontFamily: fonts.bodySemiBold }}>{t('transactionForm.transfer')}</Text>}
                             </TouchableOpacity>
+                            ); })()}
                         </View>
 
                         {/* Confirm/Save button */}
                         <TouchableOpacity onPress={saveForm}
                             disabled={formView === 'history' || saving || !formAmount || (formType !== 'transfer' && !formCategoryId) || !formAccountId}
-                            style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
-                                backgroundColor: formView === 'history' || !formAmount ? colors.bgTertiary : '#555' }}>
-                            <Check color={formView === 'history' || !formAmount ? colors.textDisabled : '#fff'} size={20} />
+                            style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center',
+                                backgroundColor: formView === 'history' || !formAmount ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.15)' }}>
+                            <Check color={formView === 'history' || !formAmount ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.7)'} size={20} />
                         </TouchableOpacity>
                     </View>
 
