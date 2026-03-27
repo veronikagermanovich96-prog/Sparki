@@ -882,12 +882,13 @@ export default function TransactionForm({
         [',', '0', '⌫', '÷'],
     ];
 
-    const toolbarIcons: { id: 'numpad' | 'calendar' | 'note' | 'recurring' | 'receipt'; Icon: React.ComponentType<{color: string; size: number}> }[] = [
-        { id: 'numpad', Icon: Calculator },
-        { id: 'calendar', Icon: Calendar },
-        { id: 'note', Icon: Pencil },
-        { id: 'recurring', Icon: RefreshCw },
-        { id: 'receipt', Icon: Camera },
+    const toolbarIcons: { key: string; id: 'numpad' | 'calendar' | 'note' | 'recurring' | 'receipt'; Icon: React.ComponentType<{color: string; size: number}> }[] = [
+        { key: 'tag', id: 'numpad', Icon: Tag },
+        { key: 'cal', id: 'calendar', Icon: Calendar },
+        { key: 'note', id: 'note', Icon: Pencil },
+        { key: 'recur', id: 'recurring', Icon: RefreshCw },
+        { key: 'bell', id: 'recurring', Icon: Bell },
+        { key: 'cam', id: 'receipt', Icon: Camera },
     ];
 
     // ── Render ────────────────────────────────────────────────────────────────
@@ -947,16 +948,17 @@ export default function TransactionForm({
                 <View style={{ flex: 1 }}>
 
                     {/* ── Top bar ── */}
-                    <View style={{ paddingTop: 56, paddingHorizontal: 20, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <TouchableOpacity onPress={onClose} hitSlop={10}>
-                            <Text style={{ color: colors.textSecondary, fontSize: 15, fontFamily: fonts.body }}>{t('common.cancel')}</Text>
+                    <View style={{ paddingTop: 52, paddingHorizontal: 16, paddingBottom: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <TouchableOpacity onPress={onClose}
+                            style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: colors.bgTertiary }}>
+                            <Text style={{ color: colors.textSecondary, fontSize: 14, fontFamily: fonts.body }}>{t('common.cancel')}</Text>
                         </TouchableOpacity>
-                        <Text style={{ color: colors.textPrimary, fontSize: 17, fontFamily: fonts.heading }}>
+                        <Text style={{ color: colors.textPrimary, fontSize: 16, fontFamily: fonts.heading }}>
                             {editingTx ? t('transactionForm.editTitle') : t('transactionForm.newTitle')}
                         </Text>
                         <TouchableOpacity onPress={saveForm} disabled={saving || !formAmount || (formType !== 'transfer' && !formCategoryId)}
-                            hitSlop={10}>
-                            <Text style={{ color: saving || !formAmount ? colors.textDisabled : '#7C6FFF', fontSize: 15, fontFamily: fonts.bodySemiBold }}>
+                            style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: saving || !formAmount ? colors.bgTertiary : '#7C6FFF' }}>
+                            <Text style={{ color: saving || !formAmount ? colors.textDisabled : '#fff', fontSize: 14, fontFamily: fonts.bodySemiBold }}>
                                 {saving ? '...' : t('common.save')}
                             </Text>
                         </TouchableOpacity>
@@ -964,20 +966,18 @@ export default function TransactionForm({
 
                     {/* ── Accounts ── */}
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingVertical: 8 }}>
-                        {accounts.map(acc => (
+                        style={{ flexGrow: 0 }}
+                        contentContainerStyle={{ paddingHorizontal: 20, gap: 20, paddingVertical: 8 }}>
+                        {accounts.map(acc => {
+                            const sel = formAccountId === acc.id;
+                            return (
                             <TouchableOpacity key={acc.id}
-                                onPress={() => { setFormAccountId(acc.id); setFormCurrency(acc.currency); }}
-                                style={{
-                                    paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12,
-                                    backgroundColor: formAccountId === acc.id ? (acc.color ?? '#7C6FFF') + '22' : colors.bgTertiary,
-                                    borderWidth: formAccountId === acc.id ? 1.5 : 0,
-                                    borderColor: acc.color ?? '#7C6FFF',
-                                }}>
-                                <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: fonts.bodyMedium }}>{acc.name}</Text>
-                                <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>{formatAmount(acc.balance, acc.currency)}</Text>
+                                onPress={() => { setFormAccountId(acc.id); setFormCurrency(acc.currency); }}>
+                                <Text style={{ color: colors.textPrimary, fontSize: 16, fontFamily: sel ? fonts.heading : fonts.body, opacity: sel ? 1 : 0.5 }}>{acc.name}</Text>
+                                <Text style={{ color: colors.textMuted, fontSize: 12, opacity: sel ? 1 : 0.4 }}>{formatAmount(acc.balance, acc.currency)}</Text>
                             </TouchableOpacity>
-                        ))}
+                            );
+                        })}
                         {formType === 'transfer' && formToAccId && (
                             <View style={{ justifyContent: 'center', paddingHorizontal: 8 }}>
                                 <ArrowRightLeft color={colors.textMuted} size={18} />
@@ -999,9 +999,9 @@ export default function TransactionForm({
                     </ScrollView>
 
                     {/* ── Amount display ── */}
-                    <View style={{ alignItems: 'center', paddingVertical: 16 }}>
-                        <View style={{ height: 2, width: '90%', backgroundColor: typeColor, opacity: 0.3, marginBottom: 12, borderRadius: 1 }} />
-                        <Text style={{ color: colors.textPrimary, fontSize: 36, fontFamily: fonts.heading, textAlign: 'center' }}>
+                    <TouchableOpacity onPress={() => setCurrencyOpen(true)} activeOpacity={0.8} style={{ alignItems: 'center', paddingVertical: 12 }}>
+                        <View style={{ height: 2, width: '90%', backgroundColor: typeColor, opacity: 0.3, marginBottom: 10, borderRadius: 1 }} />
+                        <Text style={{ color: colors.textPrimary, fontSize: 38, fontFamily: fonts.heading, textAlign: 'center' }}>
                             {hasExpr ? formAmount.replace(/\*/g, '×').replace(/\//g, '÷').replace(/-/g, '−') : (formAmount || '0')}
                             {' '}<Text style={{ fontSize: 28, color: colors.textSecondary }}>{formCurrency}</Text>
                         </Text>
@@ -1009,22 +1009,23 @@ export default function TransactionForm({
                             <Text style={{ color: typeColor, fontSize: 16, fontFamily: fonts.bodySemiBold, marginTop: 2 }}>= {resolvedAmt}</Text>
                         )}
                         {convertedStr && (
-                            <Text style={{ color: colors.textMuted, fontSize: 14, marginTop: 4, fontFamily: fonts.body }}>{convertedStr}</Text>
+                            <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 2, fontFamily: fonts.body }}>{convertedStr}</Text>
                         )}
-                    </View>
+                    </TouchableOpacity>
 
                     {/* ── Category section ── */}
                     {formType !== 'transfer' && (
-                        <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                                <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: fonts.bodySemiBold }}>{t('transactionForm.category')}</Text>
+                        <View style={{ marginBottom: 4 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 6 }}>
+                                <Text style={{ color: colors.textPrimary, fontSize: 13, fontFamily: fonts.bodySemiBold }}>{t('transactionForm.category')}</Text>
                                 <TouchableOpacity onPress={openCatForm}
-                                    style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: colors.bgTertiary, alignItems: 'center', justifyContent: 'center' }}>
-                                    <Plus color={colors.textMuted} size={16} />
+                                    style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.bgTertiary, alignItems: 'center', justifyContent: 'center' }}>
+                                    <Plus color={colors.textMuted} size={14} />
                                 </TouchableOpacity>
                             </View>
-                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                                {formCats.slice(0, 12).map(cat => {
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={{ paddingHorizontal: 16, gap: 6 }}>
+                                {formCats.slice(0, 16).map(cat => {
                                     const sel = formCategoryId === cat.id;
                                     const Ic = cat.icon ? CAT_ICONS[cat.icon] : null;
                                     return (
@@ -1038,34 +1039,37 @@ export default function TransactionForm({
                                         </TouchableOpacity>
                                     );
                                 })}
-                            </View>
+                            </ScrollView>
                         </View>
                     )}
 
+                    {/* ── Bottom section (pushed to bottom) ── */}
+                    <View style={{ marginTop: 'auto' }}>
+
                     {/* ── Toolbar ── */}
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.bgTertiary }}>
-                        {toolbarIcons.map(({ id, Icon }) => (
-                            <TouchableOpacity key={id}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 6, borderTopWidth: 1, borderTopColor: colors.bgTertiary }}>
+                        {toolbarIcons.map(({ key, id, Icon }) => (
+                            <TouchableOpacity key={key}
                                 onPress={() => { Keyboard.dismiss(); setActivePanel(activePanel === id ? 'numpad' : id); }}
-                                style={{ padding: 10, borderRadius: 12, backgroundColor: activePanel === id ? 'rgba(124,111,255,0.12)' : 'transparent' }}>
-                                <Icon color={activePanel === id ? '#7C6FFF' : colors.textMuted} size={22} />
+                                style={{ padding: 8, borderRadius: 10, backgroundColor: activePanel === id ? 'rgba(124,111,255,0.12)' : 'transparent' }}>
+                                <Icon color={activePanel === id ? '#7C6FFF' : colors.textMuted} size={20} />
                             </TouchableOpacity>
                         ))}
                     </View>
 
                     {/* ── Bottom panel ── */}
-                    <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 8 }}>
+                    <View style={{ paddingHorizontal: 12, paddingTop: 4 }}>
 
                         {/* Numpad */}
                         {activePanel === 'numpad' && (
-                            <View style={{ gap: 6 }}>
+                            <View style={{ gap: 5 }}>
                                 {NUMPAD_ROWS.map((row, ri) => (
-                                    <View key={ri} style={{ flexDirection: 'row', gap: 6 }}>
+                                    <View key={ri} style={{ flexDirection: 'row', gap: 5 }}>
                                         {row.map(btn => {
                                             const isOp = ['+', '−', '×', '÷'].includes(btn);
                                             return (
                                                 <TouchableOpacity key={btn} onPress={() => handleNumpadKey(btn)} activeOpacity={0.6}
-                                                    style={{ flex: 1, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
+                                                    style={{ flex: 1, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
                                                         backgroundColor: isOp ? 'rgba(124,111,255,0.15)' : colors.bgTertiary }}>
                                                     {btn === '⌫' ? <Delete color={colors.textPrimary} size={20} /> : (
                                                         <Text style={{ fontSize: 22, fontWeight: '500', color: isOp ? '#7C6FFF' : colors.textPrimary }}>{btn}</Text>
@@ -1185,11 +1189,11 @@ export default function TransactionForm({
                     </View>
 
                     {/* ── Save button ── */}
-                    <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+                    <View style={{ paddingHorizontal: 12, paddingVertical: 6 }}>
                         <TouchableOpacity onPress={saveForm}
                             disabled={saving || !formAmount || (formType !== 'transfer' && !formCategoryId) || !formAccountId}
                             style={{
-                                paddingVertical: 16, borderRadius: 16, alignItems: 'center',
+                                paddingVertical: 14, borderRadius: 14, alignItems: 'center',
                                 backgroundColor: saving || !formAmount || (formType !== 'transfer' && !formCategoryId) || !formAccountId
                                     ? colors.borderLight : '#fff',
                             }}>
@@ -1200,21 +1204,29 @@ export default function TransactionForm({
                     </View>
 
                     {/* ── Type tabs ── */}
-                    <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 34, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.bgTertiary }}>
-                        {(['expense', 'income', 'transfer'] as const).map(type => {
-                            const sel = formType === type;
-                            const label = type === 'expense' ? t('transactionForm.expense') : type === 'income' ? t('transactionForm.income') : t('transactionForm.transfer');
-                            const col = type === 'expense' ? '#f87171' : type === 'income' ? '#22c55e' : '#60a5fa';
+                    <View style={{ flexDirection: 'row', marginHorizontal: 12, marginBottom: 30, padding: 3, borderRadius: 20, backgroundColor: colors.bgTertiary, borderWidth: 1, borderColor: colors.borderLight }}>
+                        {[
+                            { type: null as 'income' | 'expense' | 'transfer' | null, label: t('transactionForm.history'), col: '#a78bfa' },
+                            { type: 'income' as const, label: t('transactionForm.income'), col: '#22c55e' },
+                            { type: 'expense' as const, label: t('transactionForm.expense'), col: '#f87171' },
+                            { type: 'transfer' as const, label: t('transactionForm.transfer'), col: '#60a5fa' },
+                        ].map((item, idx) => {
+                            const sel = item.type !== null && formType === item.type;
                             return (
-                                <TouchableOpacity key={type} onPress={() => { setFormType(type); if (type === 'transfer') { setFormToAccId(accounts.find(a => a.id !== formAccountId)?.id ?? ''); } }}
-                                    style={{ flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: 'center',
-                                        backgroundColor: sel ? col + '22' : 'transparent', borderWidth: sel ? 1.5 : 0, borderColor: col }}>
-                                    <Text style={{ color: sel ? col : colors.textMuted, fontSize: 13, fontFamily: sel ? fonts.bodySemiBold : fonts.body }}>{label}</Text>
+                                <TouchableOpacity key={idx} onPress={() => {
+                                    if (item.type === null) { onClose(); return; }
+                                    setFormType(item.type);
+                                    if (item.type === 'transfer') setFormToAccId(accounts.find(a => a.id !== formAccountId)?.id ?? '');
+                                }}
+                                    style={{ flex: 1, paddingVertical: 10, borderRadius: 18, alignItems: 'center',
+                                        backgroundColor: sel ? item.col + '22' : 'transparent' }}>
+                                    <Text style={{ color: sel ? item.col : item.type === null ? '#a78bfa' : colors.textMuted, fontSize: 12, fontFamily: sel ? fonts.bodySemiBold : fonts.body }}>{item.label}</Text>
                                 </TouchableOpacity>
                             );
                         })}
                     </View>
 
+                    </View>{/* end bottom section */}
                 </View>
             )}
 

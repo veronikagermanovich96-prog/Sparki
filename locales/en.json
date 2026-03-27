@@ -802,6 +802,7 @@
     "newTitle": "New transaction",
     "expense": "Expense",
     "income": "Income",
+    "history": "History",
     "transfer": "Transfer",
     "fromAccount": "FROM",
     "account": "ACCOUNT",
