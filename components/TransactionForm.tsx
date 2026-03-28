@@ -1,7 +1,7 @@
 import {
     Activity, ArrowDownRight, ArrowLeft, ArrowRightLeft, ArrowUpRight, Award,
     Banknote, Bike, Bitcoin, BookOpen, Briefcase, Building2, Bus,
-    Bell, Calculator, Calendar, Camera, Car, Check, ChevronDown, CircleDollarSign, Clock, Coffee, Coins, CreditCard, Images,
+    Calculator, Calendar, Camera, Car, Check, ChevronDown, CircleDollarSign, Clock, Coffee, Coins, CreditCard, Images,
     Droplets, Dumbbell, Film, Flag, Flame, Fuel, Gift, Globe, GraduationCap,
     Heart, Home, Landmark, MapPin, Monitor, Music,
     Package, PawPrint, Pencil, Pill, Plane, Plus, Receipt, Scissors,
@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { format } from 'date-fns';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+// useSafeAreaInsets removed — not needed in new layout
 import { CustomCalendar } from '@/components/ui/CustomCalendar';
 import { ru } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
@@ -204,9 +204,6 @@ export default function TransactionForm({
     const [formRate,       setFormRate]       = useState('');
     const [formDate,       setFormDate]       = useState('');
     const [formNote,       setFormNote]       = useState('');
-    const [showCalc,       setShowCalc]       = useState(false);
-    const [showDatePicker, setShowDatePicker] = useState(false);
-    const [calcExpression, setCalcExpression] = useState('');
     const [formIsRecurring,    setFormIsRecurring]    = useState(false);
     const [formRecurFreq,      setFormRecurFreq]      = useState<RecurFreq>('monthly');
     const [formRecurWeekday,   setFormRecurWeekday]   = useState(0);
@@ -215,10 +212,10 @@ export default function TransactionForm({
     const [formRecurYearDay,   setFormRecurYearDay]   = useState(new Date().getDate());
     const [formRecurNotify,    setFormRecurNotify]    = useState(3);
     const [formRecurOverrideDate, setFormRecurOverrideDate] = useState<Date | null>(null);
-    const [showRecurDatePicker,   setShowRecurDatePicker]   = useState(false);
+    const [_showRecurDatePicker,   _setShowRecurDatePicker]   = useState(false); // TODO: implement recurring date picker
     const [currencyOpen,     setCurrencyOpen]     = useState(false);
     const [currencySearch,   setCurrencySearch]   = useState('');
-    const [fetchingRate,     setFetchingRate]     = useState(false);
+    const [_fetchingRate,    setFetchingRate]     = useState(false); // eslint-disable-line @typescript-eslint/no-unused-vars
     const [receiptUri,       setReceiptUri]       = useState<string | null>(null);
     const [receiptUploadUrl, setReceiptUploadUrl] = useState<string | null>(null);
     const [uploadingReceipt, setUploadingReceipt] = useState(false);
@@ -231,14 +228,11 @@ export default function TransactionForm({
     const [saving,           setSaving]           = useState(false);
     const [undoDelete, setUndoDelete] = useState<{ cat: CategoryLight; timer: ReturnType<typeof setTimeout> } | null>(null);
 
-    // ── Tags ─────────────────────────────────────────────────────────────────
-    const [categoryTags,   setCategoryTags]   = useState<TagLight[]>([]);
+    // ── Tags (not yet in new compact UI, but state used in save logic) ─────
+    const [, setCategoryTags]   = useState<TagLight[]>([]);
     const [selectedTagId,  setSelectedTagId]  = useState('');
-    const [newTagText,     setNewTagText]     = useState('');
-    const [addingTag,      setAddingTag]      = useState(false);
-    const [editingTagId,   setEditingTagId]   = useState('');
-    const [editingTagText, setEditingTagText] = useState('');
-    const [tagSheet,       setTagSheet]       = useState<TagLight | null>(null);
+    const [, setNewTagText]     = useState('');
+    const [, setAddingTag]      = useState(false);
 
     // ── Category sub-form ────────────────────────────────────────────────────
     const [catFormVisible, setCatFormVisible] = useState(false);
@@ -275,7 +269,11 @@ export default function TransactionForm({
 
     // ── Initialize form when visibility or editingTx changes ─────────────────
     useEffect(() => {
-        if (!visible) return;
+        if (!visible) {
+            // Clear undo timer when form closes
+            if (undoDelete) { clearTimeout(undoDelete.timer); setUndoDelete(null); }
+            return;
+        }
         if (editingTx) {
             setFormType(editingTx.type);
             setFormAccountId(editingTx.account_id);
@@ -320,9 +318,6 @@ export default function TransactionForm({
             setReceiptCollapsed(new Set());
             setSelectedTagId('');
         }
-        setShowCalc(false);
-        setCalcExpression('');
-        setShowDatePicker(false);
         setActivePanel('numpad');
         setFormView('form');
         setCategoryTags([]);
@@ -440,44 +435,6 @@ export default function TransactionForm({
     function onCatSelect(catId: string) {
         setFormCategoryId(catId);
         setSelectedTagId('');
-    }
-
-    function onAccountChange(accId: string) {
-        setFormAccountId(accId);
-        const acc = accounts.find(a => a.id === accId);
-        if (acc) setFormCurrency(acc.currency);
-    }
-
-    // ── Tags ─────────────────────────────────────────────────────────────────
-
-    async function addTag() {
-        const name = newTagText.trim();
-        if (!name || !formCategoryId || !householdId) return;
-        const { data } = await supabase
-            .from('category_tags')
-            .insert({ household_id: householdId, category_id: formCategoryId, name })
-            .select('id, name').single();
-        if (data) {
-            setCategoryTags(prev => [...prev, data]);
-            setSelectedTagId(data.id);
-        }
-        setNewTagText('');
-        setAddingTag(false);
-    }
-
-    async function updateTag() {
-        const name = editingTagText.trim();
-        if (!name || !editingTagId) { setEditingTagId(''); return; }
-        await supabase.from('category_tags').update({ name }).eq('id', editingTagId);
-        setCategoryTags(prev => prev.map(t => t.id === editingTagId ? { ...t, name } : t));
-        setEditingTagId('');
-        setEditingTagText('');
-    }
-
-    async function deleteTag(tagId: string) {
-        await supabase.from('category_tags').delete().eq('id', tagId);
-        setCategoryTags(prev => prev.filter(t => t.id !== tagId));
-        if (selectedTagId === tagId) setSelectedTagId('');
     }
 
     // ── Receipt ──────────────────────────────────────────────────────────────
@@ -656,34 +613,6 @@ export default function TransactionForm({
         } catch { return '0'; }
     }
 
-    function handleCalcButton(btn: string) {
-        if (btn === 'C') {
-            setCalcExpression('');
-        } else if (btn === '⌫') {
-            setCalcExpression(prev => prev.slice(0, -1));
-        } else if (btn === '=') {
-            const result = evaluateExpression(calcExpression);
-            if (result !== '?') {
-                setFormAmount(result);
-                setShowCalc(false);
-                setCalcExpression('');
-            }
-        } else if (btn === '±') {
-            setCalcExpression(prev => prev.startsWith('-') ? prev.slice(1) : '-' + prev);
-        } else if (btn === '%') {
-            const val = parseFloat(evaluateExpression(calcExpression));
-            if (!isNaN(val)) setCalcExpression(String(val / 100));
-        } else if (btn === '÷') {
-            setCalcExpression(prev => prev + '/');
-        } else if (btn === '×') {
-            setCalcExpression(prev => prev + '*');
-        } else if (btn === '−') {
-            setCalcExpression(prev => prev + '-');
-        } else {
-            setCalcExpression(prev => prev + btn);
-        }
-    }
-
     // ── Receipt save helper ─────────────────────────────────────────────────
 
     type CheckedItem = typeof receiptItems[0];
@@ -822,7 +751,10 @@ export default function TransactionForm({
         }
 
         if (!formAmount) return;
-        const amount = parseFloat(formAmount);
+        // Resolve numpad expression (e.g. "60+40" → 100)
+        const hasExpr = /[+\-*/]/.test(formAmount);
+        const resolved = hasExpr ? evaluateExpression(formAmount) : formAmount;
+        const amount = parseFloat(resolved);
         if (isNaN(amount) || amount <= 0) return;
         if (formType !== 'transfer' && !formCategoryId) return;
         setSaving(true);
@@ -905,19 +837,40 @@ export default function TransactionForm({
     const [formView, setFormView] = useState<'form' | 'history'>('form');
     const [historyTxs, setHistoryTxs] = useState<any[]>([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
+    const [historyPeriod, setHistoryPeriod] = useState<'week' | 'month' | 'year' | 'all' | 'custom'>('month');
+    const [historyCustomFrom, setHistoryCustomFrom] = useState<string>('');
+    const [historyCustomTo, setHistoryCustomTo] = useState<string>('');
+    const [showHistoryDatePicker, setShowHistoryDatePicker] = useState<'from' | 'to' | null>(null);
 
     // Load history when switching to history view
-    async function loadHistory() {
+    async function loadHistory(period?: 'week' | 'month' | 'year' | 'all' | 'custom', customFrom?: string, customTo?: string) {
         if (!formAccountId || !householdId) return;
         setLoadingHistory(true);
-        const { data } = await supabase
+        const p = period ?? historyPeriod;
+        let query = supabase
             .from('transactions')
             .select('id, amount, currency, date, note, type, category_id, categories(name, icon, color)')
             .eq('account_id', formAccountId)
             .eq('household_id', householdId)
             .eq('is_deleted', false)
             .order('date', { ascending: false })
-            .limit(50);
+            .limit(100);
+
+        if (p === 'custom') {
+            const from = customFrom || historyCustomFrom;
+            const to = customTo || historyCustomTo;
+            if (from) query = query.gte('date', from);
+            if (to) query = query.lte('date', to);
+        } else if (p !== 'all') {
+            const now = new Date();
+            let from: Date;
+            if (p === 'week') { from = new Date(now); from.setDate(now.getDate() - 7); }
+            else if (p === 'month') { from = new Date(now.getFullYear(), now.getMonth(), 1); }
+            else { from = new Date(now.getFullYear(), 0, 1); }
+            query = query.gte('date', from.toISOString().slice(0, 10));
+        }
+
+        const { data } = await query;
         setHistoryTxs(data ?? []);
         setLoadingHistory(false);
     }
@@ -1037,6 +990,68 @@ export default function TransactionForm({
                     {/* ═══ HISTORY VIEW ═══ */}
                     {formView === 'history' ? (
                         <View style={{ flex: 1, paddingHorizontal: 16 }}>
+                            {/* Period tabs */}
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8, marginBottom: 8 }} contentContainerStyle={{ gap: 6 }}>
+                                {(['week', 'month', 'year', 'all', 'custom'] as const).map(p => {
+                                    const sel = historyPeriod === p;
+                                    const labels: Record<string, string> = { week: t('transactions.week'), month: t('transactions.month'), year: t('transactions.year'), all: t('transactions.allTime'), custom: t('transactions.custom') };
+                                    return (
+                                        <TouchableOpacity key={p} onPress={() => {
+                                            setHistoryPeriod(p);
+                                            if (p === 'custom') {
+                                                if (!historyCustomFrom) {
+                                                    const d = new Date(); d.setMonth(d.getMonth() - 1);
+                                                    setHistoryCustomFrom(d.toISOString().slice(0, 10));
+                                                }
+                                                if (!historyCustomTo) setHistoryCustomTo(new Date().toISOString().slice(0, 10));
+                                                setShowHistoryDatePicker('from');
+                                            } else { loadHistory(p); }
+                                        }}
+                                            style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16,
+                                                backgroundColor: sel ? '#7C6FFF' : 'rgba(255,255,255,0.06)' }}>
+                                            <Text style={{ color: sel ? '#fff' : colors.textMuted, fontSize: 13, fontFamily: sel ? fonts.bodySemiBold : fonts.body }}>{labels[p]}</Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </ScrollView>
+
+                            {/* Custom period date pickers */}
+                            {historyPeriod === 'custom' && (
+                                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+                                    <TouchableOpacity onPress={() => setShowHistoryDatePicker('from')}
+                                        style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 10, padding: 10, borderWidth: showHistoryDatePicker === 'from' ? 1 : 0, borderColor: '#7C6FFF' }}>
+                                        <Text style={{ color: colors.textMuted, fontSize: 11, fontFamily: fonts.body }}>{t('transactions.fromDate')}</Text>
+                                        <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: fonts.bodyMedium }}>{historyCustomFrom || '—'}</Text>
+                                    </TouchableOpacity>
+                                    <Text style={{ color: colors.textMuted }}>→</Text>
+                                    <TouchableOpacity onPress={() => setShowHistoryDatePicker('to')}
+                                        style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 10, padding: 10, borderWidth: showHistoryDatePicker === 'to' ? 1 : 0, borderColor: '#7C6FFF' }}>
+                                        <Text style={{ color: colors.textMuted, fontSize: 11, fontFamily: fonts.body }}>{t('transactions.toDate')}</Text>
+                                        <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: fonts.bodyMedium }}>{historyCustomTo || '—'}</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+
+                            {/* Calendar for custom period */}
+                            {historyPeriod === 'custom' && showHistoryDatePicker && (
+                                <View style={{ marginBottom: 8 }}>
+                                    <CustomCalendar
+                                        value={new Date((showHistoryDatePicker === 'from' ? historyCustomFrom : historyCustomTo) + 'T00:00:00')}
+                                        maximumDate={new Date()}
+                                        onChange={(d: Date) => {
+                                            const ds = d.toISOString().slice(0, 10);
+                                            if (showHistoryDatePicker === 'from') {
+                                                setHistoryCustomFrom(ds);
+                                                setShowHistoryDatePicker('to');
+                                            } else {
+                                                setHistoryCustomTo(ds);
+                                                setShowHistoryDatePicker(null);
+                                                loadHistory('custom', historyCustomFrom, ds);
+                                            }
+                                        }}
+                                    />
+                                </View>
+                            )}
                             {loadingHistory ? (
                                 <ActivityIndicator color="#7C6FFF" style={{ marginTop: 40 }} />
                             ) : historyTxs.length === 0 ? (
@@ -1427,7 +1442,7 @@ export default function TransactionForm({
                             ); })()}
                             {/* Income */}
                             {(() => { const sel = formView === 'form' && formType === 'income'; return (
-                            <TouchableOpacity onPress={() => { setFormView('form'); setFormType('income'); }}
+                            <TouchableOpacity onPress={() => { setFormView('form'); onFormTypeChange('income'); }}
                                 style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: sel ? 5 : 0, flex: sel ? 1 : 0.6, paddingVertical: 12, borderRadius: 22,
                                     backgroundColor: sel ? 'rgba(34,197,94,0.15)' : 'transparent' }}>
                                 <ArrowUpRight color={sel ? '#22c55e' : 'rgba(34,197,94,0.5)'} size={20} />
@@ -1436,7 +1451,7 @@ export default function TransactionForm({
                             ); })()}
                             {/* Expense */}
                             {(() => { const sel = formView === 'form' && formType === 'expense'; return (
-                            <TouchableOpacity onPress={() => { setFormView('form'); setFormType('expense'); }}
+                            <TouchableOpacity onPress={() => { setFormView('form'); onFormTypeChange('expense'); }}
                                 style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: sel ? 5 : 0, flex: sel ? 1 : 0.6, paddingVertical: 12, borderRadius: 22,
                                     backgroundColor: sel ? 'rgba(239,68,68,0.15)' : 'transparent' }}>
                                 <ArrowDownRight color={sel ? '#ef4444' : 'rgba(239,68,68,0.5)'} size={20} />
@@ -1445,7 +1460,7 @@ export default function TransactionForm({
                             ); })()}
                             {/* Transfer */}
                             {(() => { const sel = formView === 'form' && formType === 'transfer'; return (
-                            <TouchableOpacity onPress={() => { setFormView('form'); setFormType('transfer'); setFormToAccId(accounts.find(a => a.id !== formAccountId)?.id ?? ''); }}
+                            <TouchableOpacity onPress={() => { setFormView('form'); onFormTypeChange('transfer'); setFormToAccId(accounts.find(a => a.id !== formAccountId)?.id ?? ''); }}
                                 style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: sel ? 5 : 0, flex: sel ? 1 : 0.6, paddingVertical: 12, borderRadius: 22,
                                     backgroundColor: sel ? 'rgba(148,163,184,0.15)' : 'transparent' }}>
                                 <ArrowRightLeft color={sel ? '#94a3b8' : 'rgba(148,163,184,0.4)'} size={20} />
