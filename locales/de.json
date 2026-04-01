@@ -734,7 +734,20 @@
     "sendTime": "SENDEZEIT",
     "hour": "STUNDE (0–23)",
     "minute": "MINUTE (0–59)",
-    "language": "Sprache"
+    "language": "Sprache",
+    "household": "HAUSHALT",
+    "members": "Mitglieder",
+    "inviteMember": "Mitglied einladen",
+    "enterEmail": "E-Mail-Adresse",
+    "sendInvite": "Einladung senden",
+    "userNotFound": "Benutzer nicht gefunden. Registrierung erforderlich.",
+    "removeMember": "Mitglied entfernen",
+    "removeMemberMsg": "{{name}} aus dem Haushalt entfernen?",
+    "memberRemoved": "Mitglied entfernt",
+    "owner": "Besitzer",
+    "member": "Mitglied",
+    "inviteSent": "Mitglied hinzugefuegt",
+    "alreadyMember": "Dieser Benutzer ist bereits Mitglied"
   },
   "payments": {
     "title": "Zahlungen",

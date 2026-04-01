@@ -2,7 +2,7 @@ import {
     ArrowDownToLine, ArrowUpFromLine,
     BarChart2, Bell, BellOff, Check, ChevronDown, ChevronRight, Clock, Database,
     Eye, EyeOff, Globe, HelpCircle, Key, Landmark, LogOut,
-    Moon, Pencil, Plus, Sun, Trash2, User, Wallet, X,
+    Moon, Pencil, Plus, Sun, Trash2, User, Users, UserPlus, Wallet, X,
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import i18n from '@/lib/i18n';
@@ -96,7 +96,7 @@ export default function SettingsScreen() {
     const params = useLocalSearchParams<{ openExtras?: string }>();
 
     // ── User & household
-    const [,             setUserId]       = useState('');
+    const [userId,       setUserId]       = useState('');
     const [householdId,  setHouseholdId]  = useState('');
     const [displayName,  setDisplayName]  = useState('');
     const [email,        setEmail]        = useState('');
@@ -194,6 +194,14 @@ export default function SettingsScreen() {
     const [importing,        setImporting]        = useState(false);
     const [importResult,     setImportResult]     = useState<{ inserted: number; failed: number } | null>(null);
 
+    // ── Members
+    type HouseholdMember = { id: string; user_id: string; role: string; display_name: string; email: string };
+    const [members,         setMembers]         = useState<HouseholdMember[]>([]);
+    const [inviteVisible,   setInviteVisible]   = useState(false);
+    const [inviteEmail,     setInviteEmail]     = useState('');
+    const [inviteError,     setInviteError]     = useState('');
+    const [inviting,        setInviting]        = useState(false);
+
     // ─────────────────────────────────────────────────────────────────────────
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -241,6 +249,26 @@ export default function SettingsScreen() {
         if (cats) setCategories(cats as Category[]);
         if (accs) setAccounts(accs as Account[]);
         if (buds) setBudgets(buds as Budget[]);
+
+        // Load household members
+        const { data: mems } = await supabase
+            .from('household_members')
+            .select('id, user_id, role')
+            .eq('household_id', member.household_id);
+        if (mems) {
+            const membersList: HouseholdMember[] = [];
+            for (const m of mems) {
+                // We already have current user info
+                if (m.user_id === user.id) {
+                    membersList.push({ ...m, display_name: user.user_metadata?.display_name ?? user.email?.split('@')[0] ?? '', email: user.email ?? '' });
+                } else {
+                    // For other members, we can't read auth.users directly, store user_id-based placeholder
+                    membersList.push({ ...m, display_name: m.user_id.slice(0, 8), email: '' });
+                }
+            }
+            setMembers(membersList);
+        }
+
         setLoading(false);
     }
 
@@ -673,6 +701,71 @@ export default function SettingsScreen() {
         ]);
     }
 
+    // ── Invite member ─────────────────────────────────────────────────────────
+
+    async function sendInvite() {
+        const emailVal = inviteEmail.trim().toLowerCase();
+        if (!emailVal) return;
+        setInviteError('');
+        setInviting(true);
+
+        // Look up user by email via RPC
+        const { data: foundUserId, error: rpcError } = await supabase.rpc('get_user_id_by_email', { lookup_email: emailVal });
+        if (rpcError || !foundUserId) {
+            setInviteError(t('settings.userNotFound'));
+            setInviting(false);
+            return;
+        }
+
+        // Check if already a member
+        const existing = members.find(m => m.user_id === foundUserId);
+        if (existing) {
+            setInviteError(t('settings.alreadyMember'));
+            setInviting(false);
+            return;
+        }
+
+        // Insert into household_members
+        const { error: insertError } = await supabase.from('household_members').insert({
+            household_id: householdId,
+            user_id: foundUserId,
+            role: 'member',
+        });
+
+        setInviting(false);
+        if (insertError) {
+            setInviteError(insertError.message);
+            return;
+        }
+
+        // Add to local state
+        setMembers(prev => [...prev, { id: foundUserId, user_id: foundUserId, role: 'member', display_name: emailVal.split('@')[0], email: emailVal }]);
+        setInviteEmail('');
+        setInviteVisible(false);
+        Alert.alert(t('common.done'), t('settings.inviteSent'));
+    }
+
+    function confirmRemoveMember(mem: HouseholdMember) {
+        const myRole = members.find(m => m.user_id === userId)?.role;
+        if (myRole !== 'owner') return;
+
+        Alert.alert(
+            t('settings.removeMember'),
+            t('settings.removeMemberMsg', { name: mem.display_name || mem.email }),
+            [
+                { text: t('common.cancel'), style: 'cancel' },
+                {
+                    text: t('settings.removeMember'), style: 'destructive',
+                    onPress: async () => {
+                        await supabase.from('household_members').delete().eq('id', mem.id);
+                        setMembers(prev => prev.filter(m => m.id !== mem.id));
+                        Alert.alert(t('common.done'), t('settings.memberRemoved'));
+                    },
+                },
+            ],
+        );
+    }
+
     // ── Preference helpers ────────────────────────────────────────────────────
 
     function setPref(key: string, value: boolean, setter: (v: boolean) => void) {
@@ -838,6 +931,42 @@ export default function SettingsScreen() {
                     />
                 </SectionCard>
 
+                {/* Домохозяйство */}
+                <SectionHeader label={t('settings.household')} />
+                <SectionCard>
+                    {members.map((mem, idx) => {
+                        const isMe = mem.user_id === userId;
+                        const isOwner = mem.role === 'owner';
+                        const label = isMe ? displayName : (mem.email || mem.display_name);
+                        return (
+                            <View key={mem.id}>
+                                {idx > 0 && <Divider />}
+                                <TouchableOpacity
+                                    activeOpacity={0.7}
+                                    onLongPress={() => { if (!isMe && members.find(m => m.user_id === userId)?.role === 'owner') confirmRemoveMember(mem); }}
+                                    style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: colors.bgSecondary }}
+                                >
+                                    <View style={{ width: 32, height: 32, borderRadius: 9, backgroundColor: isOwner ? '#1d4ed8' : colors.bgTertiary, alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                                        <User color={isOwner ? '#fff' : colors.textSecondary} size={17} />
+                                    </View>
+                                    <Text style={{ flex: 1, color: colors.textPrimary, fontSize: 16, fontFamily: fonts.body }} numberOfLines={1}>{label}</Text>
+                                    <View style={{ backgroundColor: isOwner ? '#1d4ed820' : colors.bgTertiary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
+                                        <Text style={{ color: isOwner ? '#3b82f6' : colors.textMuted, fontSize: 12, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>
+                                            {isOwner ? t('settings.owner') : t('settings.member')}
+                                        </Text>
+                                    </View>
+                                </TouchableOpacity>
+                            </View>
+                        );
+                    })}
+                    {members.length > 0 && <Divider />}
+                    <SettingRow
+                        icon={<UserPlus color="#22c55e" size={17} />}
+                        label={t('settings.inviteMember')}
+                        onPress={() => { setInviteEmail(''); setInviteError(''); setInviteVisible(true); }}
+                    />
+                </SectionCard>
+
                 {/* Безопасность */}
                 <SectionHeader label={t('settings.security')} />
                 <SectionCard>
@@ -860,6 +989,43 @@ export default function SettingsScreen() {
                 </View>
 
             </ScrollView>
+
+            {/* ════ Modal: Invite Member ════ */}
+            <BaseBottomSheet visible={inviteVisible} onClose={() => setInviteVisible(false)} scrollable={false}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                    <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700' }}>{t('settings.inviteMember')}</Text>
+                    <TouchableOpacity onPress={() => setInviteVisible(false)} hitSlop={8}><X color={colors.textMuted} size={20} /></TouchableOpacity>
+                </View>
+                <TextInput
+                    value={inviteEmail}
+                    onChangeText={setInviteEmail}
+                    placeholder={t('settings.enterEmail')}
+                    placeholderTextColor={colors.textDisabled}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    autoCorrect={false}
+                    style={{
+                        backgroundColor: colors.bgTertiary, borderRadius: 12, padding: 14, fontSize: 16, color: colors.textPrimary,
+                        fontFamily: fonts.body, marginBottom: 12,
+                    }}
+                />
+                {!!inviteError && (
+                    <Text style={{ color: '#ef4444', fontSize: 13, marginBottom: 12, fontFamily: fonts.body }}>{inviteError}</Text>
+                )}
+                <TouchableOpacity
+                    onPress={sendInvite}
+                    disabled={inviting || !inviteEmail.trim()}
+                    style={{
+                        backgroundColor: inviteEmail.trim() ? '#3b82f6' : colors.bgTertiary,
+                        borderRadius: 14, paddingVertical: 16, alignItems: 'center',
+                    }}
+                >
+                    {inviting
+                        ? <ActivityIndicator color="#fff" />
+                        : <Text style={{ color: inviteEmail.trim() ? '#fff' : colors.textDisabled, fontSize: 16, fontWeight: '600' }}>{t('settings.sendInvite')}</Text>
+                    }
+                </TouchableOpacity>
+            </BaseBottomSheet>
 
             {/* ════ Modal: Edit Name ════ */}
             <BaseBottomSheet visible={editNameVisible} onClose={() => setEditNameVisible(false)} scrollable={false}>

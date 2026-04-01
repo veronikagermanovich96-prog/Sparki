@@ -734,7 +734,20 @@
     "sendTime": "HORA DE ENVÍO",
     "hour": "HORA (0–23)",
     "minute": "MINUTOS (0–59)",
-    "language": "Idioma"
+    "language": "Idioma",
+    "household": "HOGAR",
+    "members": "Miembros",
+    "inviteMember": "Invitar miembro",
+    "enterEmail": "Correo electronico",
+    "sendInvite": "Enviar invitacion",
+    "userNotFound": "Usuario no encontrado. Debe registrarse primero.",
+    "removeMember": "Eliminar miembro",
+    "removeMemberMsg": "Eliminar a {{name}} del hogar?",
+    "memberRemoved": "Miembro eliminado",
+    "owner": "Propietario",
+    "member": "Miembro",
+    "inviteSent": "Miembro agregado",
+    "alreadyMember": "Este usuario ya es miembro"
   },
   "payments": {
     "title": "Pagos",

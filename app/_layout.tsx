@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useCallback } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
@@ -15,6 +16,16 @@ import { useAuthStore } from '@/stores/authStore';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 
 SplashScreen.preventAutoHideAsync();
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,   // 5 minutes
+      gcTime: 10 * 60 * 1000,     // 10 minutes
+      retry: 2,
+    },
+  },
+});
 
 export default function RootLayout() {
   const _colorScheme = useColorScheme(); // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -66,9 +77,11 @@ export default function RootLayout() {
   if (!fontsLoaded) return null;
 
   return (
-    <ThemeProvider>
-      <RootContent isLoading={isLoading} onLayout={onLayoutReady} />
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <RootContent isLoading={isLoading} onLayout={onLayoutReady} />
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }
 

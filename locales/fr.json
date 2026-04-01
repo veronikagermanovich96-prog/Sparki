@@ -734,7 +734,20 @@
     "sendTime": "HEURE D'ENVOI",
     "hour": "HEURE (0–23)",
     "minute": "MINUTES (0–59)",
-    "language": "Langue"
+    "language": "Langue",
+    "household": "FOYER",
+    "members": "Membres",
+    "inviteMember": "Inviter un membre",
+    "enterEmail": "Adresse e-mail",
+    "sendInvite": "Envoyer l'invitation",
+    "userNotFound": "Utilisateur introuvable. Il doit d'abord s'inscrire.",
+    "removeMember": "Supprimer le membre",
+    "removeMemberMsg": "Supprimer {{name}} du foyer ?",
+    "memberRemoved": "Membre supprime",
+    "owner": "Proprietaire",
+    "member": "Membre",
+    "inviteSent": "Membre ajoute",
+    "alreadyMember": "Cet utilisateur est deja membre"
   },
   "payments": {
     "title": "Paiements",

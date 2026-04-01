@@ -734,7 +734,20 @@
     "sendTime": "SEND TIME",
     "hour": "HOUR (0–23)",
     "minute": "MINUTE (0–59)",
-    "language": "Language"
+    "language": "Language",
+    "household": "HOUSEHOLD",
+    "members": "Members",
+    "inviteMember": "Invite member",
+    "enterEmail": "Email address",
+    "sendInvite": "Send invite",
+    "userNotFound": "User not found. They need to register first.",
+    "removeMember": "Remove member",
+    "removeMemberMsg": "Remove {{name}} from the household?",
+    "memberRemoved": "Member removed",
+    "owner": "Owner",
+    "member": "Member",
+    "inviteSent": "Member added",
+    "alreadyMember": "This user is already a member"
   },
   "payments": {
     "title": "Payments",
