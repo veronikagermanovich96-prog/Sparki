@@ -636,48 +636,41 @@ function matchAccountByName(text: string, accounts: AccountLight[]): { fromId: s
     let fromId: string | null = null;
     let toId: string | null = null;
 
-    // Sort accounts by name length descending to match longest first
     const sorted = [...accounts].sort((a, b) => b.name.length - a.name.length);
 
-    // Pattern: "со счёта X ... на счёт Y" / "с X на Y" / "from X to Y"
-    const fromPatterns = [/(?:со? счёта?|с |from |von |de |desde )\s*(.+?)(?:\s+(?:на счёт|на |to |auf |à |a )|$)/i];
-    const toPatterns = [/(?:на счёт|на |to |auf |à |a )\s*(.+?)(?:\s+\d|$)/i];
+    // Direct search: "со счёта X" → from, "на счёт Y" → to
+    const fromMarkers = ['со счёта ', 'со счета ', 'с счёта ', 'с счета ', 'from '];
+    const toMarkers = ['на счёт ', 'на счет ', 'на счёт ', 'to '];
 
-    for (const acc of sorted) {
-        const name = acc.name.toLowerCase();
-        if (!name) continue;
-
-        // Check if account name appears after "from" markers
-        const fromMarkers = ['со счёта', 'со счета', 'с счёта', 'с счета', 'с ', 'from ', 'von ', 'de ', 'desde '];
-        const toMarkers = ['на счёт', 'на счет', 'на ', 'to ', 'auf ', 'à ', 'a '];
-
-        for (const marker of fromMarkers) {
-            const idx = s.indexOf(marker);
-            if (idx !== -1) {
-                const after = s.substring(idx + marker.length).trim();
-                if (after.startsWith(name) || after.includes(name)) {
-                    fromId = acc.id;
-                    break;
-                }
+    for (const marker of fromMarkers) {
+        const idx = s.indexOf(marker);
+        if (idx === -1) continue;
+        const after = s.substring(idx + marker.length).trim();
+        for (const acc of sorted) {
+            if (after.startsWith(acc.name.toLowerCase())) {
+                fromId = acc.id;
+                break;
             }
         }
-
-        for (const marker of toMarkers) {
-            // Find "to" marker that comes AFTER "from" content
-            const fromEnd = fromId ? s.indexOf(sorted.find(a => a.id === fromId)?.name.toLowerCase() ?? '') + 1 : 0;
-            const searchFrom = Math.max(fromEnd, 0);
-            const idx = s.indexOf(marker, searchFrom);
-            if (idx !== -1 && idx >= searchFrom) {
-                const after = s.substring(idx + marker.length).trim();
-                if ((after.startsWith(name) || after.includes(name)) && acc.id !== fromId) {
-                    toId = acc.id;
-                    break;
-                }
-            }
-        }
+        if (fromId) break;
     }
 
-    // Fallback: just find any two account names mentioned
+    for (const marker of toMarkers) {
+        // Search for "to" marker only AFTER "from" section
+        const startPos = fromId ? s.indexOf(sorted.find(a => a.id === fromId)!.name.toLowerCase()) + 1 : 0;
+        const idx = s.indexOf(marker, startPos);
+        if (idx === -1) continue;
+        const after = s.substring(idx + marker.length).trim();
+        for (const acc of sorted) {
+            if (after.startsWith(acc.name.toLowerCase()) && acc.id !== fromId) {
+                toId = acc.id;
+                break;
+            }
+        }
+        if (toId) break;
+    }
+
+    // Fallback: find any two distinct account names
     if (!fromId || !toId) {
         const found: string[] = [];
         for (const acc of sorted) {
@@ -689,9 +682,6 @@ function matchAccountByName(text: string, accounts: AccountLight[]): { fromId: s
         if (found.length >= 2) {
             fromId = fromId ?? found[0];
             toId = toId ?? found[1];
-        } else if (found.length === 1) {
-            // One account found — use as "to", keep default as "from"
-            toId = toId ?? found[0];
         }
     }
 
@@ -728,23 +718,28 @@ export function parseVoiceText(
         }
     }
 
-    // Normalize: remove dots after abbreviations so they don't act as sentence separators
+    // Normalize: remove dots after abbreviations
     const cleaned = text.replace(/(\b(?:руб|тыс|шт|коп|EUR|USD|RUB|GBP|CHF))\./gi, '$1');
-    // Split by: comma, period+space+letter, or keywords
-    // Then further split by pattern: "number [currency] word" boundaries (e.g., "100 руб кофе" → ["100 руб", "кофе"])
-    const rawSentences = cleaned.split(/,|\.\s+(?=[а-яa-z])/i)
-        .flatMap(s => s.split(/\bи ещё\b|\bещё\b|\bтакже\b|\bплюс\b|\band also\b|\bplus\b|\bund auch\b|\bet aussi\b|\by también\b/i));
-    // Further split: if a sentence contains multiple "word number" patterns, split between them
+
+    // If the text is a transfer command, don't split — treat as single transaction
+    const isTransferText = /перевёл|перевел|перевод|transfer|sent/i.test(cleaned)
+        || (/(со? счёта?|со? счета?|from )/i.test(cleaned) && /(на счёт|на счет| to )/i.test(cleaned));
+
     const sentences: string[] = [];
-    for (const raw of rawSentences) {
-        const trimmed = raw.trim();
-        if (!trimmed) continue;
-        // Match pattern: split before a new word that is followed by a number (new transaction)
-        const parts = trimmed.split(/\s+(?=[а-яa-z]+\s+\d)/i);
-        if (parts.length > 1) {
-            sentences.push(...parts);
-        } else {
-            sentences.push(trimmed);
+    if (isTransferText) {
+        sentences.push(cleaned.trim());
+    } else {
+        const rawSentences = cleaned.split(/,|\.\s+(?=[а-яa-z])/i)
+            .flatMap(s => s.split(/\bи ещё\b|\bещё\b|\bтакже\b|\bплюс\b|\band also\b|\bplus\b|\bund auch\b|\bet aussi\b|\by también\b/i));
+        for (const raw of rawSentences) {
+            const trimmed = raw.trim();
+            if (!trimmed) continue;
+            const parts = trimmed.split(/\s+(?=[а-яa-z]+\s+\d)/i);
+            if (parts.length > 1) {
+                sentences.push(...parts);
+            } else {
+                sentences.push(trimmed);
+            }
         }
     }
 
