@@ -33,7 +33,7 @@ import { parseVoiceText, learnFromCorrection, type ParsedTransaction } from '@/l
 import type { Account, Category } from '@/types';
 // Conditional import: only load if native module is linked (crashes in Expo Go otherwise)
 let Voice: any = null;
-if (NativeModules.Voice) {
+if (NativeModules.Voice || NativeModules.RCTVoice) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     try { Voice = require('@react-native-voice/voice').default; } catch { /* not linked */ }
 }
@@ -163,7 +163,7 @@ export default function VoiceInput({
         if (!text) return;
         setStage('processing');
         setTimeout(() => {
-            const items = parseVoiceText(text, categories, baseCurrency, accounts[0]?.id ?? '');
+            const items = parseVoiceText(text, categories, baseCurrency, accounts[0]?.id ?? '', accounts.map(a => ({ id: a.id, name: a.name })));
             if (items.length === 0) {
                 setError(t('voice.parseError'));
             }
@@ -189,7 +189,7 @@ export default function VoiceInput({
         }
         setStage('processing');
         setTimeout(() => {
-            const items = parseVoiceText(text, categories, baseCurrency, accounts[0]?.id ?? '');
+            const items = parseVoiceText(text, categories, baseCurrency, accounts[0]?.id ?? '', accounts.map(a => ({ id: a.id, name: a.name })));
             console.log('Parsed items:', items.length);
             if (items.length === 0) {
                 setError(t('voice.parseError'));
@@ -229,26 +229,53 @@ export default function VoiceInput({
                 const account = accounts.find(a => a.id === accountId) ?? accounts[0];
                 const amount = Math.abs(tx.amount);
 
-                const { error: insertErr } = await supabase.from('transactions').insert({
-                    household_id: householdId,
-                    account_id: accountId,
-                    category_id: cat.id,
-                    user_id: user.id,
-                    type: tx.type,
-                    amount,
-                    currency: tx.currency || baseCurrency,
-                    date: tx.date,
-                    note: tx.note || null,
-                });
+                if (tx.type === 'transfer' && tx.toAccountId) {
+                    // Transfer between accounts
+                    const toAccount = accounts.find(a => a.id === tx.toAccountId);
+                    if (toAccount) {
+                        // Debit from source
+                        await supabase.from('transactions').insert({
+                            household_id: householdId,
+                            account_id: accountId,
+                            category_id: null,
+                            user_id: user.id,
+                            type: 'transfer',
+                            amount,
+                            currency: tx.currency || baseCurrency,
+                            date: tx.date,
+                            note: tx.note || null,
+                        });
+                        await supabase.from('accounts')
+                            .update({ balance: account.balance - amount })
+                            .eq('id', accountId);
+                        // Credit to destination
+                        await supabase.from('accounts')
+                            .update({ balance: toAccount.balance + amount })
+                            .eq('id', tx.toAccountId);
+                    }
+                } else {
+                    // Regular expense/income
+                    const { error: insertErr } = await supabase.from('transactions').insert({
+                        household_id: householdId,
+                        account_id: accountId,
+                        category_id: cat.id,
+                        user_id: user.id,
+                        type: tx.type,
+                        amount,
+                        currency: tx.currency || baseCurrency,
+                        date: tx.date,
+                        note: tx.note || null,
+                    });
 
-                if (insertErr) {
-                    console.warn('Insert error:', insertErr);
+                    if (insertErr) {
+                        console.warn('Insert error:', insertErr);
+                    }
+
+                    const delta = tx.type === 'income' ? amount : -amount;
+                    await supabase.from('accounts')
+                        .update({ balance: account.balance + delta })
+                        .eq('id', accountId);
                 }
-
-                const delta = tx.type === 'income' ? amount : -amount;
-                await supabase.from('accounts')
-                    .update({ balance: account.balance + delta })
-                    .eq('id', accountId);
 
                 if (tx.isRecurring && tx.recurringFrequency) {
                     await supabase.from('recurring_payments').insert({
@@ -508,13 +535,20 @@ export default function VoiceInput({
                                         </View>
 
                                         {/* Icon */}
-                                        <Text style={{ fontSize: 18, fontFamily: fonts.body }}>{tx.category?.icon ?? typeIcon(tx.type)}</Text>
+                                        {(() => {
+                                            const iconName = tx.category?.icon;
+                                            const Ic = iconName ? ICON_MAP[iconName] : null;
+                                            if (Ic) return <Ic color={tx.category?.color ?? colors.textMuted} size={20} />;
+                                            return <Text style={{ fontSize: 18 }}>{typeIcon(tx.type)}</Text>;
+                                        })()}
 
                                         {/* Info */}
                                         <View style={{ flex: 1 }}>
                                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                                                 <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>
-                                                    {tx.category?.name ?? tx.note}
+                                                    {tx.type === 'transfer'
+                                                        ? `${accounts.find(a => a.id === tx.accountId)?.name ?? '?'} → ${accounts.find(a => a.id === tx.toAccountId)?.name ?? '?'}`
+                                                        : (tx.category?.name ?? tx.note)}
                                                 </Text>
                                                 {tx.isRecurring && (
                                                     <View style={{ backgroundColor: '#7C6FFF', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 }}>
@@ -591,8 +625,8 @@ export default function VoiceInput({
                                                 </ScrollView>
                                             </View>
 
-                                            {/* Category */}
-                                            <View>
+                                            {/* Category (hidden for transfers) */}
+                                            {tx.type !== 'transfer' && <View>
                                                 <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 6, fontFamily: fonts.bodySemiBold }}>
                                                     {t('transactionForm.category')}
                                                 </Text>
@@ -655,28 +689,37 @@ export default function VoiceInput({
                                                         </TouchableOpacity>
                                                     </View>
                                                 )}
-                                            </View>
+                                            </View>}
 
                                             {/* Amount + Currency */}
                                             <View>
                                                 <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 6, fontFamily: fonts.bodySemiBold }}>
                                                     {t('transactionForm.amount')}
                                                 </Text>
-                                                <View style={{ flexDirection: 'row', gap: 10 }}>
+                                                <View style={{
+                                                    flexDirection: 'row', alignItems: 'center',
+                                                    backgroundColor: colors.bgTertiary, borderRadius: 12,
+                                                    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
+                                                    paddingHorizontal: 14,
+                                                }}>
                                                     <TextInput
                                                         value={String(tx.amount)}
                                                         onChangeText={v => setParsed(prev => prev.map((p, i) => i === idx ? { ...p, amount: parseFloat(v) || 0 } : p))}
                                                         keyboardType="decimal-pad"
-                                                        style={{ flex: 1, backgroundColor: colors.bgTertiary, color: colors.textPrimary,
-                                                            borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 18, fontWeight: '700', fontFamily: fonts.heading }}
+                                                        style={{ flex: 1, color: colors.textPrimary, paddingVertical: 12,
+                                                            fontSize: 18, fontFamily: fonts.bodySemiBold }}
                                                     />
                                                     <TouchableOpacity
                                                         onPress={() => setShowCurrencyDrop(prev => !prev)}
-                                                        style={{ backgroundColor: colors.bgTertiary, borderRadius: 12,
-                                                            paddingHorizontal: 16, justifyContent: 'center' }}>
-                                                        <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '700', fontFamily: fonts.bodySemiBold }}>
-                                                            {tx.currency} ›
+                                                        style={{
+                                                            flexDirection: 'row', alignItems: 'center', gap: 4,
+                                                            paddingLeft: 12, paddingVertical: 12,
+                                                            borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.1)',
+                                                        }}>
+                                                        <Text style={{ color: colors.textPrimary, fontSize: 16, fontFamily: fonts.bodySemiBold }}>
+                                                            {tx.currency}
                                                         </Text>
+                                                        <Text style={{ color: colors.textMuted, fontSize: 11 }}>›</Text>
                                                     </TouchableOpacity>
                                                 </View>
                                                 {showCurrencyDrop && (

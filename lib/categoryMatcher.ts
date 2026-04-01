@@ -554,7 +554,9 @@ export function parseDate(text: string): string {
 export function detectType(text: string): 'expense' | 'income' | 'transfer' {
     const s = text.toLowerCase();
     if (/получил|зарплата|доход|пришло|заработал|income|salary|received|earned|gehalt|salaire|salario/.test(s)) return 'income';
-    if (/перевёл|перевел|отправил|transfer|sent|überweisung|virement|transferencia/.test(s)) return 'transfer';
+    // Transfer requires BOTH "from" and "to" markers, or explicit "перевод/transfer" word
+    if (/перевёл|перевел|перевод|transfer|sent|überweisung|virement|transferencia/.test(s)) return 'transfer';
+    if (/(со? счёта?|со? счета?|from ).*(на счёт|на счет| to | auf | à )/i.test(s)) return 'transfer';
     return 'expense';
 }
 
@@ -612,6 +614,7 @@ export interface ParsedTransaction {
     category: Category | null;
     confidence: number;
     accountId: string;
+    toAccountId?: string;
     date: string;
     note: string;
     checked: boolean;
@@ -628,14 +631,104 @@ function parseBasics(text: string, baseCurrency: string) {
     };
 }
 
+// ── Account matching for transfers ─────────────────────────────────────────
+
+interface AccountLight { id: string; name: string; }
+
+function matchAccountByName(text: string, accounts: AccountLight[]): { fromId: string | null; toId: string | null } {
+    const s = text.toLowerCase();
+    let fromId: string | null = null;
+    let toId: string | null = null;
+
+    // Sort accounts by name length descending to match longest first
+    const sorted = [...accounts].sort((a, b) => b.name.length - a.name.length);
+
+    // Pattern: "со счёта X ... на счёт Y" / "с X на Y" / "from X to Y"
+    const fromPatterns = [/(?:со? счёта?|с |from |von |de |desde )\s*(.+?)(?:\s+(?:на счёт|на |to |auf |à |a )|$)/i];
+    const toPatterns = [/(?:на счёт|на |to |auf |à |a )\s*(.+?)(?:\s+\d|$)/i];
+
+    for (const acc of sorted) {
+        const name = acc.name.toLowerCase();
+        if (!name) continue;
+
+        // Check if account name appears after "from" markers
+        const fromMarkers = ['со счёта', 'со счета', 'с счёта', 'с счета', 'с ', 'from ', 'von ', 'de ', 'desde '];
+        const toMarkers = ['на счёт', 'на счет', 'на ', 'to ', 'auf ', 'à ', 'a '];
+
+        for (const marker of fromMarkers) {
+            const idx = s.indexOf(marker);
+            if (idx !== -1) {
+                const after = s.substring(idx + marker.length).trim();
+                if (after.startsWith(name) || after.includes(name)) {
+                    fromId = acc.id;
+                    break;
+                }
+            }
+        }
+
+        for (const marker of toMarkers) {
+            // Find "to" marker that comes AFTER "from" content
+            const fromEnd = fromId ? s.indexOf(sorted.find(a => a.id === fromId)?.name.toLowerCase() ?? '') + 1 : 0;
+            const searchFrom = Math.max(fromEnd, 0);
+            const idx = s.indexOf(marker, searchFrom);
+            if (idx !== -1 && idx >= searchFrom) {
+                const after = s.substring(idx + marker.length).trim();
+                if ((after.startsWith(name) || after.includes(name)) && acc.id !== fromId) {
+                    toId = acc.id;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Fallback: just find any two account names mentioned
+    if (!fromId || !toId) {
+        const found: string[] = [];
+        for (const acc of sorted) {
+            if (s.includes(acc.name.toLowerCase()) && !found.includes(acc.id)) {
+                found.push(acc.id);
+                if (found.length >= 2) break;
+            }
+        }
+        if (found.length >= 2) {
+            fromId = fromId ?? found[0];
+            toId = toId ?? found[1];
+        } else if (found.length === 1) {
+            // One account found — use as "to", keep default as "from"
+            toId = toId ?? found[0];
+        }
+    }
+
+    return { fromId, toId };
+}
+
 export function parseVoiceText(
     text: string,
     cats: Category[],
     defaultCurrency: string,
     defaultAccountId: string,
+    accounts?: AccountLight[],
 ): ParsedTransaction[] {
     const results: ParsedTransaction[] = [];
-    const sentences = text.split(/,|и ещё|ещё|также|плюс|and also|plus|und auch|et aussi|y también/i);
+    // Normalize: remove dots after abbreviations so they don't act as sentence separators
+    const cleaned = text.replace(/(\b(?:руб|тыс|шт|коп|EUR|USD|RUB|GBP|CHF))\./gi, '$1');
+    // Split by: comma, period+space+letter, or keywords
+    // Then further split by pattern: "number [currency] word" boundaries (e.g., "100 руб кофе" → ["100 руб", "кофе"])
+    const rawSentences = cleaned.split(/,|\.\s+(?=[а-яa-z])/i)
+        .flatMap(s => s.split(/\bи ещё\b|\bещё\b|\bтакже\b|\bплюс\b|\band also\b|\bplus\b|\bund auch\b|\bet aussi\b|\by también\b/i));
+    // Further split: if a sentence contains multiple "word number" patterns, split between them
+    const sentences: string[] = [];
+    for (const raw of rawSentences) {
+        const trimmed = raw.trim();
+        if (!trimmed) continue;
+        // Match pattern: split before a new word that is followed by a number (new transaction)
+        const parts = trimmed.split(/\s+(?=[а-яa-z]+\s+\d)/i);
+        if (parts.length > 1) {
+            sentences.push(...parts);
+        } else {
+            sentences.push(trimmed);
+        }
+    }
 
     for (const sentence of sentences) {
         const s = sentence.trim();
@@ -647,9 +740,49 @@ export function parseVoiceText(
         ));
         const { isRecurring, frequency } = detectRecurring(s);
 
+        let accountId = defaultAccountId;
+        let toAccountId: string | undefined;
+
+        // Try to match account names from text (works for both transfers and "со счёта X" expenses)
+        if (accounts && accounts.length > 0) {
+            const sLower = s.toLowerCase();
+            // Check for "со счёта X" / "с X" pattern to set source account
+            const fromMarkers = ['со счёта ', 'со счета ', 'с счёта ', 'с счета ', 'from '];
+            const sortedAccs = [...accounts].sort((a, b) => b.name.length - a.name.length);
+            for (const marker of fromMarkers) {
+                const mIdx = sLower.indexOf(marker);
+                if (mIdx !== -1) {
+                    const after = sLower.substring(mIdx + marker.length).trim();
+                    for (const acc of sortedAccs) {
+                        if (after.startsWith(acc.name.toLowerCase()) || after.includes(acc.name.toLowerCase())) {
+                            accountId = acc.id;
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        if (basics.type === 'transfer' && accounts && accounts.length > 0) {
+            const { fromId, toId } = matchAccountByName(s, accounts);
+            if (fromId) accountId = fromId;
+            if (toId) toAccountId = toId;
+        }
+
+        // If no explicit currency detected, inherit from previous result
+        let currency = basics.currency;
+        if (currency === defaultCurrency && results.length > 0) {
+            // Check if this sentence has an explicit currency marker
+            const hasExplicit = /руб|₽|rub|евро|€|eur|доллар|\$|usd|фунт|£|gbp|франк|chf|лари|gel|тенге|kzt|лира|try|дирхам|aed|гривн|uah|злот|pln|крон|czk|шекел|ils|драм|amd|сум|uzs|манат|azn|бел/i.test(s);
+            if (!hasExplicit) {
+                currency = results[results.length - 1].currency;
+            }
+        }
+
         results.push({
-            ...basics, category, confidence,
-            accountId: defaultAccountId,
+            ...basics, category, confidence, currency,
+            accountId, toAccountId,
             note: s, checked: true,
             isRecurring, recurringFrequency: frequency,
         });
