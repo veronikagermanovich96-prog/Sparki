@@ -190,9 +190,9 @@ export default function Dashboard() {
     const [withdrawing,     setWithdrawing]     = useState(false);
 
     // ── Analytics period ────────────────────────────────────────────────────
-    type AnalyticsPeriod = 'day' | 'week' | 'month' | 'year';
+    type AnalyticsPeriod = 'day' | 'week' | 'month' | 'quarter' | 'year';
     const [analyticsPeriod, setAnalyticsPeriod] = useState<AnalyticsPeriod>('month');
-    const ANALYTICS_LABELS: Record<AnalyticsPeriod, string> = { day: t('dashboard.periodDay'), week: t('dashboard.periodWeek'), month: t('dashboard.periodMonth'), year: t('dashboard.periodYear') };
+    const ANALYTICS_LABELS: Record<AnalyticsPeriod, string> = { day: t('dashboard.periodDay'), week: t('dashboard.periodWeek'), month: t('dashboard.periodMonth'), quarter: t('dashboard.periodQuarter'), year: t('dashboard.periodYear') };
 
     // ── Icon Array ───────────────────────────────────────────────────────────
     const [period,       setPeriod]       = useState<Period>('month');
@@ -663,6 +663,10 @@ export default function Dashboard() {
             case 'day':   periodStart = format(startOfDay(now), 'yyyy-MM-dd'); break;
             case 'week':  periodStart = format(startOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd'); break;
             case 'month': periodStart = format(startOfMonth(now), 'yyyy-MM-dd'); break;
+            case 'quarter': {
+                const qStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+                periodStart = format(qStart, 'yyyy-MM-dd'); break;
+            }
             case 'year':  periodStart = format(startOfYear(now), 'yyyy-MM-dd'); break;
         }
         const filtered = transactions.filter(t => t.date >= periodStart);
@@ -679,7 +683,7 @@ export default function Dashboard() {
             .slice(0, 5);
         const max = items[0]?.total ?? 1;
         const periodTotal = filtered.reduce((s, t) => s + (t.amount_base ?? t.amount), 0);
-        const periodLabel = { day: t('analytics.todayPeriod'), week: t('analytics.thisWeek'), month: t('analytics.thisMonth'), year: t('analytics.thisYear') }[analyticsPeriod];
+        const periodLabel = { day: t('analytics.todayPeriod'), week: t('analytics.thisWeek'), month: t('analytics.thisMonth'), quarter: t('dashboard.periodQuarter'), year: t('analytics.thisYear') }[analyticsPeriod];
         return { items, max, monthTotal: periodTotal, periodLabel, periodStart };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [transactions, categories, analyticsPeriod]);

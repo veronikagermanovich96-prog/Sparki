@@ -28,7 +28,7 @@ import {
     Package, PawPrint, Pencil, Pill, Plane, Receipt, Scissors,
     ShoppingBag, ShoppingCart, Shirt, Smartphone, Sofa, Sparkles, Star,
     Tag, Train, TrendingDown, TrendingUp, Trophy, Tv, Utensils,
-    Wallet, Wifi, Zap,
+    Wallet, Wifi, X, Zap,
 } from 'lucide-react-native';
 import { Circle, G, Line as SvgLine, Path, Rect, Svg, Text as SvgText } from 'react-native-svg';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -1015,7 +1015,6 @@ export default function AnalyticsScreen() {
     type WhatIfPeriod = 1 | 3 | 6 | 12;
     interface WhatIfScenario {
         categoryOverrides: Record<string, number>;
-        tagOverrides: Record<string, number>;
         incomeOverride: number | null;
         creditOverride: number | null;
         subscriptionSavings: number;
@@ -1023,7 +1022,6 @@ export default function AnalyticsScreen() {
     const [whatIfPeriod, setWhatIfPeriod] = useState<WhatIfPeriod>(3);
     const [whatIfScenario, setWhatIfScenario] = useState<WhatIfScenario>({
         categoryOverrides: {},
-        tagOverrides: {},
         incomeOverride: null,
         creditOverride: null,
         subscriptionSavings: 0,
@@ -1036,24 +1034,16 @@ export default function AnalyticsScreen() {
         const currentCredit = loans.reduce((s, l) => s + (l.monthlyPayment ?? 0), 0);
         const newIncome = whatIfScenario.incomeOverride ?? currentIncome;
 
-        const monthData = overviewByPeriod['month'] ?? overviewByPeriod[summaryPeriod];
         const catSavings = Object.entries(whatIfScenario.categoryOverrides)
             .reduce((sum, [catId, newAmount]) => {
-                const fromExtra = extraCategories.find(c => c.categoryId === catId)?.spent;
-                const fromOverview = monthData?.categories?.find(c => c.id === catId)?.amount;
-                const current = fromExtra ?? fromOverview ?? 0;
-                return sum + Math.max(0, current - newAmount);
-            }, 0);
-        const tagSavings = Object.entries(whatIfScenario.tagOverrides ?? {})
-            .reduce((sum, [tagId, newAmount]) => {
-                const current = extraCategories.flatMap(c => c.tags).find(t => t.tagId === tagId)?.spent ?? 0;
+                const current = extraCategories.find(c => c.categoryId === catId)?.spent ?? 0;
                 return sum + Math.max(0, current - newAmount);
             }, 0);
 
         const extraCreditPayment = whatIfScenario.creditOverride ?? 0;
         const subscriptionSavings = whatIfScenario.subscriptionSavings;
 
-        const totalMonthlySavings = (newIncome - currentIncome) + catSavings + tagSavings + subscriptionSavings - extraCreditPayment;
+        const totalMonthlySavings = (newIncome - currentIncome) + catSavings + subscriptionSavings - extraCreditPayment;
         const totalSavings = totalMonthlySavings * whatIfPeriod;
 
         const totalCreditDebt = loans.reduce((s, l) => s + ((l as any).remaining_balance ?? (l.totalAmount - l.paidAmount)), 0);
@@ -3912,49 +3902,21 @@ export default function AnalyticsScreen() {
 
                                         {showWhatIf && (() => {
                                             const whatIfResult = computeWhatIf();
-                                            const wiCatFromExtra = extraCategories
-                                                .filter(e => e.spent > 0)
-                                                .sort((a, b) => b.spent - a.spent)
-                                                .slice(0, 5);
-                                            const wiCatFromData = (catData?.categories ?? [])
-                                                .slice(0, 5)
-                                                .map(c => {
-                                                    const full = allCategories.find(ac => ac.id === c.id);
-                                                    return {
-                                                        categoryId: c.id,
-                                                        name: c.name,
-                                                        icon: c.icon ?? '',
-                                                        color: c.color ?? colors.textMuted,
-                                                        spent: c.amount,
-                                                        tags: full?.tags ?? [],
-                                                    };
-                                                });
-                                            const wiCategories = wiCatFromExtra.length > 0 ? wiCatFromExtra : wiCatFromData;
-
-                                            const currentIncome = (overviewByPeriod['month'] ?? overviewByPeriod[summaryPeriod])?.income ?? 0;
-                                            const incomeOn = whatIfScenario.incomeOverride !== null;
-                                            const creditOn = whatIfScenario.creditOverride !== null;
-                                            const subsOn = whatIfScenario.subscriptionSavings > 0;
-
-                                            const wiRowStyle = { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' };
-                                            const wiExpandBg = { backgroundColor: 'rgba(124,111,255,0.06)', borderRadius: 10, padding: 10, marginBottom: 10 };
-                                            const wiInputStyle = {
-                                                backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 8,
-                                                paddingHorizontal: 10, paddingVertical: 6,
-                                                color: colors.textPrimary, fontSize: 13,
-                                                fontFamily: fonts.body, width: '100%' as const,
-                                            };
-                                            const wiPresetStyle = (active: boolean) => ({
-                                                flex: 1, paddingVertical: 6, borderRadius: 8, alignItems: 'center' as const,
-                                                backgroundColor: active ? 'rgba(124,111,255,0.25)' : 'rgba(255,255,255,0.05)',
-                                                borderWidth: 1,
-                                                borderColor: active ? 'rgba(124,111,255,0.4)' : 'rgba(255,255,255,0.08)',
-                                            });
+                                            const wiCategories = extraCategories.length > 0
+                                                ? extraCategories.slice(0, 5)
+                                                : (catData?.categories ?? []).slice(0, 5).map(c => ({
+                                                    categoryId: c.id,
+                                                    name: c.name,
+                                                    icon: c.icon ?? '',
+                                                    color: c.color ?? colors.textMuted,
+                                                    spent: c.amount,
+                                                }));
 
                                             return (
                                                 <View style={{ marginTop: 16 }}>
                                                     {/* Period selector */}
-                                                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 18 }}>
+                                                    <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 8 }}>Период прогноза</Text>
+                                                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
                                                         {([1, 3, 6, 12] as WhatIfPeriod[]).map(p => (
                                                             <TouchableOpacity
                                                                 key={p}
@@ -3973,287 +3935,132 @@ export default function AnalyticsScreen() {
                                                         ))}
                                                     </View>
 
-                                                    {/* Income */}
-                                                    <View style={wiRowStyle}>
-                                                        <TouchableOpacity
-                                                            onPress={() => setWhatIfScenario(s => ({ ...s, incomeOverride: incomeOn ? null : currentIncome }))}
-                                                            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 }}
-                                                        >
+                                                    {/* Income override */}
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' }}>
+                                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
                                                             <Text style={{ fontSize: 16 }}>💰</Text>
                                                             <View style={{ flex: 1 }}>
-                                                                <Text style={{ fontSize: 13, color: colors.textPrimary, fontFamily: fonts.body }}>Доход</Text>
-                                                                <Text style={{ fontSize: 11, color: colors.textDisabled, fontFamily: fonts.body }}>
-                                                                    {formatAmount(currentIncome, currency)}/мес
+                                                                <Text style={{ fontSize: 13, fontFamily: fonts.body, color: colors.textPrimary }}>Доход</Text>
+                                                                <Text style={{ fontSize: 11, fontFamily: fonts.body, color: colors.textDisabled }}>
+                                                                    {formatAmount((overviewByPeriod['month'] ?? overviewByPeriod[summaryPeriod])?.income ?? 0, currency)}/мес
                                                                 </Text>
                                                             </View>
-                                                            <Switch
-                                                                value={incomeOn}
-                                                                onValueChange={v => setWhatIfScenario(s => ({ ...s, incomeOverride: v ? currentIncome : null }))}
-                                                                trackColor={{ false: 'rgba(255,255,255,0.1)', true: 'rgba(124,111,255,0.4)' }}
-                                                                thumbColor={incomeOn ? '#7C6FFF' : '#555'}
+                                                        </View>
+                                                        {whatIfScenario.incomeOverride !== null ? (
+                                                            <TextInput
+                                                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, color: colors.textPrimary, fontSize: 13, fontFamily: fonts.body, width: 90, textAlign: 'right' }}
+                                                                keyboardType="decimal-pad" autoFocus
+                                                                value={String(whatIfScenario.incomeOverride)}
+                                                                onChangeText={v => {
+                                                                    const num = parseFloat(v.replace(/[^0-9.,]/g, '').replace(',', '.'));
+                                                                    setWhatIfScenario(s => ({ ...s, incomeOverride: v === '' ? null : (isNaN(num) ? s.incomeOverride : num) }));
+                                                                }}
                                                             />
-                                                        </TouchableOpacity>
-                                                        {incomeOn && (
-                                                            <View style={wiExpandBg}>
-                                                                <TextInput
-                                                                    style={wiInputStyle}
-                                                                    keyboardType="decimal-pad"
-                                                                    placeholder={String(Math.round(currentIncome))}
-                                                                    placeholderTextColor={colors.textDisabled}
-                                                                    value={whatIfScenario.incomeOverride !== null ? String(whatIfScenario.incomeOverride) : ''}
-                                                                    onChangeText={v => {
-                                                                        const num = parseFloat(v.replace(/[^0-9.,]/g, '').replace(',', '.'));
-                                                                        setWhatIfScenario(s => ({ ...s, incomeOverride: v === '' ? 0 : (isNaN(num) ? s.incomeOverride : num) }));
-                                                                    }}
-                                                                />
-                                                                {whatIfScenario.incomeOverride !== null && whatIfScenario.incomeOverride !== currentIncome && (
-                                                                    <Text style={{ fontSize: 11, marginTop: 4, color: whatIfScenario.incomeOverride > currentIncome ? '#4FFFB0' : '#f87171' }}>
-                                                                        {whatIfScenario.incomeOverride > currentIncome ? '+' : ''}
-                                                                        {formatAmount(whatIfScenario.incomeOverride - currentIncome, currency)}/мес
-                                                                    </Text>
-                                                                )}
-                                                            </View>
+                                                        ) : (
+                                                            <Switch value={false} onValueChange={() => setWhatIfScenario(s => ({ ...s, incomeOverride: (overviewByPeriod['month'] ?? overviewByPeriod[summaryPeriod])?.income ?? 0 }))}
+                                                                trackColor={{ false: 'rgba(255,255,255,0.1)', true: 'rgba(124,111,255,0.4)' }} thumbColor="#555" />
                                                         )}
                                                     </View>
 
-                                                    {/* Credit */}
+                                                    {/* Extra credit payment */}
                                                     {loans.length > 0 && (
-                                                        <View style={wiRowStyle}>
-                                                            <TouchableOpacity
-                                                                onPress={() => setWhatIfScenario(s => ({ ...s, creditOverride: creditOn ? null : 0 }))}
-                                                                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 }}
-                                                            >
+                                                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' }}>
+                                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
                                                                 <Text style={{ fontSize: 16 }}>💳</Text>
                                                                 <View style={{ flex: 1 }}>
-                                                                    <Text style={{ fontSize: 13, color: colors.textPrimary, fontFamily: fonts.body }}>Доплата по кредиту</Text>
-                                                                    <Text style={{ fontSize: 11, color: colors.textDisabled, fontFamily: fonts.body }}>
-                                                                        Платёж: {formatAmount(loans.reduce((s, l) => s + (l.monthlyPayment ?? 0), 0), currency)}/мес
+                                                                    <Text style={{ fontSize: 13, fontFamily: fonts.body, color: colors.textPrimary }}>Доплата по кредиту</Text>
+                                                                    <Text style={{ fontSize: 11, fontFamily: fonts.body, color: colors.textDisabled }}>
+                                                                        Платёж: {formatAmount(loans.reduce((s, l) => s + ((l as any).monthly_payment ?? 0), 0), currency)}/мес
                                                                     </Text>
                                                                 </View>
-                                                                <Switch
-                                                                    value={creditOn}
-                                                                    onValueChange={v => setWhatIfScenario(s => ({ ...s, creditOverride: v ? 0 : null }))}
-                                                                    trackColor={{ false: 'rgba(255,255,255,0.1)', true: 'rgba(124,111,255,0.4)' }}
-                                                                    thumbColor={creditOn ? '#7C6FFF' : '#555'}
+                                                            </View>
+                                                            {whatIfScenario.creditOverride !== null ? (
+                                                                <TextInput
+                                                                    style={{ backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, color: colors.textPrimary, fontSize: 13, fontFamily: fonts.body, width: 90, textAlign: 'right' }}
+                                                                    keyboardType="decimal-pad" autoFocus
+                                                                    value={String(whatIfScenario.creditOverride)}
+                                                                    onChangeText={v => {
+                                                                        const num = parseFloat(v.replace(/[^0-9.,]/g, '').replace(',', '.'));
+                                                                        setWhatIfScenario(s => ({ ...s, creditOverride: v === '' ? null : (isNaN(num) ? s.creditOverride : num) }));
+                                                                    }}
                                                                 />
-                                                            </TouchableOpacity>
-                                                            {creditOn && (
-                                                                <View style={wiExpandBg}>
-                                                                    <Text style={{ fontSize: 11, color: colors.textDisabled, marginBottom: 6, fontFamily: fonts.body }}>Доплата сверх обычного платежа</Text>
-                                                                    <TextInput
-                                                                        style={wiInputStyle}
-                                                                        keyboardType="decimal-pad"
-                                                                        placeholder="0"
-                                                                        placeholderTextColor={colors.textDisabled}
-                                                                        value={whatIfScenario.creditOverride ? String(whatIfScenario.creditOverride) : ''}
-                                                                        onChangeText={v => {
-                                                                            const num = parseFloat(v.replace(/[^0-9.,]/g, '').replace(',', '.'));
-                                                                            setWhatIfScenario(s => ({ ...s, creditOverride: isNaN(num) ? 0 : num }));
-                                                                        }}
-                                                                    />
-                                                                </View>
+                                                            ) : (
+                                                                <Switch value={false} onValueChange={() => setWhatIfScenario(s => ({ ...s, creditOverride: 0 }))}
+                                                                    trackColor={{ false: 'rgba(255,255,255,0.1)', true: 'rgba(124,111,255,0.4)' }} thumbColor="#555" />
                                                             )}
                                                         </View>
                                                     )}
 
-                                                    {/* Subscriptions */}
-                                                    <View style={wiRowStyle}>
-                                                        <TouchableOpacity
-                                                            onPress={() => setWhatIfScenario(s => ({ ...s, subscriptionSavings: subsOn ? 0 : 1 }))}
-                                                            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 }}
-                                                        >
+                                                    {/* Subscription savings */}
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' }}>
+                                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
                                                             <Text style={{ fontSize: 16 }}>📱</Text>
                                                             <View style={{ flex: 1 }}>
-                                                                <Text style={{ fontSize: 13, color: colors.textPrimary, fontFamily: fonts.body }}>Подписки</Text>
-                                                                <Text style={{ fontSize: 11, color: colors.textDisabled, fontFamily: fonts.body }}>Сколько сэкономить</Text>
+                                                                <Text style={{ fontSize: 13, fontFamily: fonts.body, color: colors.textPrimary }}>Подписки</Text>
+                                                                <Text style={{ fontSize: 11, fontFamily: fonts.body, color: colors.textDisabled }}>Сколько сэкономить</Text>
                                                             </View>
-                                                            <Switch
-                                                                value={subsOn}
-                                                                onValueChange={v => setWhatIfScenario(s => ({ ...s, subscriptionSavings: v ? 1 : 0 }))}
-                                                                trackColor={{ false: 'rgba(255,255,255,0.1)', true: 'rgba(124,111,255,0.4)' }}
-                                                                thumbColor={subsOn ? '#7C6FFF' : '#555'}
+                                                        </View>
+                                                        {whatIfScenario.subscriptionSavings > 0 ? (
+                                                            <TextInput
+                                                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, color: colors.textPrimary, fontSize: 13, fontFamily: fonts.body, width: 90, textAlign: 'right' }}
+                                                                keyboardType="decimal-pad" autoFocus
+                                                                value={String(whatIfScenario.subscriptionSavings)}
+                                                                onChangeText={v => {
+                                                                    const num = parseFloat(v.replace(/[^0-9.,]/g, '').replace(',', '.'));
+                                                                    setWhatIfScenario(s => ({ ...s, subscriptionSavings: isNaN(num) ? 0 : num }));
+                                                                }}
                                                             />
-                                                        </TouchableOpacity>
-                                                        {subsOn && (
-                                                            <View style={wiExpandBg}>
-                                                                <TextInput
-                                                                    style={wiInputStyle}
-                                                                    keyboardType="decimal-pad"
-                                                                    placeholder="0"
-                                                                    placeholderTextColor={colors.textDisabled}
-                                                                    value={whatIfScenario.subscriptionSavings > 0 ? String(whatIfScenario.subscriptionSavings) : ''}
-                                                                    onChangeText={v => {
-                                                                        const num = parseFloat(v.replace(/[^0-9.,]/g, '').replace(',', '.'));
-                                                                        setWhatIfScenario(s => ({ ...s, subscriptionSavings: isNaN(num) ? 0 : num }));
-                                                                    }}
-                                                                />
-                                                            </View>
+                                                        ) : (
+                                                            <Switch value={false} onValueChange={() => setWhatIfScenario(s => ({ ...s, subscriptionSavings: 1 }))}
+                                                                trackColor={{ false: 'rgba(255,255,255,0.1)', true: 'rgba(124,111,255,0.4)' }} thumbColor="#555" />
                                                         )}
                                                     </View>
 
-                                                    {/* Categories */}
-                                                    {wiCategories.map((cat, idx) => {
-                                                        const catOn = whatIfScenario.categoryOverrides[cat.categoryId] !== undefined;
-                                                        const currentVal = whatIfScenario.categoryOverrides[cat.categoryId] ?? Math.round(cat.spent);
-                                                        const catTags = (cat.tags ?? []).map((t: any) => ({ id: t.tagId ?? t.id, name: t.tagName ?? t.name }));
-                                                        const isLast = idx === wiCategories.length - 1;
-                                                        return (
-                                                            <View key={cat.categoryId} style={isLast ? undefined : wiRowStyle}>
-                                                                <TouchableOpacity
-                                                                    onPress={() => setWhatIfScenario(s => {
-                                                                        const next = { ...s.categoryOverrides };
-                                                                        if (catOn) { delete next[cat.categoryId]; } else { next[cat.categoryId] = Math.round(cat.spent); }
-                                                                        return { ...s, categoryOverrides: next };
-                                                                    })}
-                                                                    style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 }}
-                                                                >
-                                                                    <CategoryIcon iconName={cat.icon} color={cat.color ?? colors.textMuted} size={16} />
-                                                                    <View style={{ flex: 1 }}>
-                                                                        <Text style={{ fontSize: 13, color: colors.textPrimary, fontFamily: fonts.body }} numberOfLines={1}>{cat.name}</Text>
-                                                                        <Text style={{ fontSize: 11, color: colors.textDisabled, fontFamily: fonts.body }}>
-                                                                            {formatAmount(cat.spent, currency)}/мес
-                                                                        </Text>
-                                                                    </View>
-                                                                    <Switch
-                                                                        value={catOn}
-                                                                        onValueChange={v => setWhatIfScenario(s => {
-                                                                            const next = { ...s.categoryOverrides };
-                                                                            if (!v) { delete next[cat.categoryId]; } else { next[cat.categoryId] = Math.round(cat.spent); }
-                                                                            return { ...s, categoryOverrides: next };
-                                                                        })}
-                                                                        trackColor={{ false: 'rgba(255,255,255,0.1)', true: 'rgba(124,111,255,0.4)' }}
-                                                                        thumbColor={catOn ? '#7C6FFF' : '#555'}
-                                                                    />
-                                                                </TouchableOpacity>
-                                                                {catOn && (
-                                                                    <View style={wiExpandBg}>
-                                                                        {catTags.length > 0 && (
-                                                                            <View style={{ marginBottom: 8 }}>
-                                                                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginBottom: 4 }}>
-                                                                                    {catTags.slice(0, 4).map((tag: { id: string; name: string; spent?: number }) => {
-                                                                                        const tagOn = whatIfScenario.tagOverrides[tag.id] !== undefined;
-                                                                                        return (
-                                                                                            <TouchableOpacity
-                                                                                                key={tag.id}
-                                                                                                onPress={() => setWhatIfScenario(s => {
-                                                                                                    const next = { ...s.tagOverrides };
-                                                                                                    if (tagOn) { delete next[tag.id]; } else { next[tag.id] = Math.round(tag.spent ?? 0); }
-                                                                                                    return { ...s, tagOverrides: next };
-                                                                                                })}
-                                                                                                style={{
-                                                                                                    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
-                                                                                                    backgroundColor: tagOn ? (cat.color ?? '#7C6FFF') + '44' : (cat.color ?? '#7C6FFF') + '22',
-                                                                                                    borderWidth: tagOn ? 1 : 0,
-                                                                                                    borderColor: cat.color ?? '#7C6FFF',
-                                                                                                }}
-                                                                                            >
-                                                                                                <Text style={{ fontSize: 11, color: cat.color ?? '#7C6FFF', fontFamily: fonts.body }}>{tag.name}</Text>
-                                                                                            </TouchableOpacity>
-                                                                                        );
-                                                                                    })}
-                                                                                </View>
-                                                                                {catTags.slice(0, 4).map((tag: { id: string; name: string; spent?: number }) => {
-                                                                                    const tagOn = whatIfScenario.tagOverrides[tag.id] !== undefined;
-                                                                                    const tagVal = whatIfScenario.tagOverrides[tag.id] ?? Math.round(tag.spent ?? 0);
-                                                                                    if (!tagOn) return null;
-                                                                                    return (
-                                                                                        <View key={tag.id} style={{ backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: 8, marginTop: 4 }}>
-                                                                                            <Text style={{ fontSize: 11, color: colors.textDisabled, marginBottom: 6, fontFamily: fonts.body }}>{tag.name}: {formatAmount(tag.spent ?? 0, currency)}/мес</Text>
-                                                                                            <View style={{ flexDirection: 'row', gap: 5, marginBottom: 6 }}>
-                                                                                                {([-25, -10, 10, 25] as const).map(pct => {
-                                                                                                    const pVal = Math.round((tag.spent ?? 0) * (1 + pct / 100));
-                                                                                                    const isAct = tagVal === pVal;
-                                                                                                    return (
-                                                                                                        <TouchableOpacity key={pct}
-                                                                                                            onPress={() => setWhatIfScenario(s => ({ ...s, tagOverrides: { ...s.tagOverrides, [tag.id]: pVal } }))}
-                                                                                                            style={{ flex: 1, paddingVertical: 5, borderRadius: 7, alignItems: 'center', backgroundColor: isAct ? 'rgba(124,111,255,0.25)' : 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: isAct ? 'rgba(124,111,255,0.4)' : 'rgba(255,255,255,0.08)' }}>
-                                                                                                            <Text style={{ fontSize: 10, fontWeight: '600', color: isAct ? '#7C6FFF' : (pct < 0 ? '#4FFFB0' : '#f87171') }}>{pct > 0 ? '+' : ''}{pct}%</Text>
-                                                                                                        </TouchableOpacity>
-                                                                                                    );
-                                                                                                })}
-                                                                                            </View>
-                                                                                            <TextInput
-                                                                                                style={{ backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 7, paddingHorizontal: 8, paddingVertical: 5, color: colors.textPrimary, fontSize: 12, fontFamily: fonts.body, width: '100%' }}
-                                                                                                keyboardType="decimal-pad"
-                                                                                                placeholder={String(Math.round(tag.spent ?? 0))}
-                                                                                                placeholderTextColor={colors.textDisabled}
-                                                                                                value={String(tagVal)}
-                                                                                                onChangeText={v => {
-                                                                                                    const num = parseFloat(v.replace(/[^0-9.,]/g, '').replace(',', '.'));
-                                                                                                    setWhatIfScenario(s => ({ ...s, tagOverrides: { ...s.tagOverrides, [tag.id]: v === '' ? 0 : (isNaN(num) ? tagVal : num) } }));
-                                                                                                }}
-                                                                                            />
-                                                                                            {tagVal !== Math.round(tag.spent ?? 0) && (
-                                                                                                <Text style={{ fontSize: 10, marginTop: 3, color: tagVal < (tag.spent ?? 0) ? '#4FFFB0' : '#f87171' }}>
-                                                                                                    {tagVal < (tag.spent ?? 0) ? '−' : '+'}{formatAmount(Math.abs(tagVal - (tag.spent ?? 0)), currency)}/мес
-                                                                                                </Text>
-                                                                                            )}
-                                                                                        </View>
-                                                                                    );
-                                                                                })}
-                                                                            </View>
-                                                                        )}
-                                                                        {/* Show category-level controls only if NO tags are selected */}
-                                                                        {!catTags.some((tag: { id: string }) => whatIfScenario.tagOverrides?.[tag.id] !== undefined) && (
-                                                                            <>
-                                                                                <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
-                                                                                    {([-25, -10, 10, 25] as const).map(pct => {
-                                                                                        const presetVal = Math.round(cat.spent * (1 + pct / 100));
-                                                                                        const isActive = currentVal === presetVal;
-                                                                                        return (
-                                                                                            <TouchableOpacity
-                                                                                                key={pct}
-                                                                                                onPress={() => setWhatIfScenario(s => ({
-                                                                                                    ...s,
-                                                                                                    categoryOverrides: { ...s.categoryOverrides, [cat.categoryId]: presetVal },
-                                                                                                }))}
-                                                                                                style={wiPresetStyle(isActive)}
-                                                                                            >
-                                                                                                <Text style={{ fontSize: 11, fontWeight: '600', color: isActive ? '#7C6FFF' : (pct < 0 ? '#4FFFB0' : '#f87171') }}>
-                                                                                                    {pct > 0 ? '+' : ''}{pct}%
-                                                                                                </Text>
-                                                                                            </TouchableOpacity>
-                                                                                        );
-                                                                                    })}
-                                                                                </View>
-                                                                                <TextInput
-                                                                                    style={wiInputStyle}
-                                                                                    keyboardType="decimal-pad"
-                                                                                    placeholder={String(Math.round(cat.spent))}
-                                                                                    placeholderTextColor={colors.textDisabled}
-                                                                                    value={String(currentVal)}
-                                                                                    onChangeText={v => {
-                                                                                        const num = parseFloat(v.replace(/[^0-9.,]/g, '').replace(',', '.'));
-                                                                                        setWhatIfScenario(s => ({
-                                                                                            ...s,
-                                                                                            categoryOverrides: {
-                                                                                                ...s.categoryOverrides,
-                                                                                                [cat.categoryId]: v === '' ? 0 : (isNaN(num) ? currentVal : num),
-                                                                                            },
-                                                                                        }));
-                                                                                    }}
-                                                                                />
-                                                                                {currentVal !== Math.round(cat.spent) && (
-                                                                                    <Text style={{ fontSize: 11, marginTop: 4, color: currentVal < cat.spent ? '#4FFFB0' : '#f87171' }}>
-                                                                                        {currentVal < cat.spent ? '−' : '+'}
-                                                                                        {formatAmount(Math.abs(currentVal - cat.spent), currency)}/мес
-                                                                                    </Text>
-                                                                                )}
-                                                                            </>
-                                                                        )}
-                                                                    </View>
-                                                                )}
+                                                    {/* Top 5 categories */}
+                                                    {wiCategories.length > 0 && wiCategories.map(cat => (
+                                                        <View key={cat.categoryId} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' }}>
+                                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                                                                <CategoryIcon iconName={cat.icon} color={cat.color ?? colors.textMuted} size={16} />
+                                                                <View style={{ flex: 1 }}>
+                                                                    <Text style={{ fontSize: 13, fontFamily: fonts.body, color: colors.textPrimary }} numberOfLines={1}>{cat.name}</Text>
+                                                                    <Text style={{ fontSize: 11, fontFamily: fonts.body, color: colors.textDisabled }}>{formatAmount(cat.spent, currency)}/мес</Text>
+                                                                </View>
                                                             </View>
-                                                        );
-                                                    })}
+                                                            {whatIfScenario.categoryOverrides[cat.categoryId] !== undefined ? (
+                                                                <TextInput
+                                                                    style={{ backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, color: colors.textPrimary, fontSize: 13, fontFamily: fonts.body, width: 90, textAlign: 'right' }}
+                                                                    keyboardType="decimal-pad" autoFocus
+                                                                    value={String(whatIfScenario.categoryOverrides[cat.categoryId])}
+                                                                    onChangeText={v => {
+                                                                        const num = parseFloat(v.replace(/[^0-9.,]/g, '').replace(',', '.'));
+                                                                        setWhatIfScenario(s => ({
+                                                                            ...s,
+                                                                            categoryOverrides: {
+                                                                                ...s.categoryOverrides,
+                                                                                [cat.categoryId]: v === '' ? undefined as any : (isNaN(num) ? (s.categoryOverrides[cat.categoryId] ?? cat.spent) : num),
+                                                                            },
+                                                                        }));
+                                                                    }}
+                                                                />
+                                                            ) : (
+                                                                <Switch value={false} onValueChange={() => setWhatIfScenario(s => ({
+                                                                    ...s, categoryOverrides: { ...s.categoryOverrides, [cat.categoryId]: Math.round(cat.spent) },
+                                                                }))}
+                                                                    trackColor={{ false: 'rgba(255,255,255,0.1)', true: 'rgba(124,111,255,0.4)' }} thumbColor="#555" />
+                                                            )}
+                                                        </View>
+                                                    ))}
 
-                                                    {/* Reset */}
+                                                    {/* Reset button */}
                                                     <TouchableOpacity
                                                         onPress={() => {
-                                                            setWhatIfScenario({ categoryOverrides: {}, tagOverrides: {}, incomeOverride: null, creditOverride: null, subscriptionSavings: 0 });
+                                                            setWhatIfScenario({ categoryOverrides: {}, incomeOverride: null, creditOverride: null, subscriptionSavings: 0 });
                                                             setWhatIfPeriod(3);
                                                         }}
-                                                        style={{ alignSelf: 'flex-end', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.06)', marginTop: 12, marginBottom: 16 }}
+                                                        style={{
+                                                            alignSelf: 'flex-end', paddingHorizontal: 14, paddingVertical: 8,
+                                                            borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.06)', marginTop: 4, marginBottom: 16,
+                                                        }}
                                                     >
                                                         <Text style={{ fontSize: 12, color: colors.textMuted, fontWeight: '600' }}>Сбросить</Text>
                                                     </TouchableOpacity>
@@ -4288,6 +4095,8 @@ export default function AnalyticsScreen() {
                                                                 <Text style={{ fontSize: 14, color: row.color, fontWeight: '700' }}>{row.value}</Text>
                                                             </View>
                                                         ))}
+
+                                                        {/* Savings goal coverage */}
                                                         {whatIfResult.totalSavings > 0 && goalsState.length > 0 && (() => {
                                                             const openGoal = goalsState.find(g => g.saved < g.target);
                                                             if (!openGoal) return null;
@@ -5865,11 +5674,14 @@ export default function AnalyticsScreen() {
                                 <CategoryIcon iconName={depositIcon} color={depositColor} size={24} />
                             </View>
                             <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary }}>{editingDeposit ? t('analytics.editDeposit') : t('analytics.newDeposit')}</Text>
-                                <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 1 }}>
+                                <Text style={{ fontSize: 18, fontFamily: fonts.bodyBold, color: colors.textPrimary }}>{editingDeposit ? t('analytics.editDeposit') : t('analytics.newDeposit')}</Text>
+                                <Text style={{ fontSize: 12, fontFamily: fonts.body, color: colors.textMuted, marginTop: 1 }}>
                                     {depositName.trim() || t('analytics.goalFormEnterName')}
                                 </Text>
                             </View>
+                            <TouchableOpacity onPress={closeDepositModal} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.bgTertiary, alignItems: 'center', justifyContent: 'center' }}>
+                                <X color={colors.textMuted} size={16} />
+                            </TouchableOpacity>
                         </View>
 
                         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
@@ -5917,30 +5729,36 @@ export default function AnalyticsScreen() {
                                 onChangeText={setDepositName}
                             />
 
-                            {/* Amount + Currency */}
+                            {/* Amount + Currency (unified) */}
                             <Text style={labelStyle}>{t('analytics.depositAmount')}</Text>
-                            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                            <View style={{
+                                flexDirection: 'row', alignItems: 'center', marginBottom: 8,
+                                backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12,
+                                borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
+                                paddingHorizontal: 14,
+                                opacity: editingDeposit ? 0.85 : 1,
+                            }}>
                                 <TextInput
-                                    style={[inputStyle, { flex: 1, marginBottom: 0 }]}
+                                    style={{ flex: 1, paddingVertical: 12, color: '#fff', fontSize: 15, fontFamily: fonts.body }}
                                     keyboardType="numeric"
                                     placeholder="25000"
                                     placeholderTextColor={colors.textDisabled}
                                     value={depositAmount}
                                     onChangeText={setDepositAmount}
+                                    editable={!editingDeposit}
                                 />
                                 <TouchableOpacity
-                                    onPress={() => setShowDepositCurrencyDropdown(true)}
+                                    onPress={() => !editingDeposit && setShowDepositCurrencyDropdown(true)}
+                                    activeOpacity={editingDeposit ? 1 : 0.7}
                                     style={{
                                         flexDirection: 'row', alignItems: 'center', gap: 6,
-                                        paddingHorizontal: 14, borderRadius: 12,
-                                        backgroundColor: 'rgba(255,255,255,0.06)',
-                                        borderWidth: 1.5, borderColor: 'rgba(124,111,255,0.3)',
-                                        minWidth: 88,
+                                        paddingLeft: 12, paddingVertical: 12,
+                                        borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.15)',
                                     }}
                                 >
-                                    <Text style={{ fontSize: 18 }}>{CURRENCIES.find(c => c.code === depositCurrency)?.flag}</Text>
-                                    <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '700' }}>{depositCurrency}</Text>
-                                    <Text style={{ color: colors.textMuted, fontSize: 11, marginLeft: 2 }}>▾</Text>
+                                    <Text style={{ fontSize: 16 }}>{CURRENCIES.find(c => c.code === depositCurrency)?.flag}</Text>
+                                    <Text style={{ color: '#fff', fontSize: 14, fontFamily: fonts.bodySemiBold }}>{depositCurrency}</Text>
+                                    {!editingDeposit && <Text style={{ color: colors.textMuted, fontSize: 11 }}>▾</Text>}
                                 </TouchableOpacity>
                             </View>
 
@@ -5979,93 +5797,74 @@ export default function AnalyticsScreen() {
                                 </View>
                             )}
 
-                            {/* Top-up section (edit mode only) */}
+                            {/* Top-up section (edit mode only — always open) */}
                             {editingDeposit && (
-                                !showDepositTopUp ? (
-                                    <TouchableOpacity onPress={() => setShowDepositTopUp(true)} style={{
-                                        paddingVertical: 14, borderRadius: 14, alignItems: 'center',
-                                        backgroundColor: 'rgba(79,255,176,0.08)',
-                                        borderWidth: 1.5, borderColor: 'rgba(79,255,176,0.25)',
-                                        marginBottom: 12,
-                                    }}>
-                                        <Text style={{ color: '#4FFFB0', fontSize: 14, fontWeight: '600' }}>{t('analytics.topUpGoal')}</Text>
-                                    </TouchableOpacity>
-                                ) : (
-                                    <View style={{ backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(79,255,176,0.15)' }}>
-                                        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 12 }}>{t('analytics.topUpDeposit')}</Text>
+                                <View style={{ backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(79,255,176,0.15)' }}>
+                                    <Text style={{ fontSize: 14, fontFamily: fonts.bodySemiBold, color: colors.textPrimary, marginBottom: 12 }}>{t('analytics.topUpDeposit')}</Text>
 
-                                        <Text style={labelStyle}>{t('analytics.sum')}</Text>
-                                        <TextInput
-                                            value={depositTopUpAmount}
-                                            onChangeText={setDepositTopUpAmount}
-                                            placeholder="0"
-                                            placeholderTextColor={colors.textDisabled}
-                                            keyboardType="decimal-pad"
-                                            style={inputStyle}
-                                        />
+                                    <Text style={labelStyle}>{t('analytics.sum')}</Text>
+                                    <TextInput
+                                        value={depositTopUpAmount}
+                                        onChangeText={setDepositTopUpAmount}
+                                        placeholder="0"
+                                        placeholderTextColor={colors.textDisabled}
+                                        keyboardType="decimal-pad"
+                                        style={inputStyle}
+                                    />
 
-                                        <Text style={labelStyle}>{t('analytics.fromAccount')}</Text>
-                                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-                                            <View style={{ flexDirection: 'row', gap: 8 }}>
-                                                {accounts.map(acc => {
-                                                    const sel = depositTopUpAccountId === acc.id;
-                                                    return (
-                                                        <TouchableOpacity key={acc.id} onPress={() => setDepositTopUpAccountId(sel ? '' : acc.id)} style={{
-                                                            flexDirection: 'row', alignItems: 'center', gap: 6,
-                                                            paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
-                                                            backgroundColor: sel ? 'rgba(124,111,255,0.15)' : 'rgba(255,255,255,0.05)',
-                                                            borderWidth: 1.5, borderColor: sel ? '#7C6FFF' : 'rgba(255,255,255,0.08)',
-                                                        }}>
-                                                            <Text style={{ fontSize: 14 }}>{acc.icon || '💳'}</Text>
-                                                            <Text style={{ color: sel ? '#a78bfa' : '#fff', fontSize: 13, fontWeight: '500' }}>{acc.name}</Text>
-                                                            <Text style={{ color: colors.textMuted, fontSize: 11 }}>{formatAmount(acc.balance, acc.currency)}</Text>
-                                                        </TouchableOpacity>
-                                                    );
-                                                })}
-                                            </View>
-                                        </ScrollView>
-
-                                        {depositTopUpAccountId && (() => {
-                                            const srcAcc = accounts.find(a => a.id === depositTopUpAccountId);
-                                            const amt = parseFloat(depositTopUpAmount.replace(',', '.')) || 0;
-                                            if (srcAcc && amt > srcAcc.balance) {
-                                                return <Text style={{ fontSize: 11, color: '#FFB84F', marginBottom: 4 }}>{t('analytics.insufficientFunds', { amount: formatAmount(srcAcc.balance, srcAcc.currency) })}</Text>;
-                                            }
-                                            return null;
-                                        })()}
-
-                                        <Text style={labelStyle}>{t('common.date')}</Text>
-                                        <TouchableOpacity onPress={() => setShowDepositTopUpDatePicker(!showDepositTopUpDatePicker)} style={{
-                                            backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12,
-                                            paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8,
-                                            borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
-                                        }}>
-                                            <Text style={{ color: colors.textPrimary, fontSize: 14 }}>{format(depositTopUpDate, 'dd.MM.yyyy')}</Text>
-                                        </TouchableOpacity>
-                                        {showDepositTopUpDatePicker && (
-                                            <DateTimePicker value={depositTopUpDate} mode="date" display="inline" themeVariant="dark"
-                                                onChange={(_, d) => { setShowDepositTopUpDatePicker(false); if (d) setDepositTopUpDate(d); }} />
-                                        )}
-
-                                        <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
-                                            <TouchableOpacity onPress={() => setShowDepositTopUp(false)} style={{
-                                                flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center',
-                                                backgroundColor: 'rgba(255,255,255,0.06)',
-                                            }}>
-                                                <Text style={{ color: colors.textMuted, fontSize: 14, fontWeight: '600' }}>{t('common.cancel')}</Text>
-                                            </TouchableOpacity>
-                                            <TouchableOpacity onPress={confirmDepositTopUp} disabled={savingDepositTopUp || !depositTopUpAmount.trim()} style={{
-                                                flex: 2, paddingVertical: 12, borderRadius: 12, alignItems: 'center',
-                                                backgroundColor: '#4FFFB0', opacity: savingDepositTopUp || !depositTopUpAmount.trim() ? 0.5 : 1,
-                                            }}>
-                                                {savingDepositTopUp
-                                                    ? <ActivityIndicator color="#000" />
-                                                    : <Text style={{ color: '#000', fontSize: 14, fontWeight: '700' }}>{t('analytics.topUpGoal')}</Text>
-                                                }
-                                            </TouchableOpacity>
+                                    <Text style={labelStyle}>{t('analytics.fromAccount')}</Text>
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+                                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                                            {accounts.map(acc => {
+                                                const sel = depositTopUpAccountId === acc.id;
+                                                return (
+                                                    <TouchableOpacity key={acc.id} onPress={() => setDepositTopUpAccountId(sel ? '' : acc.id)} style={{
+                                                        flexDirection: 'row', alignItems: 'center', gap: 6,
+                                                        paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+                                                        backgroundColor: sel ? 'rgba(124,111,255,0.15)' : 'rgba(255,255,255,0.05)',
+                                                        borderWidth: 1.5, borderColor: sel ? '#7C6FFF' : 'rgba(255,255,255,0.08)',
+                                                    }}>
+                                                        <Text style={{ fontSize: 14 }}>{acc.icon || '💳'}</Text>
+                                                        <Text style={{ color: sel ? '#a78bfa' : '#fff', fontSize: 13, fontFamily: fonts.body }}>{acc.name}</Text>
+                                                        <Text style={{ color: colors.textMuted, fontSize: 11, fontFamily: fonts.body }}>{formatAmount(acc.balance, acc.currency)}</Text>
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
                                         </View>
-                                    </View>
-                                )
+                                    </ScrollView>
+
+                                    {depositTopUpAccountId && (() => {
+                                        const srcAcc = accounts.find(a => a.id === depositTopUpAccountId);
+                                        const amt = parseFloat(depositTopUpAmount.replace(',', '.')) || 0;
+                                        if (srcAcc && amt > srcAcc.balance) {
+                                            return <Text style={{ fontSize: 11, fontFamily: fonts.body, color: '#FFB84F', marginBottom: 4 }}>{t('analytics.insufficientFunds', { amount: formatAmount(srcAcc.balance, srcAcc.currency) })}</Text>;
+                                        }
+                                        return null;
+                                    })()}
+
+                                    <Text style={labelStyle}>{t('common.date')}</Text>
+                                    <TouchableOpacity onPress={() => setShowDepositTopUpDatePicker(!showDepositTopUpDatePicker)} style={{
+                                        backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12,
+                                        paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8,
+                                        borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
+                                    }}>
+                                        <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: fonts.body }}>{format(depositTopUpDate, 'dd.MM.yyyy')}</Text>
+                                    </TouchableOpacity>
+                                    {showDepositTopUpDatePicker && (
+                                        <DateTimePicker value={depositTopUpDate} mode="date" display="inline" themeVariant="dark"
+                                            onChange={(_, d) => { setShowDepositTopUpDatePicker(false); if (d) setDepositTopUpDate(d); }} />
+                                    )}
+
+                                    <TouchableOpacity onPress={confirmDepositTopUp} disabled={savingDepositTopUp || !depositTopUpAmount.trim()} style={{
+                                        paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 8,
+                                        backgroundColor: '#4FFFB0', opacity: savingDepositTopUp || !depositTopUpAmount.trim() ? 0.5 : 1,
+                                    }}>
+                                        {savingDepositTopUp
+                                            ? <ActivityIndicator color="#000" />
+                                            : <Text style={{ color: '#000', fontSize: 14, fontFamily: fonts.bodySemiBold }}>{t('analytics.topUpGoal')}</Text>
+                                        }
+                                    </TouchableOpacity>
+                                </View>
                             )}
 
                             {/* Currency dropdown */}
