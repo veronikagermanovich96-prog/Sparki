@@ -81,7 +81,7 @@ type CategoryLight = { id: string; name: string; slug: string | null; icon: stri
 
 export default function AccountDetailScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
-    const { colors } = useTheme();
+    const { colors, fonts } = useTheme();
     const { t } = useTranslation();
 
     const [account, setAccount] = useState<Account | null>(null);
@@ -373,14 +373,14 @@ export default function AccountDetailScreen() {
                 </View>
 
                 <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '500' }}>{label}</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '500', fontFamily: fonts.bodyMedium }}>{label}</Text>
                     {txn.note ? (
-                        <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>{txn.note}</Text>
+                        <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2, fontFamily: fonts.body }} numberOfLines={1}>{txn.note}</Text>
                     ) : null}
-                    <Text style={{ color: colors.textDisabled, fontSize: 12, marginTop: 2 }}>{dateStr}</Text>
+                    <Text style={{ color: colors.textDisabled, fontSize: 12, marginTop: 2, fontFamily: fonts.body }}>{dateStr}</Text>
                 </View>
 
-                <Text style={{ color: amountColor, fontWeight: '600', fontSize: 15 }}>
+                <Text style={{ color: amountColor, fontWeight: '600', fontSize: 15, fontFamily: fonts.bodySemiBold }}>
                     {sign}{formatAmount(txn.amount, txn.currency)}
                 </Text>
             </TouchableOpacity>
@@ -413,7 +413,7 @@ export default function AccountDetailScreen() {
                 <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={{ marginRight: 10 }}>
                     <ChevronLeft color={colors.textPrimary} size={26} />
                 </TouchableOpacity>
-                <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: '700', flex: 1 }} numberOfLines={1}>
+                <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: '700', flex: 1, fontFamily: fonts.heading }} numberOfLines={1}>
                     {account.name}
                 </Text>
                 <TouchableOpacity onPress={openEdit} hitSlop={12}>
@@ -441,11 +441,11 @@ export default function AccountDetailScreen() {
                         <IC color={col} size={24} />
                     </View>
                     <View style={{ flex: 1 }}>
-                        <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
+                        <Text style={{ color: colors.textSecondary, fontSize: 13, fontFamily: fonts.body }}>
                             {CURRENCY_MAP[account.currency]?.flag ?? ''} {account.currency}
                         </Text>
                         {account.exclude_from_dashboard && (
-                            <Text style={{ color: colors.textDisabled, fontSize: 11, marginTop: 3 }}>{t('accounts.hiddenFromCalc')}</Text>
+                            <Text style={{ color: colors.textDisabled, fontSize: 11, marginTop: 3, fontFamily: fonts.body }}>{t('accounts.hiddenFromCalc')}</Text>
                         )}
                     </View>
 
@@ -458,11 +458,11 @@ export default function AccountDetailScreen() {
                     />
                 </View>
 
-                <Text style={{ color: colors.textPrimary, fontSize: 34, fontWeight: '800', letterSpacing: -0.5 }}>
+                <Text style={{ color: colors.textPrimary, fontSize: 34, fontWeight: '800', letterSpacing: -0.5, fontFamily: fonts.heading }}>
                     {formatAmount(account.balance, account.currency)}
                 </Text>
                 {account.exclude_from_dashboard && (
-                    <Text style={{ color: colors.textDisabled, fontSize: 12, marginTop: 6 }}>
+                    <Text style={{ color: colors.textDisabled, fontSize: 12, marginTop: 6, fontFamily: fonts.body }}>
                         {t('accounts.notCountedInBalance')}
                     </Text>
                 )}
@@ -475,7 +475,7 @@ export default function AccountDetailScreen() {
                 paddingHorizontal: 20,
                 paddingVertical: 12,
             }}>
-                <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '700', flex: 1 }}>
+                <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '700', flex: 1, fontFamily: fonts.bodySemiBold }}>
                     {t('accounts.transactionHistory')}
                 </Text>
                 {txLoading && <ActivityIndicator size="small" color={colors.textMuted} />}
@@ -484,8 +484,8 @@ export default function AccountDetailScreen() {
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 60 }}>
                 {!txLoading && transactions.length === 0 ? (
                     <View style={{ alignItems: 'center', marginTop: 48 }}>
-                        <Text style={{ color: colors.borderLight, fontSize: 15 }}>{t('accounts.noTransactions')}</Text>
-                        <Text style={{ color: colors.bgTertiary, fontSize: 13, marginTop: 6 }}>
+                        <Text style={{ color: colors.borderLight, fontSize: 15, fontFamily: fonts.body }}>{t('accounts.noTransactions')}</Text>
+                        <Text style={{ color: colors.bgTertiary, fontSize: 13, marginTop: 6, fontFamily: fonts.body }}>
                             {t('accounts.addOrTopUp')}
                         </Text>
                     </View>
@@ -500,7 +500,7 @@ export default function AccountDetailScreen() {
             <BaseBottomSheet visible={showEditSheet} onClose={() => setShowEditSheet(false)} maxHeight="92%">
                         <SheetHandle />
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-                            <Text style={[titleStyle, { color: colors.textPrimary }]}>{t('accounts.editAccount')}</Text>
+                            <Text style={[titleStyle, { color: colors.textPrimary, fontFamily: fonts.heading }]}>{t('accounts.editAccount')}</Text>
                             <TouchableOpacity onPress={() => setShowEditSheet(false)}>
                                 <X color={colors.textMuted} size={22} />
                             </TouchableOpacity>
@@ -555,8 +555,8 @@ export default function AccountDetailScreen() {
                                 padding: 16, marginBottom: 24,
                             }}>
                                 <View style={{ flex: 1, marginRight: 12 }}>
-                                    <Text style={{ color: colors.textPrimary, fontSize: 15 }}>{t('accounts.hideFromBalance')}</Text>
-                                    <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>{t('accounts.hideHint')}</Text>
+                                    <Text style={{ color: colors.textPrimary, fontSize: 15, fontFamily: fonts.body }}>{t('accounts.hideFromBalance')}</Text>
+                                    <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2, fontFamily: fonts.body }}>{t('accounts.hideHint')}</Text>
                                 </View>
                                 <Switch
                                     value={editExclude}
@@ -589,7 +589,7 @@ export default function AccountDetailScreen() {
                                                     borderWidth: 1, borderColor: editLimitPeriod === f ? '#3b82f6' : colors.borderLight,
                                                 }}
                                             >
-                                                <Text style={{ color: editLimitPeriod === f ? colors.textPrimary : colors.textSecondary, fontSize: 13 }}>
+                                                <Text style={{ color: editLimitPeriod === f ? colors.textPrimary : colors.textSecondary, fontSize: 13, fontFamily: fonts.body }}>
                                                     {PERIOD_PICKER_LABELS[f]}
                                                 </Text>
                                             </TouchableOpacity>
@@ -597,7 +597,7 @@ export default function AccountDetailScreen() {
                                     </View>
                                 </>
                             )}
-                            <Text style={{ color: colors.textDisabled, fontSize: 12, marginTop: -12, marginBottom: 20, marginLeft: 4 }}>
+                            <Text style={{ color: colors.textDisabled, fontSize: 12, marginTop: -12, marginBottom: 20, marginLeft: 4, fontFamily: fonts.body }}>
                                 {t('accounts.progressBarHint')}
                             </Text>
 
@@ -614,8 +614,8 @@ export default function AccountDetailScreen() {
             ════════════════════════════════════════ */}
             <BaseBottomSheet visible={showTransferDeleteSheet} onClose={() => setShowTransferDeleteSheet(false)} scrollable={false}>
                     <SheetHandle />
-                    <Text style={[titleStyle, { color: colors.textPrimary, marginBottom: 6 }]}>{t('accounts.whatToDoWithHistory')}</Text>
-                    <Text style={{ color: colors.textMuted, fontSize: 14, marginBottom: 20 }}>
+                    <Text style={[titleStyle, { color: colors.textPrimary, marginBottom: 6, fontFamily: fonts.heading }]}>{t('accounts.whatToDoWithHistory')}</Text>
+                    <Text style={{ color: colors.textMuted, fontSize: 14, marginBottom: 20, fontFamily: fonts.body }}>
                         {t('accounts.moveTransactions')}
                     </Text>
 
@@ -641,8 +641,8 @@ export default function AccountDetailScreen() {
                                     }}>
                                         <IC2 color={c} size={18} />
                                     </View>
-                                    <Text style={{ color: colors.textPrimary, fontSize: 15, flex: 1 }}>{acc.name}</Text>
-                                    <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+                                    <Text style={{ color: colors.textPrimary, fontSize: 15, flex: 1, fontFamily: fonts.body }}>{acc.name}</Text>
+                                    <Text style={{ color: colors.textMuted, fontSize: 13, fontFamily: fonts.body }}>
                                         {formatAmount(acc.balance, acc.currency)}
                                     </Text>
                                 </TouchableOpacity>
@@ -657,7 +657,7 @@ export default function AccountDetailScreen() {
                         onPress={() => setShowTransferDeleteSheet(false)}
                         style={{ paddingVertical: 14, alignItems: 'center' }}
                     >
-                        <Text style={{ color: colors.textMuted }}>{t('common.back')}</Text>
+                        <Text style={{ color: colors.textMuted, fontFamily: fonts.body }}>{t('common.back')}</Text>
                     </TouchableOpacity>
             </BaseBottomSheet>
 
@@ -685,31 +685,32 @@ function SheetHandle() {
 }
 
 function Label({ children }: { children: React.ReactNode }) {
-    const { colors } = useTheme();
-    return <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 8 }}>{children}</Text>;
+    const { colors, fonts } = useTheme();
+    return <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 8, fontFamily: fonts.bodyMedium }}>{children}</Text>;
 }
 
 function PrimaryButton({ label, onPress, disabled, color = '#2563eb' }: {
     label: string; onPress: () => void; disabled?: boolean; color?: string;
 }) {
-    const { colors } = useTheme();
+    const { colors, fonts } = useTheme();
     return (
         <TouchableOpacity onPress={onPress} disabled={disabled} style={{
             backgroundColor: color, borderRadius: 14, paddingVertical: 16,
             alignItems: 'center', marginBottom: 12, opacity: disabled ? 0.5 : 1,
         }}>
-            <Text style={{ color: colors.textPrimary, fontWeight: '700', fontSize: 16 }}>{label}</Text>
+            <Text style={{ color: colors.textPrimary, fontWeight: '700', fontSize: 16, fontFamily: fonts.bodySemiBold }}>{label}</Text>
         </TouchableOpacity>
     );
 }
 
 function DangerButton({ label, onPress }: { label: string; onPress: () => void }) {
+    const { fonts } = useTheme();
     return (
         <TouchableOpacity onPress={onPress} style={{
             borderWidth: 1, borderColor: '#7f1d1d', borderRadius: 14,
             paddingVertical: 16, alignItems: 'center', marginBottom: 8,
         }}>
-            <Text style={{ color: '#ef4444', fontWeight: '600', fontSize: 16 }}>{label}</Text>
+            <Text style={{ color: '#ef4444', fontWeight: '600', fontSize: 16, fontFamily: fonts.bodySemiBold }}>{label}</Text>
         </TouchableOpacity>
     );
 }
@@ -719,6 +720,7 @@ function DangerButton({ label, onPress }: { label: string; onPress: () => void }
 const titleStyle = {
     fontSize: 20,
     fontWeight: '700',
+    fontFamily: 'Charter-Bold',
 } as const;
 
 const inputStyle = {
@@ -728,4 +730,5 @@ const inputStyle = {
     paddingVertical: 14,
     fontSize: 16,
     marginBottom: 20,
+    fontFamily: 'Geist',
 } as const;

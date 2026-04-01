@@ -36,7 +36,7 @@ export const SavingsDots: React.FC<SavingsDotsProps> = ({
         <View className="items-center">
             <IconArray dots={dots} columns={10} dotSize={8} gap={4} />
             <View className="flex-row justify-between w-full mt-2">
-                <Text className="text-gray-400 text-xs">{(currentBalance / targetAmount * 100).toFixed(0)}% накоплено</Text>
+                <Text className="text-gray-400 text-xs" style={{ fontFamily: 'Geist' }}>{(currentBalance / targetAmount * 100).toFixed(0)}% накоплено</Text>
             </View>
         </View>
     );

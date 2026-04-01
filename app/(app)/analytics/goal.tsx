@@ -31,14 +31,14 @@ type Compounding = 'monthly' | 'yearly';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const labelStyle = { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6 } as const;
+const labelStyle = { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6 };
 const inputStyle = {
     backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, color: '#fff',
     fontSize: 15, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 20,
     borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
-} as const;
+};
 
-function Legend({ color, label, outline }: { color: string; label: string; outline?: boolean }) {
+function Legend({ color, label, outline, fonts }: { color: string; label: string; outline?: boolean; fonts: any }) {
     return (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
             <View style={{
@@ -47,7 +47,7 @@ function Legend({ color, label, outline }: { color: string; label: string; outli
                 borderWidth: outline ? 1.5 : 0,
                 borderColor: color,
             }} />
-            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{label}</Text>
+            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', fontFamily: fonts.body }}>{label}</Text>
         </View>
     );
 }
@@ -55,7 +55,7 @@ function Legend({ color, label, outline }: { color: string; label: string; outli
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function GoalScreen() {
-    const { colors } = useTheme();
+    const { colors, fonts } = useTheme();
     const { t } = useTranslation();
     const router = useRouter();
     const params = useLocalSearchParams<{
@@ -355,7 +355,7 @@ export default function GoalScreen() {
                     <ChevronLeft color={colors.textSecondary} size={24} />
                 </TouchableOpacity>
                 <Text style={{ fontSize: 26, marginRight: 2 }}>{icon}</Text>
-                <Text style={{ fontSize: 20, fontWeight: '800', color: colors.textPrimary, flex: 1 }} numberOfLines={1}>
+                <Text style={{ fontSize: 20, fontWeight: '800', color: colors.textPrimary, flex: 1, fontFamily: fonts.heading }} numberOfLines={1}>
                     {name}
                 </Text>
                 <TouchableOpacity onPress={openEdit} hitSlop={10} style={{
@@ -381,9 +381,9 @@ export default function GoalScreen() {
 
                     {/* Legend */}
                     <View style={{ flexDirection: 'row', gap: 18, marginTop: 18 }}>
-                        <Legend color="#1E5128" label={`${t('analytics.goalSaved')} ${pct}%`} />
-                        <Legend color="#4E9F3D" label={t('analytics.percentIncome')} />
-                        <Legend color="#2d3748" label={t('analytics.remaining2')} outline />
+                        <Legend color="#1E5128" label={`${t('analytics.goalSaved')} ${pct}%`} fonts={fonts} />
+                        <Legend color="#4E9F3D" label={t('analytics.percentIncome')} fonts={fonts} />
+                        <Legend color="#2d3748" label={t('analytics.remaining2')} outline fonts={fonts} />
                     </View>
 
                     {/* Amounts row */}
@@ -392,14 +392,14 @@ export default function GoalScreen() {
                         width: '100%', marginTop: 18,
                     }}>
                         <View>
-                            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 3 }}>{t('analytics.goalSaved')}</Text>
-                            <Text style={{ fontSize: 20, fontWeight: '800', color: '#4FFFB0' }}>
+                            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 3, fontFamily: fonts.body }}>{t('analytics.goalSaved')}</Text>
+                            <Text style={{ fontSize: 20, fontWeight: '800', color: '#4FFFB0', fontFamily: fonts.bodyBold }}>
                                 {formatAmount(saved, currency)}
                             </Text>
                         </View>
                         <View style={{ alignItems: 'flex-end' }}>
-                            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 3 }}>{t('analytics.goalTargetLabel')}</Text>
-                            <Text style={{ fontSize: 20, fontWeight: '800', color: colors.textPrimary }}>
+                            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 3, fontFamily: fonts.body }}>{t('analytics.goalTargetLabel')}</Text>
+                            <Text style={{ fontSize: 20, fontWeight: '800', color: colors.textPrimary, fontFamily: fonts.bodyBold }}>
                                 {formatAmount(target, currency)}
                             </Text>
                         </View>
@@ -425,7 +425,7 @@ export default function GoalScreen() {
                     borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
                     borderRadius: 20, padding: 20, marginBottom: 12,
                 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 18 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 18, fontFamily: fonts.bodyBold }}>
                         {t('analytics.growthCalc')}
                     </Text>
 
@@ -434,7 +434,7 @@ export default function GoalScreen() {
                         flexDirection: 'row', alignItems: 'center',
                         justifyContent: 'space-between', marginBottom: 14,
                     }}>
-                        <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{t('analytics.rate')}</Text>
+                        <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', fontFamily: fonts.body }}>{t('analytics.rate')}</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                             <TextInput
                                 value={rateInput}
@@ -451,10 +451,10 @@ export default function GoalScreen() {
                                     borderColor: 'rgba(255,255,255,0.08)',
                                     color: colors.textPrimary, fontSize: 15, fontWeight: '700',
                                     paddingHorizontal: 12, paddingVertical: 8,
-                                    minWidth: 60, textAlign: 'center',
+                                    minWidth: 60, textAlign: 'center', fontFamily: fonts.body,
                                 }}
                             />
-                            <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>{t('analytics.annualPercent')}</Text>
+                            <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13, fontFamily: fonts.body }}>{t('analytics.annualPercent')}</Text>
                         </View>
                     </View>
 
@@ -463,7 +463,7 @@ export default function GoalScreen() {
                         flexDirection: 'row', alignItems: 'center',
                         justifyContent: 'space-between', marginBottom: 18,
                     }}>
-                        <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{t('analytics.compounding')}</Text>
+                        <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', fontFamily: fonts.body }}>{t('analytics.compounding')}</Text>
                         <View style={{
                             flexDirection: 'row',
                             backgroundColor: 'rgba(255,255,255,0.06)',
@@ -482,6 +482,7 @@ export default function GoalScreen() {
                                         fontSize: 12,
                                         color: compounding === c ? colors.textPrimary : 'rgba(255,255,255,0.38)',
                                         fontWeight: compounding === c ? '600' : '400',
+                                        fontFamily: fonts.body,
                                     }}>
                                         {c === 'monthly' ? t('analytics.monthly') : t('analytics.yearly')}
                                     </Text>
@@ -531,11 +532,11 @@ export default function GoalScreen() {
                             <Text style={{
                                 fontSize: row.indent ? 12 : 13,
                                 color: row.indent ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.55)',
-                                flex: 1,
+                                flex: 1, fontFamily: fonts.body,
                             }}>
                                 {row.label}
                             </Text>
-                            <Text style={{ fontSize: 14, fontWeight: '700', color: row.color }}>
+                            <Text style={{ fontSize: 14, fontWeight: '700', color: row.color, fontFamily: fonts.bodyBold }}>
                                 {row.value}
                             </Text>
                         </View>
@@ -552,7 +553,7 @@ export default function GoalScreen() {
                         marginBottom: 10,
                     }}
                 >
-                    <Text style={{ color: '#4FFFB0', fontSize: 14, fontWeight: '600' }}>
+                    <Text style={{ color: '#4FFFB0', fontSize: 14, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>
                         {t('analytics.topUpGoal')}
                     </Text>
                 </TouchableOpacity>
@@ -566,7 +567,7 @@ export default function GoalScreen() {
                         borderWidth: 1, borderColor: 'rgba(239,68,68,0.18)',
                     }}
                 >
-                    <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '600' }}>
+                    <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>
                         {t('analytics.deleteGoal')}
                     </Text>
                 </TouchableOpacity>
@@ -598,20 +599,20 @@ export default function GoalScreen() {
 
                     <Text style={{
                         fontSize: 18, fontWeight: '800', color: colors.textPrimary,
-                        marginBottom: 8,
+                        marginBottom: 8, fontFamily: fonts.heading,
                     }}>
                         {t('analytics.deleteGoalMsg', { name })}
                     </Text>
                     <Text style={{
                         fontSize: 13, color: colors.textMuted,
-                        marginBottom: 20,
+                        marginBottom: 20, fontFamily: fonts.body,
                     }}>
                         {t('analytics.goalBalance', { amount: formatAmount(saved, currency) })}
                     </Text>
 
                     {saved > 0 && (
                         <>
-                            <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textSecondary, marginBottom: 14 }}>
+                            <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textSecondary, marginBottom: 14, fontFamily: fonts.bodySemiBold }}>
                                 {t('analytics.whereToTransfer')}
                             </Text>
 
@@ -629,7 +630,7 @@ export default function GoalScreen() {
                                         <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#7C6FFF' }} />
                                     )}
                                 </View>
-                                <Text style={{ color: colors.textPrimary, fontSize: 14 }}>{t('analytics.toAccount')}</Text>
+                                <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: fonts.body }}>{t('analytics.toAccount')}</Text>
                             </TouchableOpacity>
                             {deleteDestType === 'account' && (
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginLeft: 30, marginBottom: 14 }}>
@@ -647,7 +648,7 @@ export default function GoalScreen() {
                                                         borderColor: sel ? '#7C6FFF' : 'rgba(255,255,255,0.08)',
                                                     }}
                                                 >
-                                                    <Text style={{ color: sel ? '#a78bfa' : colors.textPrimary, fontSize: 13 }}>
+                                                    <Text style={{ color: sel ? '#a78bfa' : colors.textPrimary, fontSize: 13, fontFamily: fonts.body }}>
                                                         {acc.name}
                                                     </Text>
                                                 </TouchableOpacity>
@@ -673,7 +674,7 @@ export default function GoalScreen() {
                                                 <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#7C6FFF' }} />
                                             )}
                                         </View>
-                                        <Text style={{ color: colors.textPrimary, fontSize: 14 }}>{t('analytics.toGoal')}</Text>
+                                        <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: fonts.body }}>{t('analytics.toGoal')}</Text>
                                     </TouchableOpacity>
                                     {deleteDestType === 'goal' && (
                                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginLeft: 30, marginBottom: 14 }}>
@@ -691,7 +692,7 @@ export default function GoalScreen() {
                                                                 borderColor: sel ? '#7C6FFF' : 'rgba(255,255,255,0.08)',
                                                             }}
                                                         >
-                                                            <Text style={{ color: sel ? '#a78bfa' : colors.textPrimary, fontSize: 13 }}>
+                                                            <Text style={{ color: sel ? '#a78bfa' : colors.textPrimary, fontSize: 13, fontFamily: fonts.body }}>
                                                                 {g.name}
                                                             </Text>
                                                         </TouchableOpacity>
@@ -717,7 +718,7 @@ export default function GoalScreen() {
                                         <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#7C6FFF' }} />
                                     )}
                                 </View>
-                                <Text style={{ color: colors.textPrimary, fontSize: 14 }}>{t('analytics.dontTransfer')}</Text>
+                                <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: fonts.body }}>{t('analytics.dontTransfer')}</Text>
                             </TouchableOpacity>
                         </>
                     )}
@@ -732,7 +733,7 @@ export default function GoalScreen() {
                     >
                         {archiving
                             ? <ActivityIndicator color="#fff" />
-                            : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
+                            : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700', fontFamily: fonts.bodyBold }}>
                                 {t('common.delete')}
                             </Text>
                         }
@@ -745,7 +746,7 @@ export default function GoalScreen() {
                             backgroundColor: 'rgba(255,255,255,0.06)',
                         }}
                     >
-                        <Text style={{ color: colors.textSecondary, fontSize: 15, fontWeight: '600' }}>
+                        <Text style={{ color: colors.textSecondary, fontSize: 15, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>
                             {t('common.cancel')}
                         </Text>
                     </TouchableOpacity>
@@ -762,23 +763,23 @@ export default function GoalScreen() {
                     }}>
                         <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginBottom: 20 }} />
 
-                        <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary, marginBottom: 20 }}>
+                        <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary, marginBottom: 20, fontFamily: fonts.heading }}>
                             {t('analytics.topUpGoal')}
                         </Text>
 
                         {/* Amount */}
-                        <Text style={labelStyle}>{t('common.amount')}</Text>
+                        <Text style={[labelStyle, { fontFamily: fonts.bodyMedium }]}>{t('common.amount')}</Text>
                         <TextInput
                             value={topUpAmount}
                             onChangeText={setTopUpAmount}
                             placeholder="0"
                             placeholderTextColor="rgba(255,255,255,0.2)"
                             keyboardType="decimal-pad"
-                            style={inputStyle}
+                            style={[inputStyle, { fontFamily: fonts.body }]}
                         />
 
                         {/* From account */}
-                        <Text style={labelStyle}>{t('analytics.fromAccount')}</Text>
+                        <Text style={[labelStyle, { fontFamily: fonts.bodyMedium }]}>{t('analytics.fromAccount')}</Text>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
                             <View style={{ flexDirection: 'row', gap: 8 }}>
                                 {accounts.map(acc => {
@@ -796,10 +797,10 @@ export default function GoalScreen() {
                                             }}
                                         >
                                             <Text style={{ fontSize: 14 }}>{acc.icon || '💳'}</Text>
-                                            <Text style={{ color: sel ? '#a78bfa' : colors.textPrimary, fontSize: 13, fontWeight: '500' }}>
+                                            <Text style={{ color: sel ? '#a78bfa' : colors.textPrimary, fontSize: 13, fontWeight: '500', fontFamily: fonts.bodyMedium }}>
                                                 {acc.name}
                                             </Text>
-                                            <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>
+                                            <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, fontFamily: fonts.body }}>
                                                 {formatAmount(acc.balance, acc.currency)}
                                             </Text>
                                         </TouchableOpacity>
@@ -814,7 +815,7 @@ export default function GoalScreen() {
                             const amt = parseFloat(topUpAmount.replace(',', '.')) || 0;
                             if (srcAcc && amt > srcAcc.balance) {
                                 return (
-                                    <Text style={{ fontSize: 11, color: '#FFB84F', marginBottom: 4 }}>
+                                    <Text style={{ fontSize: 11, color: '#FFB84F', marginBottom: 4, fontFamily: fonts.body }}>
                                         {t('analytics.insufficientOnAccount', { amount: formatAmount(srcAcc.balance, srcAcc.currency) })}
                                     </Text>
                                 );
@@ -825,7 +826,7 @@ export default function GoalScreen() {
                         <View style={{ height: 12 }} />
 
                         {/* Date */}
-                        <Text style={labelStyle}>{t('common.date')}</Text>
+                        <Text style={[labelStyle, { fontFamily: fonts.bodyMedium }]}>{t('common.date')}</Text>
                         <TouchableOpacity
                             onPress={() => setShowTopUpDatePicker(!showTopUpDatePicker)}
                             style={{
@@ -834,7 +835,7 @@ export default function GoalScreen() {
                                 borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
                             }}
                         >
-                            <Text style={{ color: colors.textPrimary, fontSize: 14 }}>
+                            <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: fonts.body }}>
                                 {format(topUpDate, 'dd.MM.yyyy')}
                             </Text>
                         </TouchableOpacity>
@@ -860,7 +861,7 @@ export default function GoalScreen() {
                         >
                             {savingTopUp
                                 ? <ActivityIndicator color="#000" />
-                                : <Text style={{ color: '#000', fontSize: 15, fontWeight: '700' }}>{t('analytics.topUpGoal')}</Text>
+                                : <Text style={{ color: '#000', fontSize: 15, fontWeight: '700', fontFamily: fonts.bodyBold }}>{t('analytics.topUpGoal')}</Text>
                             }
                         </TouchableOpacity>
                     </View>
@@ -885,8 +886,8 @@ export default function GoalScreen() {
                                 <Text style={{ fontSize: 24 }}>{editIcon}</Text>
                             </View>
                             <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary }}>{t('common.edit')}</Text>
-                                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 1 }}>
+                                <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary, fontFamily: fonts.heading }}>{t('common.edit')}</Text>
+                                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 1, fontFamily: fonts.body }}>
                                     {editName.trim() || name}
                                 </Text>
                             </View>
@@ -895,7 +896,7 @@ export default function GoalScreen() {
                         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
                             {/* Icon picker */}
-                            <Text style={labelStyle}>{t('common.icon')}</Text>
+                            <Text style={[labelStyle, { fontFamily: fonts.bodyMedium }]}>{t('common.icon')}</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
                                 <View style={{ flexDirection: 'row', gap: 6 }}>
                                     {['🎯','🏖️','💻','🚗','🏠','🎓','✈️','📱','🎮','💪','🛡️','📈','🌍','🎁','💰','🎸','🏋️','🐶'].map(em => (
@@ -912,7 +913,7 @@ export default function GoalScreen() {
                             </ScrollView>
 
                             {/* Color picker */}
-                            <Text style={labelStyle}>{t('common.color')}</Text>
+                            <Text style={[labelStyle, { fontFamily: fonts.bodyMedium }]}>{t('common.color')}</Text>
                             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
                                 {['#7C6FFF', '#4FFFB0', '#FFB84F', '#FF6B6B', '#4FC3FF', '#F472B6', '#34D399', '#FB923C'].map(c => (
                                     <TouchableOpacity key={c} onPress={() => setEditColor(c)} style={{
@@ -928,17 +929,17 @@ export default function GoalScreen() {
                             </View>
 
                             {/* Name */}
-                            <Text style={labelStyle}>{t('common.name')}</Text>
+                            <Text style={[labelStyle, { fontFamily: fonts.bodyMedium }]}>{t('common.name')}</Text>
                             <TextInput
                                 value={editName}
                                 onChangeText={setEditName}
                                 placeholder={t('analytics.goalFormTitle')}
                                 placeholderTextColor="rgba(255,255,255,0.2)"
-                                style={inputStyle}
+                                style={[inputStyle, { fontFamily: fonts.body }]}
                             />
 
                             {/* Target + Currency */}
-                            <Text style={labelStyle}>{t('analytics.targetAmount')}</Text>
+                            <Text style={[labelStyle, { fontFamily: fonts.bodyMedium }]}>{t('analytics.targetAmount')}</Text>
                             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
                                 <TextInput
                                     value={editTarget}
@@ -946,7 +947,7 @@ export default function GoalScreen() {
                                     placeholder="0"
                                     placeholderTextColor="rgba(255,255,255,0.2)"
                                     keyboardType="decimal-pad"
-                                    style={[inputStyle, { flex: 1, marginBottom: 0 }]}
+                                    style={[inputStyle, { flex: 1, marginBottom: 0, fontFamily: fonts.body }]}
                                 />
                                 <TouchableOpacity
                                     onPress={() => setShowCurrencyDropdown(true)}
@@ -959,14 +960,14 @@ export default function GoalScreen() {
                                     }}
                                 >
                                     <Text style={{ fontSize: 18 }}>{CURRENCIES.find(c => c.code === editCurrency)?.flag}</Text>
-                                    <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '700' }}>{editCurrency}</Text>
-                                    <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginLeft: 2 }}>▾</Text>
+                                    <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '700', fontFamily: fonts.bodyBold }}>{editCurrency}</Text>
+                                    <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginLeft: 2, fontFamily: fonts.body }}>▾</Text>
                                 </TouchableOpacity>
                             </View>
 
                             {/* Warning: target below saved */}
                             {targetBelowSaved && (
-                                <Text style={{ fontSize: 11, color: '#FFB84F', marginBottom: 12 }}>
+                                <Text style={{ fontSize: 11, color: '#FFB84F', marginBottom: 12, fontFamily: fonts.body }}>
                                     {t('analytics.insufficientFunds', { amount: formatAmount(saved, currency) })}
                                 </Text>
                             )}
@@ -978,14 +979,14 @@ export default function GoalScreen() {
                                     onPress={() => { setShowCurrencyDropdown(false); setCurrencySearch(''); }} />
                                 <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#1a2235', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingBottom: 40, maxHeight: '60%' }}>
                                     <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginBottom: 16 }} />
-                                    <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, paddingHorizontal: 20, marginBottom: 12 }}>{t('common.currency')}</Text>
+                                    <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, paddingHorizontal: 20, marginBottom: 12, fontFamily: fonts.bodyBold }}>{t('common.currency')}</Text>
                                     <View style={{ marginHorizontal: 20, marginBottom: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 }}>
                                         <TextInput
                                             value={currencySearch}
                                             onChangeText={setCurrencySearch}
                                             placeholder={t('common.search')}
                                             placeholderTextColor="rgba(255,255,255,0.25)"
-                                            style={{ flex: 1, color: colors.textPrimary, fontSize: 14 }}
+                                            style={{ flex: 1, color: colors.textPrimary, fontSize: 14, fontFamily: fonts.body }}
                                             autoCorrect={false} autoCapitalize="none"
                                         />
                                     </View>
@@ -1003,10 +1004,10 @@ export default function GoalScreen() {
                                                     style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingVertical: 13, backgroundColor: sel ? 'rgba(124,111,255,0.12)' : 'transparent' }}>
                                                     <Text style={{ fontSize: 22 }}>{c.flag}</Text>
                                                     <View style={{ flex: 1 }}>
-                                                        <Text style={{ fontSize: 14, fontWeight: sel ? '700' : '500', color: sel ? '#a78bfa' : colors.textPrimary }}>{c.code}</Text>
-                                                        <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{c.name}</Text>
+                                                        <Text style={{ fontSize: 14, fontWeight: sel ? '700' : '500', color: sel ? '#a78bfa' : colors.textPrimary, fontFamily: fonts.bodySemiBold }}>{c.code}</Text>
+                                                        <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: fonts.body }}>{c.name}</Text>
                                                     </View>
-                                                    {sel && <Text style={{ color: '#7C6FFF', fontSize: 16 }}>✓</Text>}
+                                                    {sel && <Text style={{ color: '#7C6FFF', fontSize: 16, fontFamily: fonts.body }}>✓</Text>}
                                                 </TouchableOpacity>
                                             );
                                         }}
@@ -1015,7 +1016,7 @@ export default function GoalScreen() {
                             </Modal>
 
                             {/* Target date */}
-                            <Text style={labelStyle}>{t('analytics.targetDate')}</Text>
+                            <Text style={[labelStyle, { fontFamily: fonts.bodyMedium }]}>{t('analytics.targetDate')}</Text>
                             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 4 }}>
                                 <TouchableOpacity
                                     onPress={() => {
@@ -1023,7 +1024,7 @@ export default function GoalScreen() {
                                         setShowDatePicker(true);
                                     }}
                                     style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)' }}>
-                                    <Text style={{ color: editDate ? colors.textPrimary : 'rgba(255,255,255,0.2)', fontSize: 14 }}>
+                                    <Text style={{ color: editDate ? colors.textPrimary : 'rgba(255,255,255,0.2)', fontSize: 14, fontFamily: fonts.body }}>
                                         {editDate ? format(editDate, 'dd.MM.yyyy') : t('analytics.noTerm')}
                                     </Text>
                                 </TouchableOpacity>
@@ -1044,7 +1045,7 @@ export default function GoalScreen() {
                                 onPress={saveEdit}
                                 disabled={savingEdit}
                                 style={{ marginTop: 20, marginBottom: 20, paddingVertical: 14, backgroundColor: '#7C6FFF', borderRadius: 14, alignItems: 'center', opacity: savingEdit ? 0.5 : 1 }}>
-                                <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '700' }}>{savingEdit ? t('common.saving') : t('common.save')}</Text>
+                                <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '700', fontFamily: fonts.bodyBold }}>{savingEdit ? t('common.saving') : t('common.save')}</Text>
                             </TouchableOpacity>
                         </ScrollView>
                     </View>

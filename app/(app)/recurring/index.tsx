@@ -118,7 +118,7 @@ function getDueBadge(nextDate: string): { label: string; color: string } {
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function RecurringScreen() {
-    const { colors } = useTheme();
+    const { colors, fonts } = useTheme();
     const { t } = useTranslation();
     const [items,       setItems]       = useState<RecurringRow[]>([]);
     const [accounts,    setAccounts]    = useState<Account[]>([]);
@@ -404,28 +404,28 @@ export default function RecurringScreen() {
 
                     {/* Info */}
                     <View style={{ flex: 1 }}>
-                        <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '600' }}>{item.name}</Text>
+                        <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>{item.name}</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3, gap: 8, flexWrap: 'wrap' }}>
-                            <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+                            <Text style={{ color: colors.textMuted, fontSize: 12, fontFamily: fonts.body }}>
                                 {t(FREQ_KEYS[item.frequency])} · {item.account_name}
                             </Text>
                             {item.expense_type === 'base' && (
                                 <View style={{ backgroundColor: '#1e3a5f', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 }}>
-                                    <Text style={{ color: '#60a5fa', fontSize: 10, fontWeight: '600' }}>{t('recurring.baseType')}</Text>
+                                    <Text style={{ color: '#60a5fa', fontSize: 10, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>{t('recurring.baseType')}</Text>
                                 </View>
                             )}
                         </View>
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
                             <Clock color={due.color} size={11} />
-                            <Text style={{ color: due.color, fontSize: 12 }}>{due.label}</Text>
+                            <Text style={{ color: due.color, fontSize: 12, fontFamily: fonts.body }}>{due.label}</Text>
                         </View>
                     </View>
 
                     {/* Amount + controls */}
                     <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                        <Text style={{ color: amountColor, fontSize: 14, fontWeight: '700' }}>
+                        <Text style={{ color: amountColor, fontSize: 14, fontWeight: '700', fontFamily: fonts.bodyBold }}>
                             {item.type === 'income' ? '+' : '−'}{formatAmount(item.amount, item.currency)}
-                            <Text style={{ color: colors.textDisabled, fontSize: 10, fontWeight: '400' }}>
+                            <Text style={{ color: colors.textDisabled, fontSize: 10, fontWeight: '400', fontFamily: fonts.body }}>
                                 {t(FREQ_SHORT_KEYS[item.frequency])}
                             </Text>
                         </Text>
@@ -460,7 +460,7 @@ export default function RecurringScreen() {
         return (
             <View>
                 <View style={{ paddingHorizontal: 20, paddingVertical: 8, backgroundColor: '#0a0f1e' }}>
-                    <Text style={{ color: colors.textSecondary, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: fonts.bodySemiBold }}>
                         {title}
                     </Text>
                 </View>
@@ -480,9 +480,9 @@ export default function RecurringScreen() {
 
             {/* Header */}
             <View style={{ paddingTop: 60, paddingBottom: 12, paddingHorizontal: 20 }}>
-                <Text style={{ color: colors.textPrimary, fontSize: 24, fontWeight: '700' }}>{t('recurring.title')}</Text>
+                <Text style={{ color: colors.textPrimary, fontSize: 24, fontWeight: '700', fontFamily: fonts.heading }}>{t('recurring.title')}</Text>
                 {monthlyInfra > 0 && (
-                    <Text style={{ color: colors.textDisabled, fontSize: 13, marginTop: 4 }}>
+                    <Text style={{ color: colors.textDisabled, fontSize: 13, marginTop: 4, fontFamily: fonts.body }}>
                         {t('recurring.infraSummary', { amount: formatAmount(monthlyInfra, infraCurrency) })}
                     </Text>
                 )}
@@ -495,15 +495,15 @@ export default function RecurringScreen() {
             ) : items.length === 0 ? (
                 <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                     <Repeat2 color={colors.borderLight} size={48} />
-                    <Text style={{ color: colors.textMuted, fontSize: 16, marginTop: 8 }}>{t('recurring.noPayments')}</Text>
-                    <Text style={{ color: colors.textDisabled, fontSize: 14 }}>{t('recurring.noPaymentsHint')}</Text>
+                    <Text style={{ color: colors.textMuted, fontSize: 16, marginTop: 8, fontFamily: fonts.body }}>{t('recurring.noPayments')}</Text>
+                    <Text style={{ color: colors.textDisabled, fontSize: 14, fontFamily: fonts.body }}>{t('recurring.noPaymentsHint')}</Text>
                 </View>
             ) : (
                 <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
                     {overdueItems.length > 0 && (
                         <View>
                             <View style={{ paddingHorizontal: 20, paddingVertical: 10, backgroundColor: 'rgba(239,68,68,0.08)', borderBottomWidth: 1, borderBottomColor: 'rgba(239,68,68,0.15)' }}>
-                                <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                                <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: fonts.bodyBold }}>
                                     {t('recurring.attentionNeeded', { count: overdueItems.length })}
                                 </Text>
                             </View>
@@ -535,14 +535,14 @@ export default function RecurringScreen() {
                         <View style={{ width: 40, height: 4, backgroundColor: colors.borderLight, borderRadius: 2, alignSelf: 'center', marginBottom: 20 }} />
 
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-                            <Text style={[titleStyle, { color: colors.textPrimary }]}>{editing ? t('recurring.editTitle') : t('recurring.newTitle')}</Text>
+                            <Text style={[titleStyle, { color: colors.textPrimary, fontFamily: fonts.heading }]}>{editing ? t('recurring.editTitle') : t('recurring.newTitle')}</Text>
                             <TouchableOpacity onPress={() => setShowForm(false)}><X color={colors.textMuted} size={22} /></TouchableOpacity>
                         </View>
 
                             {/* Name */}
                             <FieldLabel>{t('common.name')}</FieldLabel>
                             <TextInput
-                                style={[inputStyle, { backgroundColor: colors.bgTertiary, borderColor: colors.borderLight, color: colors.textPrimary }]}
+                                style={[inputStyle, { backgroundColor: colors.bgTertiary, borderColor: colors.borderLight, color: colors.textPrimary, fontFamily: fonts.body }]}
                                 placeholder={t('recurring.namePlaceholder')}
                                 placeholderTextColor={colors.textDisabled}
                                 value={fName}
@@ -570,7 +570,7 @@ export default function RecurringScreen() {
                                     >
                                         <Text style={{
                                             color: fType === tp ? (tp === 'expense' ? '#ef4444' : '#22c55e') : colors.textMuted,
-                                            fontWeight: '600', fontSize: 14,
+                                            fontWeight: '600', fontSize: 14, fontFamily: fonts.bodySemiBold,
                                         }}>
                                             {tp === 'expense' ? t('recurring.typeExpense') : t('recurring.typeIncome')}
                                         </Text>
@@ -581,7 +581,7 @@ export default function RecurringScreen() {
                             {/* Amount */}
                             <FieldLabel>{t('common.amount')}</FieldLabel>
                             <TextInput
-                                style={[inputStyle, { backgroundColor: colors.bgTertiary, borderColor: colors.borderLight, color: colors.textPrimary, fontSize: 26, fontWeight: '700', textAlign: 'center', paddingVertical: 18 }]}
+                                style={[inputStyle, { backgroundColor: colors.bgTertiary, borderColor: colors.borderLight, color: colors.textPrimary, fontSize: 26, fontWeight: '700', textAlign: 'center', paddingVertical: 18, fontFamily: fonts.bodyBold }]}
                                 placeholder="0"
                                 placeholderTextColor={colors.textDisabled}
                                 value={fAmount}
@@ -602,7 +602,7 @@ export default function RecurringScreen() {
                                             borderWidth: 1, borderColor: fFreq === f ? '#3b82f6' : colors.borderLight,
                                         }}
                                     >
-                                        <Text style={{ color: fFreq === f ? colors.textPrimary : colors.textSecondary, fontSize: 13, fontWeight: '500' }}>
+                                        <Text style={{ color: fFreq === f ? colors.textPrimary : colors.textSecondary, fontSize: 13, fontWeight: '500', fontFamily: fonts.body }}>
                                             {t(FREQ_KEYS[f])}
                                         </Text>
                                     </TouchableOpacity>
@@ -612,7 +612,7 @@ export default function RecurringScreen() {
                             {/* Next date */}
                             <FieldLabel>{t('recurring.nextDate')}</FieldLabel>
                             <TextInput
-                                style={[inputStyle, { backgroundColor: colors.bgTertiary, borderColor: colors.borderLight, color: colors.textPrimary }]}
+                                style={[inputStyle, { backgroundColor: colors.bgTertiary, borderColor: colors.borderLight, color: colors.textPrimary, fontFamily: fonts.body }]}
                                 placeholder="2026-04-01"
                                 placeholderTextColor={colors.textDisabled}
                                 value={fNextDate}
@@ -643,8 +643,8 @@ export default function RecurringScreen() {
                                         >
                                             <IC color={sel ? col : colors.textMuted} size={16} />
                                             <View>
-                                                <Text style={{ color: sel ? colors.textPrimary : colors.textSecondary, fontSize: 13, fontWeight: '600' }}>{acc.name}</Text>
-                                                <Text style={{ color: colors.textMuted, fontSize: 11 }}>{formatAmount(acc.balance, acc.currency)}</Text>
+                                                <Text style={{ color: sel ? colors.textPrimary : colors.textSecondary, fontSize: 13, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>{acc.name}</Text>
+                                                <Text style={{ color: colors.textMuted, fontSize: 11, fontFamily: fonts.body }}>{formatAmount(acc.balance, acc.currency)}</Text>
                                             </View>
                                         </TouchableOpacity>
                                     );
@@ -662,7 +662,7 @@ export default function RecurringScreen() {
                                         borderWidth: 1, borderColor: fCategoryId === '' ? colors.textMuted : colors.borderLight,
                                     }}
                                 >
-                                    <Text style={{ color: fCategoryId === '' ? colors.textPrimary : colors.textMuted, fontSize: 13 }}>{t('recurring.noCategory')}</Text>
+                                    <Text style={{ color: fCategoryId === '' ? colors.textPrimary : colors.textMuted, fontSize: 13, fontFamily: fonts.body }}>{t('recurring.noCategory')}</Text>
                                 </TouchableOpacity>
                                 {filteredCategories.map(cat => {
                                     const col = cat.color ?? '#6b7280';
@@ -677,7 +677,7 @@ export default function RecurringScreen() {
                                                 borderWidth: 1, borderColor: sel ? col : colors.borderLight,
                                             }}
                                         >
-                                            <Text style={{ color: sel ? col : colors.textSecondary, fontSize: 13, fontWeight: sel ? '600' : '400' }}>
+                                            <Text style={{ color: sel ? col : colors.textSecondary, fontSize: 13, fontWeight: sel ? '600' : '400', fontFamily: sel ? fonts.bodySemiBold : fonts.body }}>
                                                 {cat.name}
                                             </Text>
                                         </TouchableOpacity>
@@ -698,7 +698,7 @@ export default function RecurringScreen() {
                                             borderWidth: 1, borderColor: fNotify === n ? '#3b82f6' : colors.borderLight,
                                         }}
                                     >
-                                        <Text style={{ color: fNotify === n ? colors.textPrimary : colors.textSecondary, fontWeight: '600', fontSize: 14 }}>
+                                        <Text style={{ color: fNotify === n ? colors.textPrimary : colors.textSecondary, fontWeight: '600', fontSize: 14, fontFamily: fonts.bodySemiBold }}>
                                             {t('recurring.dayN', { count: n })}
                                         </Text>
                                     </TouchableOpacity>
@@ -715,7 +715,7 @@ export default function RecurringScreen() {
                                     opacity: saving || !fName.trim() || !fAmount || !fAccountId ? 0.5 : 1,
                                 }}
                             >
-                                <Text style={{ color: colors.textPrimary, fontWeight: '700', fontSize: 16 }}>
+                                <Text style={{ color: colors.textPrimary, fontWeight: '700', fontSize: 16, fontFamily: fonts.bodySemiBold }}>
                                     {saving ? t('common.saving') : editing ? t('common.save') : t('common.create')}
                                 </Text>
                             </TouchableOpacity>
@@ -727,8 +727,8 @@ export default function RecurringScreen() {
 // ─── Small components ─────────────────────────────────────────────────────────
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-    const { colors } = useTheme();
-    return <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 8 }}>{children}</Text>;
+    const { colors, fonts } = useTheme();
+    return <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 8, fontFamily: fonts.bodyMedium }}>{children}</Text>;
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────

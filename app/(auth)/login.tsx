@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { useTheme } from '@/context/ThemeContext';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -10,6 +11,7 @@ export default function Login() {
     const [loading, setLoading] = useState(false);
     const router = useRouter();
     const { t } = useTranslation();
+    const { fonts } = useTheme();
 
     async function signInWithEmail() {
         setLoading(true);
@@ -28,11 +30,12 @@ export default function Login() {
 
     return (
         <View className="flex-1 bg-gray-950 px-8 justify-center">
-            <Text className="text-3xl font-bold text-white mb-8 text-center">{t('auth.welcomeBack')}</Text>
+            <Text className="text-3xl font-bold text-white mb-8 text-center" style={{ fontFamily: fonts.heading }}>{t('auth.welcomeBack')}</Text>
 
             <View className="gap-y-4 mb-8">
                 <TextInput
                     className="bg-gray-900 border border-gray-800 rounded-2xl p-4 text-white text-lg"
+                    style={{ fontFamily: fonts.body }}
                     placeholder="Email"
                     placeholderTextColor="#6b7280"
                     value={email}
@@ -42,6 +45,7 @@ export default function Login() {
                 />
                 <TextInput
                     className="bg-gray-900 border border-gray-800 rounded-2xl p-4 text-white text-lg"
+                    style={{ fontFamily: fonts.body }}
                     placeholder={t('auth.password')}
                     placeholderTextColor="#6b7280"
                     value={password}
@@ -55,14 +59,14 @@ export default function Login() {
                 onPress={signInWithEmail}
                 disabled={loading}
             >
-                <Text className="font-bold text-gray-950 text-lg">{t('auth.login')}</Text>
+                <Text className="font-bold text-gray-950 text-lg" style={{ fontFamily: fonts.bodySemiBold }}>{t('auth.login')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
                 className="mt-6 items-center"
                 onPress={() => router.push('/(auth)/register')}
             >
-                <Text className="text-gray-400">{t('auth.noAccount')}<Text className="text-white font-bold">{t('auth.register')}</Text></Text>
+                <Text className="text-gray-400" style={{ fontFamily: fonts.body }}>{t('auth.noAccount')}<Text className="text-white font-bold" style={{ fontFamily: fonts.bodyBold }}>{t('auth.register')}</Text></Text>
             </TouchableOpacity>
         </View>
     );

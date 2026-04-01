@@ -69,8 +69,8 @@ export const DailyDots: React.FC<DailyDotsProps> = ({ period, dailyLimit, transa
         <View className="items-center">
             <IconArray dots={dots} columns={7} dotSize={16} gap={6} />
             <View className="flex-row justify-between w-full mt-4">
-                <Text className="text-gray-400">Лимит в день: {formatAmount(dailyLimit, 'EUR')}</Text>
-                <Text className="text-gray-400">Потрачено: {formatAmount(totalSpent, 'EUR')}</Text>
+                <Text className="text-gray-400" style={{ fontFamily: 'Geist' }}>Лимит в день: {formatAmount(dailyLimit, 'EUR')}</Text>
+                <Text className="text-gray-400" style={{ fontFamily: 'Geist' }}>Потрачено: {formatAmount(totalSpent, 'EUR')}</Text>
             </View>
         </View>
     );

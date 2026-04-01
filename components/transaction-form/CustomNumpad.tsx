@@ -15,7 +15,7 @@ const ROWS = [
 ];
 
 export function CustomNumpad({ onKey }: NumpadProps) {
-    const { colors } = useTheme();
+    const { colors, fonts } = useTheme();
 
     return (
         <View style={{ gap: 8 }}>
@@ -39,6 +39,7 @@ export function CustomNumpad({ onKey }: NumpadProps) {
                                     <Text style={{
                                         fontSize: 22, fontWeight: '500',
                                         color: isOp ? '#7C6FFF' : colors.textPrimary,
+                                        fontFamily: fonts.bodyMedium,
                                     }}>{btn}</Text>
                                 )}
                             </TouchableOpacity>

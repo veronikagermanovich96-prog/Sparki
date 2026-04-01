@@ -22,7 +22,7 @@ export default function EditCardScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const { colors } = useTheme();
+    const { colors, fonts } = useTheme();
     const { t } = useTranslation();
     const [permission, requestPermission] = useCameraPermissions();
 
@@ -235,9 +235,9 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
     },
     backBtn: { padding: 4 },
-    title: { fontSize: 17, fontWeight: '600' },
+    title: { fontSize: 17, fontWeight: '600', fontFamily: 'Geist-SemiBold' },
     saveBtn: { padding: 4 },
-    saveTxt: { fontSize: 15, fontWeight: '600', color: '#3b82f6' },
+    saveTxt: { fontSize: 15, fontWeight: '600', color: '#3b82f6', fontFamily: 'Geist-SemiBold' },
     content: { padding: 20, paddingBottom: 60 },
     preview: {
         borderRadius: 16,
@@ -246,14 +246,15 @@ const styles = StyleSheet.create({
         minHeight: 110,
         justifyContent: 'space-between',
     },
-    previewName: { fontSize: 18, fontWeight: '700', color: '#fff' },
-    previewDiscount: { fontSize: 28, fontWeight: '800', color: 'rgba(255,255,255,0.9)', marginTop: 8 },
-    label: { fontSize: 13, fontWeight: '500', marginBottom: 8, marginTop: 20 },
+    previewName: { fontSize: 18, fontWeight: '700', color: '#fff', fontFamily: 'Geist-SemiBold' },
+    previewDiscount: { fontSize: 28, fontWeight: '800', color: 'rgba(255,255,255,0.9)', marginTop: 8, fontFamily: 'Geist-Bold' },
+    label: { fontSize: 13, fontWeight: '500', marginBottom: 8, marginTop: 20, fontFamily: 'Geist-Medium' },
     input: {
         borderRadius: 12,
         paddingHorizontal: 14,
         paddingVertical: 12,
         fontSize: 15,
+        fontFamily: 'Geist',
     },
     colorRow: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
     colorDot: { width: 36, height: 36, borderRadius: 18 },
@@ -274,7 +275,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
     },
     typeChipActive: { backgroundColor: '#1d4ed8', borderColor: '#3b82f6' },
-    typeChipTxt: { fontSize: 13 },
+    typeChipTxt: { fontSize: 13, fontFamily: 'Geist' },
     scannerOverlay: {
         position: 'absolute',
         bottom: 0,
@@ -285,7 +286,7 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0,0,0,0.5)',
         paddingTop: 24,
     },
-    scannerHint: { color: '#fff', fontSize: 15 },
+    scannerHint: { color: '#fff', fontSize: 15, fontFamily: 'Geist' },
     scannerClose: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    scannerCloseTxt: { color: '#fff', fontSize: 15 },
+    scannerCloseTxt: { color: '#fff', fontSize: 15, fontFamily: 'Geist' },
 });

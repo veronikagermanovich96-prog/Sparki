@@ -1,3 +1,4 @@
+import { useTheme } from '@/context/ThemeContext';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
@@ -7,6 +8,7 @@ export default function Onboarding() {
     const [slide, setSlide] = useState(0);
     const router = useRouter();
     const { t } = useTranslation();
+    const { fonts } = useTheme();
 
     const slides = [
         {
@@ -56,8 +58,8 @@ export default function Onboarding() {
         <View className="flex-1 bg-gray-950 justify-center p-6">
             <View className="flex-1 justify-center">
                 {slides[slide].renderVisual()}
-                <Text className="text-3xl font-bold text-white text-center mb-4">{t(slides[slide].titleKey)}</Text>
-                <Text className="text-lg text-gray-400 text-center">{t(slides[slide].descKey)}</Text>
+                <Text className="text-3xl font-bold text-white text-center mb-4" style={{ fontFamily: fonts.heading }}>{t(slides[slide].titleKey)}</Text>
+                <Text className="text-lg text-gray-400 text-center" style={{ fontFamily: fonts.body }}>{t(slides[slide].descKey)}</Text>
             </View>
 
             <View className="flex-row justify-between mb-8 items-center">
@@ -73,7 +75,7 @@ export default function Onboarding() {
                     className="bg-white px-6 py-3 rounded-full"
                     onPress={handleNext}
                 >
-                    <Text className="font-bold text-gray-950">{slide === slides.length - 1 ? t('onboarding.start') : t('onboarding.next')}</Text>
+                    <Text className="font-bold text-gray-950" style={{ fontFamily: fonts.bodySemiBold }}>{slide === slides.length - 1 ? t('onboarding.start') : t('onboarding.next')}</Text>
                 </TouchableOpacity>
             </View>
         </View>

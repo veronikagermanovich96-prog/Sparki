@@ -27,7 +27,7 @@ export default function CardDetailScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const { colors } = useTheme();
+    const { colors, fonts } = useTheme();
     const { t } = useTranslation();
     const [card, setCard] = useState<LoyaltyCard | null>(null);
     const [loading, setLoading] = useState(true);
@@ -86,7 +86,7 @@ export default function CardDetailScreen() {
     if (!card) {
         return (
             <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.bgPrimary }]}>
-                <Text style={{ color: colors.textPrimary, textAlign: 'center', marginTop: 40 }}>{t('cards.cardNotFound')}</Text>
+                <Text style={{ color: colors.textPrimary, textAlign: 'center', marginTop: 40, fontFamily: fonts.body }}>{t('cards.cardNotFound')}</Text>
             </View>
         );
     }
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
         padding: 6,
         borderRadius: 8,
     },
-    headerTitle: { flex: 1, fontSize: 17, fontWeight: '600', textAlign: 'center', marginHorizontal: 8 },
+    headerTitle: { flex: 1, fontSize: 17, fontWeight: '600', textAlign: 'center', marginHorizontal: 8, fontFamily: 'Geist-SemiBold' },
     cardVisual: {
         margin: 20,
         borderRadius: 20,
@@ -200,8 +200,8 @@ const styles = StyleSheet.create({
         minHeight: 140,
         justifyContent: 'space-between',
     },
-    cardName: { fontSize: 22, fontWeight: '700', color: '#fff' },
-    cardDiscount: { fontSize: 36, fontWeight: '800', color: 'rgba(255,255,255,0.9)', marginTop: 12 },
+    cardName: { fontSize: 22, fontWeight: '700', color: '#fff', fontFamily: 'Geist-SemiBold' },
+    cardDiscount: { fontSize: 36, fontWeight: '800', color: 'rgba(255,255,255,0.9)', marginTop: 12, fontFamily: 'Geist-Bold' },
     barcodeContainer: {
         alignItems: 'center',
         marginTop: 24,
@@ -213,13 +213,13 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
         paddingVertical: 20,
     },
-    manualCodeTxt: { fontSize: 28, fontWeight: '700', letterSpacing: 3 },
+    manualCodeTxt: { fontSize: 28, fontWeight: '700', letterSpacing: 3, fontFamily: 'Geist-Bold' },
     noBarcode: { alignItems: 'center', marginTop: 40, gap: 16 },
-    noBarcodeTitle: { fontSize: 16 },
+    noBarcodeTitle: { fontSize: 16, fontFamily: 'Geist' },
     addBarcodeBtn: {
         paddingHorizontal: 20,
         paddingVertical: 10,
         borderRadius: 10,
     },
-    addBarcodeTxt: { fontSize: 14, color: '#3b82f6', fontWeight: '600' },
+    addBarcodeTxt: { fontSize: 14, color: '#3b82f6', fontWeight: '600', fontFamily: 'Geist-SemiBold' },
 });

@@ -22,7 +22,7 @@ interface LoyaltyCard {
 export default function CardsScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const { colors } = useTheme();
+    const { colors, fonts } = useTheme();
     const { t } = useTranslation();
     const [cards, setCards] = useState<LoyaltyCard[]>([]);
     const [loading, setLoading] = useState(true);
@@ -80,7 +80,7 @@ export default function CardsScreen() {
         return (
             <View style={{ flex: 1, backgroundColor: colors.bgPrimary, paddingTop: insets.top }}>
                 <View style={styles.header}>
-                    <Text style={{ fontSize: 28, fontWeight: '700', color: colors.textPrimary }}>{t('cards.title')}</Text>
+                    <Text style={{ fontSize: 28, fontWeight: '700', color: colors.textPrimary, fontFamily: fonts.heading }}>{t('cards.title')}</Text>
                 </View>
                 <ActivityIndicator color={colors.textPrimary} style={{ marginTop: 40 }} />
             </View>
@@ -90,7 +90,7 @@ export default function CardsScreen() {
     return (
         <View style={{ flex: 1, backgroundColor: colors.bgPrimary, paddingTop: insets.top }}>
             <View style={styles.header}>
-                <Text style={{ fontSize: 28, fontWeight: '700', color: colors.textPrimary }}>{t('cards.title')}</Text>
+                <Text style={{ fontSize: 28, fontWeight: '700', color: colors.textPrimary, fontFamily: fonts.heading }}>{t('cards.title')}</Text>
                 <TouchableOpacity
                     onPress={() => router.push('/cards/add' as any)}
                     style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgTertiary, alignItems: 'center', justifyContent: 'center' }}
@@ -102,8 +102,8 @@ export default function CardsScreen() {
             {cards.length === 0 ? (
                 <View style={styles.empty}>
                     <Tag color={colors.borderLight} size={56} />
-                    <Text style={{ fontSize: 20, fontWeight: '700', color: colors.textPrimary, marginTop: 8 }}>{t('cards.noCards')}</Text>
-                    <Text style={{ fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20 }}>{t('cards.noCardsHint')}</Text>
+                    <Text style={{ fontSize: 20, fontWeight: '700', color: colors.textPrimary, marginTop: 8, fontFamily: fonts.heading }}>{t('cards.noCards')}</Text>
+                    <Text style={{ fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, fontFamily: fonts.body }}>{t('cards.noCardsHint')}</Text>
                     <TouchableOpacity
                         style={styles.emptyButton}
                         onPress={() => router.push('/cards/add' as any)}
@@ -144,12 +144,13 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
     },
     cardContent: { flex: 1, justifyContent: 'space-between' },
-    cardName: { fontSize: 15, fontWeight: '600', color: '#fff' },
+    cardName: { fontSize: 15, fontWeight: '600', color: '#fff', fontFamily: 'Geist-SemiBold' },
     cardDiscount: {
         fontSize: 22,
         fontWeight: '700',
         color: 'rgba(255,255,255,0.9)',
         marginTop: 8,
+        fontFamily: 'Geist-Bold',
     },
     cardBarIndicator: {
         height: 3,
@@ -171,5 +172,5 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         borderRadius: 12,
     },
-    emptyButtonText: { fontSize: 15, fontWeight: '600', color: '#fff' },
+    emptyButtonText: { fontSize: 15, fontWeight: '600', color: '#fff', fontFamily: 'Geist-SemiBold' },
 });

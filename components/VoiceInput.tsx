@@ -60,7 +60,7 @@ export default function VoiceInput({
     visible, onClose, onSaved,
     householdId, accounts, categories, baseCurrency,
 }: VoiceInputProps) {
-    const { colors } = useTheme();
+    const { colors, fonts } = useTheme();
     const { t } = useTranslation();
 
     const [stage, setStage] = useState<Stage>('recording');
@@ -216,12 +216,14 @@ export default function VoiceInput({
         if (!accounts.length) { setError(t('voice.noAccount')); setStage('results'); return; }
 
         try {
-            for (const tx of toSave) {
+            if (toSave.length === 1) {
+                // Single item — regular transaction (no split)
+                const tx = toSave[0];
                 const cat = tx.category
                     ?? categories.find(c => c.type === tx.type)
                     ?? categories[0];
 
-                if (!cat) continue;
+                if (!cat) { onSaved(); return; }
 
                 const accountId = tx.accountId || accounts[0].id;
                 const account = accounts.find(a => a.id === accountId) ?? accounts[0];
@@ -241,7 +243,6 @@ export default function VoiceInput({
 
                 if (insertErr) {
                     console.warn('Insert error:', insertErr);
-                    continue;
                 }
 
                 const delta = tx.type === 'income' ? amount : -amount;
@@ -249,7 +250,6 @@ export default function VoiceInput({
                     .update({ balance: account.balance + delta })
                     .eq('id', accountId);
 
-                // Create recurring payment if detected
                 if (tx.isRecurring && tx.recurringFrequency) {
                     await supabase.from('recurring_payments').insert({
                         household_id: householdId,
@@ -263,6 +263,58 @@ export default function VoiceInput({
                         is_active: true,
                     });
                 }
+            } else {
+                // Multiple items — create ONE split transaction with transaction_items
+                const firstTx = toSave[0];
+                const accountId = firstTx.accountId || accounts[0].id;
+                const account = accounts.find(a => a.id === accountId) ?? accounts[0];
+                const totalAmount = toSave.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+                const currency = firstTx.currency || baseCurrency;
+                const type = firstTx.type;
+
+                const { data: parentTx, error: insertErr } = await supabase.from('transactions').insert({
+                    household_id: householdId,
+                    account_id: accountId,
+                    category_id: null,
+                    user_id: user.id,
+                    type,
+                    amount: totalAmount,
+                    currency,
+                    date: firstTx.date,
+                    note: firstTx.note || null,
+                    is_split: true,
+                }).select('id').single();
+
+                if (insertErr || !parentTx) {
+                    console.warn('Insert split parent error:', insertErr);
+                    setError(t('voice.saveError'));
+                    setStage('results');
+                    return;
+                }
+
+                const items = toSave.map((tx, idx) => {
+                    const cat = tx.category
+                        ?? categories.find(c => c.type === tx.type)
+                        ?? categories[0];
+                    return {
+                        transaction_id: parentTx.id,
+                        category_id: cat?.id ?? null,
+                        amount: Math.abs(tx.amount),
+                        amount_base: Math.abs(tx.amount),
+                        note: tx.note || null,
+                        sort_order: idx,
+                    };
+                });
+
+                const { error: itemsErr } = await supabase.from('transaction_items').insert(items);
+                if (itemsErr) {
+                    console.warn('Insert transaction_items error:', itemsErr);
+                }
+
+                const delta = type === 'income' ? totalAmount : -totalAmount;
+                await supabase.from('accounts')
+                    .update({ balance: account.balance + delta })
+                    .eq('id', accountId);
             }
 
             onSaved();
@@ -318,7 +370,7 @@ export default function VoiceInput({
         <BaseBottomSheet visible={visible} onClose={onClose} maxHeight="80%">
             {/* Header */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: 'bold' }}>
+                <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: 'bold', fontFamily: fonts.heading }}>
                     {t('voice.title')}
                 </Text>
                 <TouchableOpacity onPress={onClose} hitSlop={12}>
@@ -341,11 +393,11 @@ export default function VoiceInput({
                                 </View>
                             </Animated.View>
                             {transcript ? (
-                                <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center', paddingHorizontal: 20, marginBottom: 8 }}>
+                                <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center', paddingHorizontal: 20, marginBottom: 8, fontFamily: fonts.body }}>
                                     «{transcript}»
                                 </Text>
                             ) : (
-                                <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: 8 }}>
+                                <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: 8, fontFamily: fonts.bodyMedium }}>
                                     {t('voice.listening')}
                                 </Text>
                             )}
@@ -353,7 +405,7 @@ export default function VoiceInput({
                                 onPress={stopRecording}
                                 style={{ paddingVertical: 10, paddingHorizontal: 24, borderRadius: 12, backgroundColor: colors.bgTertiary }}
                             >
-                                <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600' }}>
+                                <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>
                                     {t('voice.stopRecording')}
                                 </Text>
                             </TouchableOpacity>
@@ -364,7 +416,7 @@ export default function VoiceInput({
                     {voiceAvailable && (
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
                             <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-                            <Text style={{ color: colors.textMuted, fontSize: 12, marginHorizontal: 12 }}>
+                            <Text style={{ color: colors.textMuted, fontSize: 12, marginHorizontal: 12, fontFamily: fonts.bodyMedium }}>
                                 {t('voice.orType')}
                             </Text>
                             <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
@@ -381,7 +433,7 @@ export default function VoiceInput({
                         style={{
                             backgroundColor: colors.bgTertiary, color: colors.textPrimary,
                             borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12,
-                            fontSize: 15, minHeight: 70, textAlignVertical: 'top',
+                            fontSize: 15, minHeight: 70, textAlignVertical: 'top', fontFamily: fonts.body,
                         }}
                     />
                     <TouchableOpacity
@@ -393,7 +445,7 @@ export default function VoiceInput({
                             alignItems: 'center',
                         }}
                     >
-                        <Text style={{ color: '#000', fontSize: 15, fontWeight: '700' }}>
+                        <Text style={{ color: '#000', fontSize: 15, fontWeight: '700', fontFamily: fonts.bodySemiBold }}>
                             {t('voice.parseText')}
                         </Text>
                     </TouchableOpacity>
@@ -404,11 +456,11 @@ export default function VoiceInput({
             {stage === 'processing' && (
                 <View style={{ alignItems: 'center', paddingVertical: 50 }}>
                     <ActivityIndicator size="large" color="#7C6FFF" />
-                    <Text style={{ color: colors.textSecondary, fontSize: 15, marginTop: 16 }}>
+                    <Text style={{ color: colors.textSecondary, fontSize: 15, marginTop: 16, fontFamily: fonts.body }}>
                         {t('voice.processing')}
                     </Text>
                     {transcript ? (
-                        <Text style={{ color: colors.textMuted, fontSize: 13, textAlign: 'center', paddingHorizontal: 20, marginTop: 8 }}>
+                        <Text style={{ color: colors.textMuted, fontSize: 13, textAlign: 'center', paddingHorizontal: 20, marginTop: 8, fontFamily: fonts.bodyMedium }}>
                             «{transcript}»
                         </Text>
                     ) : null}
@@ -421,7 +473,7 @@ export default function VoiceInput({
                     {error ? (
                         <View style={{ alignItems: 'center', paddingVertical: 24 }}>
                             <MicOff color={colors.textMuted} size={32} />
-                            <Text style={{ color: colors.textMuted, fontSize: 14, textAlign: 'center', marginTop: 12 }}>
+                            <Text style={{ color: colors.textMuted, fontSize: 14, textAlign: 'center', marginTop: 12, fontFamily: fonts.body }}>
                                 {error}
                             </Text>
                         </View>
@@ -429,7 +481,7 @@ export default function VoiceInput({
 
                     {parsed.length > 0 && (
                         <View style={{ gap: 8, marginBottom: 20 }}>
-                            <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600', marginBottom: 4 }}>
+                            <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600', marginBottom: 4, fontFamily: fonts.bodySemiBold }}>
                                 {t('voice.recognized')}
                             </Text>
                             {parsed.map((tx, idx) => (
@@ -456,17 +508,17 @@ export default function VoiceInput({
                                         </View>
 
                                         {/* Icon */}
-                                        <Text style={{ fontSize: 18 }}>{tx.category?.icon ?? typeIcon(tx.type)}</Text>
+                                        <Text style={{ fontSize: 18, fontFamily: fonts.body }}>{tx.category?.icon ?? typeIcon(tx.type)}</Text>
 
                                         {/* Info */}
                                         <View style={{ flex: 1 }}>
                                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                                <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600' }}>
+                                                <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>
                                                     {tx.category?.name ?? tx.note}
                                                 </Text>
                                                 {tx.isRecurring && (
                                                     <View style={{ backgroundColor: '#7C6FFF', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 }}>
-                                                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>
+                                                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>
                                                             {tx.recurringFrequency === 'monthly' ? '🔄 мес' :
                                                              tx.recurringFrequency === 'weekly' ? '🔄 нед' :
                                                              tx.recurringFrequency === 'daily' ? '🔄 дн' : '🔄 год'}
@@ -475,7 +527,7 @@ export default function VoiceInput({
                                                 )}
                                             </View>
                                             {tx.note ? (
-                                                <Text style={{ color: colors.textMuted, fontSize: 12 }} numberOfLines={1}>
+                                                <Text style={{ color: colors.textMuted, fontSize: 12, fontFamily: fonts.bodyMedium }} numberOfLines={1}>
                                                     {tx.note}
                                                 </Text>
                                             ) : null}
@@ -485,6 +537,7 @@ export default function VoiceInput({
                                         <Text style={{
                                             fontSize: 15, fontWeight: '700',
                                             color: tx.type === 'income' ? '#16a34a' : '#dc2626',
+                                            fontFamily: fonts.bodySemiBold,
                                         }}>
                                             {typeSign(tx.type)}{tx.amount.toLocaleString()} {tx.currency}
                                         </Text>
@@ -510,7 +563,7 @@ export default function VoiceInput({
                                                         onPress={() => setParsed(prev => prev.map((p, i) => i === idx ? { ...p, type: tp.key } : p))}
                                                         style={{ flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center',
                                                             backgroundColor: tx.type === tp.key ? tp.color : 'transparent' }}>
-                                                        <Text style={{ color: tx.type === tp.key ? '#fff' : colors.textMuted, fontSize: 13, fontWeight: '700' }}>
+                                                        <Text style={{ color: tx.type === tp.key ? '#fff' : colors.textMuted, fontSize: 13, fontWeight: '700', fontFamily: fonts.bodySemiBold }}>
                                                             {tp.label}
                                                         </Text>
                                                     </TouchableOpacity>
@@ -519,7 +572,7 @@ export default function VoiceInput({
 
                                             {/* Account */}
                                             <View>
-                                                <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 6 }}>
+                                                <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 6, fontFamily: fonts.bodySemiBold }}>
                                                     {t('transactionForm.account')}
                                                 </Text>
                                                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -530,8 +583,8 @@ export default function VoiceInput({
                                                                 style={{ paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12,
                                                                     backgroundColor: tx.accountId === acc.id ? 'rgba(124,111,255,0.15)' : colors.bgTertiary,
                                                                     borderWidth: 1.5, borderColor: tx.accountId === acc.id ? '#7C6FFF' : 'transparent' }}>
-                                                                <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600' }}>{acc.name}</Text>
-                                                                <Text style={{ color: colors.textMuted, fontSize: 11 }}>{acc.currency} {acc.balance.toLocaleString()}</Text>
+                                                                <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>{acc.name}</Text>
+                                                                <Text style={{ color: colors.textMuted, fontSize: 11, fontFamily: fonts.body }}>{acc.currency} {acc.balance.toLocaleString()}</Text>
                                                             </TouchableOpacity>
                                                         ))}
                                                     </View>
@@ -540,7 +593,7 @@ export default function VoiceInput({
 
                                             {/* Category */}
                                             <View>
-                                                <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 6 }}>
+                                                <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 6, fontFamily: fonts.bodySemiBold }}>
                                                     {t('transactionForm.category')}
                                                 </Text>
                                                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -564,7 +617,7 @@ export default function VoiceInput({
                                                                         backgroundColor: active ? 'rgba(124,111,255,0.15)' : colors.bgTertiary,
                                                                         borderWidth: 1.5, borderColor: active ? '#7C6FFF' : 'transparent' }}>
                                                                     {Ic ? <Ic color={active ? '#fff' : (cat.color ?? '#6b7280')} size={14} /> : null}
-                                                                    <Text style={{ color: active ? colors.textPrimary : colors.textSecondary, fontSize: 13, fontWeight: active ? '600' : '400' }}>{cat.name}</Text>
+                                                                    <Text style={{ color: active ? colors.textPrimary : colors.textSecondary, fontSize: 13, fontWeight: active ? '600' : '400', fontFamily: active ? fonts.bodySemiBold : fonts.body }}>{cat.name}</Text>
                                                                 </TouchableOpacity>
                                                             );
                                                         })}
@@ -574,7 +627,7 @@ export default function VoiceInput({
                                                 {!showNewCat ? (
                                                     <TouchableOpacity onPress={() => setShowNewCat(true)}
                                                         style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                                        <Text style={{ color: '#7C6FFF', fontSize: 13, fontWeight: '600' }}>+ {t('transactionForm.newCategory')}</Text>
+                                                        <Text style={{ color: '#7C6FFF', fontSize: 13, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>+ {t('transactionForm.newCategory')}</Text>
                                                     </TouchableOpacity>
                                                 ) : (
                                                     <View style={{ marginTop: 8, flexDirection: 'row', gap: 8, alignItems: 'center' }}>
@@ -585,7 +638,7 @@ export default function VoiceInput({
                                                             placeholderTextColor={colors.textDisabled}
                                                             autoFocus
                                                             style={{ flex: 1, backgroundColor: colors.bgTertiary, color: colors.textPrimary,
-                                                                borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14 }}
+                                                                borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, fontFamily: fonts.body }}
                                                         />
                                                         <TouchableOpacity
                                                             onPress={() => createCategory(idx)}
@@ -594,7 +647,7 @@ export default function VoiceInput({
                                                                 borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 }}>
                                                             {creatingCat
                                                                 ? <ActivityIndicator size="small" color="#fff" />
-                                                                : <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>+</Text>
+                                                                : <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>+</Text>
                                                             }
                                                         </TouchableOpacity>
                                                         <TouchableOpacity onPress={() => { setShowNewCat(false); setNewCatName(''); }} style={{ padding: 4 }}>
@@ -606,7 +659,7 @@ export default function VoiceInput({
 
                                             {/* Amount + Currency */}
                                             <View>
-                                                <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 6 }}>
+                                                <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 6, fontFamily: fonts.bodySemiBold }}>
                                                     {t('transactionForm.amount')}
                                                 </Text>
                                                 <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -615,13 +668,13 @@ export default function VoiceInput({
                                                         onChangeText={v => setParsed(prev => prev.map((p, i) => i === idx ? { ...p, amount: parseFloat(v) || 0 } : p))}
                                                         keyboardType="decimal-pad"
                                                         style={{ flex: 1, backgroundColor: colors.bgTertiary, color: colors.textPrimary,
-                                                            borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 18, fontWeight: '700' }}
+                                                            borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 18, fontWeight: '700', fontFamily: fonts.heading }}
                                                     />
                                                     <TouchableOpacity
                                                         onPress={() => setShowCurrencyDrop(prev => !prev)}
                                                         style={{ backgroundColor: colors.bgTertiary, borderRadius: 12,
                                                             paddingHorizontal: 16, justifyContent: 'center' }}>
-                                                        <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '700' }}>
+                                                        <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '700', fontFamily: fonts.bodySemiBold }}>
                                                             {tx.currency} ›
                                                         </Text>
                                                     </TouchableOpacity>
@@ -649,6 +702,7 @@ export default function VoiceInput({
                                                                 <Text style={{
                                                                     color: tx.currency === cur ? '#fff' : colors.textSecondary,
                                                                     fontSize: 14, fontWeight: tx.currency === cur ? '700' : '500',
+                                                                    fontFamily: tx.currency === cur ? fonts.bodySemiBold : fonts.body,
                                                                 }}>{cur}</Text>
                                                             </TouchableOpacity>
                                                         ))}
@@ -658,17 +712,17 @@ export default function VoiceInput({
 
                                             {/* Date */}
                                             <View>
-                                                <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 6 }}>
+                                                <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 6, fontFamily: fonts.bodySemiBold }}>
                                                     {t('transactionForm.date')}
                                                 </Text>
                                                 <View style={{ backgroundColor: colors.bgTertiary, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 }}>
-                                                    <Text style={{ color: colors.textPrimary, fontSize: 15 }}>{tx.date}</Text>
+                                                    <Text style={{ color: colors.textPrimary, fontSize: 15, fontFamily: fonts.body }}>{tx.date}</Text>
                                                 </View>
                                             </View>
 
                                             {/* Note */}
                                             <View>
-                                                <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 6 }}>
+                                                <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', marginBottom: 6, fontFamily: fonts.bodySemiBold }}>
                                                     {t('transactionForm.note')}
                                                 </Text>
                                                 <TextInput
@@ -677,14 +731,14 @@ export default function VoiceInput({
                                                     placeholder={t('transactionForm.notePlaceholder')}
                                                     placeholderTextColor={colors.textDisabled}
                                                     style={{ backgroundColor: colors.bgTertiary, color: colors.textPrimary,
-                                                        borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 }}
+                                                        borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, fontFamily: fonts.body }}
                                                 />
                                             </View>
 
                                             {/* Done */}
                                             <TouchableOpacity onPress={() => setEditingIdx(null)}
                                                 style={{ backgroundColor: '#7C6FFF', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}>
-                                                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{t('common.done')}</Text>
+                                                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700', fontFamily: fonts.bodySemiBold }}>{t('common.done')}</Text>
                                             </TouchableOpacity>
                                         </View>
                                     )}
@@ -704,7 +758,7 @@ export default function VoiceInput({
                             }}
                         >
                             <RotateCcw color={colors.textSecondary} size={16} />
-                            <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '600' }}>
+                            <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>
                                 {t('voice.recordAgain')}
                             </Text>
                         </TouchableOpacity>
@@ -719,7 +773,7 @@ export default function VoiceInput({
                                     alignItems: 'center',
                                 }}
                             >
-                                <Text style={{ color: '#000', fontSize: 15, fontWeight: '700' }}>
+                                <Text style={{ color: '#000', fontSize: 15, fontWeight: '700', fontFamily: fonts.bodySemiBold }}>
                                     {t('voice.save', { count: checkedCount })}
                                 </Text>
                             </TouchableOpacity>
@@ -732,7 +786,7 @@ export default function VoiceInput({
             {stage === 'saving' && (
                 <View style={{ alignItems: 'center', paddingVertical: 50 }}>
                     <ActivityIndicator size="large" color="#4FFFB0" />
-                    <Text style={{ color: colors.textSecondary, fontSize: 15, marginTop: 16 }}>
+                    <Text style={{ color: colors.textSecondary, fontSize: 15, marginTop: 16, fontFamily: fonts.body }}>
                         {t('voice.saving')}
                     </Text>
                 </View>

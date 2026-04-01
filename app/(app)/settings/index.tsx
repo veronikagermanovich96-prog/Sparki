@@ -40,8 +40,8 @@ function initials(name: string) {
 }
 
 function SectionHeader({ label }: { label: string }) {
-    const { colors } = useTheme();
-    return <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.6, marginTop: 28, marginBottom: 6, paddingHorizontal: 20 }}>{label}</Text>;
+    const { colors, fonts } = useTheme();
+    return <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.6, marginTop: 28, marginBottom: 6, paddingHorizontal: 20, fontFamily: fonts.bodySemiBold }}>{label}</Text>;
 }
 
 function SettingRow({
@@ -54,7 +54,7 @@ function SettingRow({
     right?: React.ReactNode;
     danger?: boolean;
 }) {
-    const { colors } = useTheme();
+    const { colors, fonts } = useTheme();
     return (
         <TouchableOpacity onPress={onPress} activeOpacity={onPress ? 0.7 : 1}
             style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: colors.bgSecondary }}>
@@ -63,10 +63,10 @@ function SettingRow({
                     {icon}
                 </View>
             )}
-            <Text style={{ flex: 1, color: danger ? '#ef4444' : colors.textPrimary, fontSize: 16 }}>{label}</Text>
+            <Text style={{ flex: 1, color: danger ? '#ef4444' : colors.textPrimary, fontSize: 16, fontFamily: fonts.body }}>{label}</Text>
             {right !== undefined ? right : (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    {value && <Text style={{ color: colors.textMuted, fontSize: 14 }}>{value}</Text>}
+                    {value && <Text style={{ color: colors.textMuted, fontSize: 14, fontFamily: fonts.body }}>{value}</Text>}
                     {onPress && <ChevronRight color={colors.textDisabled} size={16} />}
                 </View>
             )}
@@ -108,7 +108,7 @@ export default function SettingsScreen() {
     const [accounts,   setAccounts]   = useState<Account[]>([]);
 
     // ── Local preferences
-    const { isDark: darkMode, toggleTheme, colors } = useTheme();
+    const { isDark: darkMode, toggleTheme, colors, fonts } = useTheme();
     const [hints,     setHints]    = useState(true);
     const [langSheetVisible, setLangSheetVisible] = useState(false);
 
@@ -730,7 +730,7 @@ export default function SettingsScreen() {
 
                 {/* Header */}
                 <View style={{ paddingHorizontal: 20, paddingTop: 60, paddingBottom: 8 }}>
-                    <Text style={{ color: colors.textPrimary, fontSize: 28, fontWeight: '700' }}>{t('settings.title')}</Text>
+                    <Text style={{ color: colors.textPrimary, fontSize: 28, fontWeight: '700', fontFamily: fonts.heading }}>{t('settings.title')}</Text>
                 </View>
 
                 {/* Profile card */}

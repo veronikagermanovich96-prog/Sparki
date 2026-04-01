@@ -17,6 +17,7 @@ export interface ExportRow {
     category: string;
     note: string;
     recurring: string;
+    parent_id: string;
 }
 
 export interface ImportRow {
@@ -39,6 +40,7 @@ export const CSV_COLUMNS: { key: ColumnKey; label: string; required: boolean }[]
     { key: 'category',      label: 'Категория',        required: false },
     { key: 'note',          label: 'Заметка',          required: false },
     { key: 'recurring',     label: 'Рекуррентный',     required: false },
+    { key: 'parent_id',     label: 'Группа (сплит)',   required: false },
     { key: '__skip__',      label: 'Пропустить',       required: false },
 ];
 
@@ -95,6 +97,7 @@ export function autoDetectMapping(headers: string[]): ColumnKey[] {
         'category': 'category', 'категория': 'category',
         'note': 'note', 'заметка': 'note', 'примечание': 'note',
         'recurring': 'recurring', 'рекуррентный': 'recurring',
+        'parent_id': 'parent_id', 'группа': 'parent_id',
     };
     return headers.map(h => aliases[h.trim().toLowerCase()] ?? '__skip__');
 }
@@ -110,7 +113,7 @@ export async function exportTransactions(opts: {
 }): Promise<void> {
     let q = supabase
         .from('transactions')
-        .select('date, type, expense_type, amount, currency, amount_base, note, recurring_id, accounts(name), categories(name)')
+        .select('id, date, type, expense_type, amount, currency, amount_base, note, recurring_id, is_split, accounts(name), categories(name)')
         .eq('household_id', opts.householdId)
         .eq('is_deleted', false)
         .order('date', { ascending: false })
@@ -123,19 +126,60 @@ export async function exportTransactions(opts: {
     const { data, error } = await q;
     if (error || !data) throw new Error(error?.message ?? 'Ошибка загрузки данных');
 
-    const rows = data.map((t: any): ExportRow => ({
-        date:          t.date,
-        type:          t.type,
-        expense_type:  t.expense_type ?? '',
-        amount:        String(t.amount),
-        currency:      t.currency,
-        amount_base:   String(t.amount_base ?? t.amount),
-        base_currency: opts.baseCurrency,
-        account:       t.accounts?.name ?? '',
-        category:      t.categories?.name ?? '',
-        note:          t.note ?? '',
-        recurring:     t.recurring_id ? 'yes' : '',
-    }));
+    // Fetch split items for split transactions
+    const splitIds = data.filter((t: any) => t.is_split).map((t: any) => t.id);
+    let splitItemsMap: Record<string, any[]> = {};
+    if (splitIds.length > 0) {
+        const { data: items, error: itemsErr } = await supabase
+            .from('transaction_items')
+            .select('transaction_id, amount, amount_base, note, categories(name)')
+            .in('transaction_id', splitIds);
+        if (!itemsErr && items) {
+            for (const item of items) {
+                const tid = (item as any).transaction_id;
+                if (!splitItemsMap[tid]) splitItemsMap[tid] = [];
+                splitItemsMap[tid].push(item);
+            }
+        }
+    }
+
+    const rows: ExportRow[] = [];
+    for (const t of data as any[]) {
+        if (t.is_split && splitItemsMap[t.id]?.length) {
+            // One row per split item, sharing the same parent_id
+            for (const item of splitItemsMap[t.id]) {
+                rows.push({
+                    date:          t.date,
+                    type:          t.type,
+                    expense_type:  t.expense_type ?? '',
+                    amount:        String(item.amount),
+                    currency:      t.currency,
+                    amount_base:   String(item.amount_base ?? item.amount),
+                    base_currency: opts.baseCurrency,
+                    account:       t.accounts?.name ?? '',
+                    category:      item.categories?.name ?? '',
+                    note:          item.note ?? t.note ?? '',
+                    recurring:     t.recurring_id ? 'yes' : '',
+                    parent_id:     t.id,
+                });
+            }
+        } else {
+            rows.push({
+                date:          t.date,
+                type:          t.type,
+                expense_type:  t.expense_type ?? '',
+                amount:        String(t.amount),
+                currency:      t.currency,
+                amount_base:   String(t.amount_base ?? t.amount),
+                base_currency: opts.baseCurrency,
+                account:       t.accounts?.name ?? '',
+                category:      t.categories?.name ?? '',
+                note:          t.note ?? '',
+                recurring:     t.recurring_id ? 'yes' : '',
+                parent_id:     '',
+            });
+        }
+    }
 
     const fileName = `transactions_${new Date().toISOString().slice(0, 10)}`;
 
@@ -239,7 +283,25 @@ export async function importRows(
     const categoryMap: Record<string, string> = {};
     for (const c of categories) categoryMap[c.name.toLowerCase()] = c.id;
 
-    const toInsert = rows.map(r => {
+    // Separate rows into split groups vs regular
+    const splitGroups: Record<string, ImportRow[]> = {};
+    const regularRows: ImportRow[] = [];
+
+    for (const r of rows) {
+        const pid = r.mapped.parent_id?.trim();
+        if (pid) {
+            if (!splitGroups[pid]) splitGroups[pid] = [];
+            splitGroups[pid].push(r);
+        } else {
+            regularRows.push(r);
+        }
+    }
+
+    let inserted = 0;
+    let failed = 0;
+
+    // Insert regular (non-split) transactions in chunks
+    const toInsert = regularRows.map(r => {
         const m = r.mapped;
         return {
             household_id: householdId,
@@ -258,16 +320,60 @@ export async function importRows(
         };
     }).filter(r => r.account_id);
 
-    if (!toInsert.length) return { inserted: 0, failed: rows.length };
-
-    // batch insert in chunks of 100
-    let inserted = 0;
-    let failed = 0;
     for (let i = 0; i < toInsert.length; i += 100) {
         const chunk = toInsert.slice(i, i + 100);
         const { error } = await supabase.from('transactions').insert(chunk);
         if (error) failed += chunk.length;
         else inserted += chunk.length;
     }
+
+    // Insert split transaction groups
+    for (const [, groupRows] of Object.entries(splitGroups)) {
+        const first = groupRows[0].mapped;
+        const accountId = accountMap[first.account?.toLowerCase() ?? ''] ?? null;
+        if (!accountId) { failed += groupRows.length; continue; }
+
+        const totalAmount = groupRows.reduce((s, r) => s + parseFloat(r.mapped.amount ?? '0'), 0);
+        const totalBase = groupRows.reduce((s, r) => s + (parseFloat(r.mapped.amount_base ?? r.mapped.amount ?? '0') || 0), 0);
+
+        // Create parent transaction with is_split = true
+        const { data: parentData, error: parentErr } = await supabase
+            .from('transactions')
+            .insert({
+                household_id: householdId,
+                user_id:      userId,
+                account_id:   accountId,
+                category_id:  null,
+                type:         first.type,
+                expense_type: first.expense_type || null,
+                amount:       totalAmount,
+                currency:     first.currency ?? 'EUR',
+                amount_base:  totalBase || null,
+                exchange_rate: null,
+                note:         first.note || null,
+                date:         first.date,
+                is_deleted:   false,
+                is_split:     true,
+            })
+            .select('id')
+            .single();
+
+        if (parentErr || !parentData) { failed += groupRows.length; continue; }
+
+        // Insert transaction_items
+        const items = groupRows.map(r => ({
+            transaction_id: parentData.id,
+            category_id:    categoryMap[r.mapped.category?.toLowerCase() ?? ''] ?? null,
+            tag_id:         null,
+            amount:         parseFloat(r.mapped.amount ?? '0'),
+            amount_base:    parseFloat(r.mapped.amount_base ?? r.mapped.amount ?? '0') || null,
+            note:           r.mapped.note || null,
+        }));
+
+        const { error: itemsErr } = await supabase.from('transaction_items').insert(items);
+        if (itemsErr) failed += groupRows.length;
+        else inserted += groupRows.length;
+    }
+
     return { inserted, failed };
 }

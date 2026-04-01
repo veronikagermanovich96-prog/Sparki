@@ -22,11 +22,11 @@ import { BaseBottomSheet } from '@/components/ui/BaseBottomSheet';
 import {
     Activity, ArrowRightLeft, Award,
     Banknote, Bike, Bitcoin, BookOpen, Briefcase, Building2, Bus,
-    Camera, Car, Check, ChevronLeft, ChevronRight, CircleDollarSign, Coffee, Coins, CreditCard,
+    Camera, Car, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, Coffee, Coins, CreditCard,
     Droplets, Dumbbell, Film, Flag, Flame, Fuel, Gift, Globe, GraduationCap,
-    Heart, Home, Landmark, Laptop, MapPin, Monitor, Music,
+    Heart, HelpCircle, Home, Landmark, Laptop, MapPin, Monitor, Music,
     Package, PawPrint, Pencil, Pill, Plane, Receipt, Scissors,
-    ShoppingBag, ShoppingCart, Shirt, Sofa, Star,
+    ShoppingBag, ShoppingCart, Shirt, Smartphone, Sofa, Sparkles, Star,
     Tag, Train, TrendingDown, TrendingUp, Trophy, Tv, Utensils,
     Wallet, Wifi, Zap,
 } from 'lucide-react-native';
@@ -78,7 +78,7 @@ const CAT_ICONS: Record<string, IconComp> = {
     ShoppingCart, Coffee, Utensils, ShoppingBag,
     Car, Bus, Bike, Train, Plane, Fuel,
     Home, Sofa, Zap, Wifi, Flame, Droplets,
-    Heart, Dumbbell, Activity, Pill,
+    Heart, HelpCircle, Dumbbell, Activity, Pill,
     Film, Music, Tv, Monitor, Trophy, Star,
     Shirt, Tag, Gift, Scissors,
     MapPin, Globe,
@@ -86,7 +86,7 @@ const CAT_ICONS: Record<string, IconComp> = {
     CreditCard, Wallet, Coins, Banknote, Landmark, Bitcoin, CircleDollarSign, TrendingUp, TrendingDown,
     Briefcase, Building2, Receipt, Package,
     PawPrint, Award, Flag, ArrowRightLeft,
-    Camera, Pencil, Laptop,
+    Camera, Pencil, Laptop, Smartphone, Sparkles,
 };
 
 function CategoryIcon({ iconName, color, size = 20 }: { iconName: string; color: string; size?: number }) {
@@ -601,7 +601,7 @@ function ForecastLineChart({ data, selectedIndex, onSelect, currency: cur }: { d
 
 // ─── DonutChart ───────────────────────────────────────────────────────────────
 
-function DonutChart({ categories, totalAmount, currency: cur, active, onPress, onCategoryPress, visibleLegend, onMorePress, hiddenCount }: {
+function DonutChart({ categories, totalAmount, currency: cur, active, onPress, onCategoryPress, visibleLegend, onMorePress, hiddenCount, prevCategories }: {
     categories: CategoryItem[];
     totalAmount: number;
     currency: string;
@@ -611,93 +611,108 @@ function DonutChart({ categories, totalAmount, currency: cur, active, onPress, o
     visibleLegend: CategoryItem[];
     onMorePress?: () => void;
     hiddenCount: number;
+    prevCategories?: CategoryItem[];
 }) {
-    const { colors } = useTheme();
+    const { colors, fonts } = useTheme();
     const { t } = useTranslation();
-    const SIZE = 120;
-    const cx = SIZE / 2, cy = SIZE / 2, r = 38, sw = 14;
-    const C = 2 * Math.PI * r;
+    const SIZE = 200;
+    const cx = SIZE / 2, cy = SIZE / 2, r = 72, sw = 20;
+    const C = 2 * Math.PI * r; // ~452.4
     const total = categories.reduce((s, c) => s + c.percent, 0) || 1;
+    // Round linecap extends sw/2 on each end. Visible gap = gapUnits - sw.
+    const visibleGap = categories.length > 1 ? 5 : 0;
+    const gapUnits = sw + visibleGap;
+    const totalGapUnits = gapUnits * categories.length;
+    const availableUnits = C - totalGapUnits;
 
-    let cumBefore = 0;
+    let offset = 0;
     const segs = categories.map(cat => {
         const frac = cat.percent / total;
-        const dashLen = frac * C;
-        const gapLen = C - dashLen;
-        const dashOffset = -(cumBefore / total) * C;
-        cumBefore += cat.percent;
-        return { ...cat, dashLen, gapLen, dashOffset };
+        const dashLen = frac * availableUnits;
+        const dashOffset = -offset;
+        offset += dashLen + gapUnits;
+        return { ...cat, dashLen, dashOffset };
     });
 
     const activeCat = active !== null ? categories[active] : null;
 
     return (
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            {/* Donut — ~45% */}
-            <View style={{ width: SIZE, height: SIZE }}>
+        <View style={{ alignItems: 'center' }}>
+
+            {/* Donut ring */}
+            <View style={{ width: SIZE, height: SIZE, marginBottom: 20 }}>
                 <Svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
                     <Circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth={sw} />
                     {segs.map((seg, i) => (
-                        <Circle key={i}
+                        <Circle key={seg.id}
                             cx={cx} cy={cy} r={r}
                             fill="none"
                             stroke={seg.color}
                             strokeWidth={active === i ? sw + 4 : sw}
-                            strokeDasharray={`${seg.dashLen} ${seg.gapLen}`}
+                            strokeDasharray={`${seg.dashLen} ${C - seg.dashLen}`}
                             strokeDashoffset={seg.dashOffset}
-                            opacity={active !== null && active !== i ? 0.3 : 1}
+                            strokeLinecap="round"
+                            opacity={active !== null && active !== i ? 0.25 : 1}
                             transform={`rotate(-90, ${cx}, ${cy})`}
                             onPress={() => onPress(active === i ? null : i)}
                         />
                     ))}
                 </Svg>
                 <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
-                    {activeCat ? (
-                        <>
-                            <CategoryIcon iconName={activeCat.icon} color={activeCat.color} size={20} />
-                            <Text style={{ fontSize: 13, fontWeight: '800', color: colors.textPrimary, marginTop: 2 }}>
-                                {formatAmount(activeCat.amount, cur)}
-                            </Text>
-                            <Text style={{ fontSize: 10, fontWeight: '600', color: activeCat.color }}>
-                                {Math.round(activeCat.percent)}%
-                            </Text>
-                            <Text style={{ fontSize: 8, color: colors.textMuted, textAlign: 'center', maxWidth: 60 }} numberOfLines={1}>
-                                {activeCat.name}
-                            </Text>
-                        </>
-                    ) : (
-                        <>
-                            <Text style={{ fontSize: 15, fontWeight: '800', color: colors.textPrimary }}>
-                                {formatAmount(totalAmount, cur)}
-                            </Text>
-                            <Text style={{ fontSize: 9, color: colors.textMuted }}>{t('analytics.expensesLabel')}</Text>
-                        </>
+                    <Text style={{ fontSize: 20, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>
+                        {formatAmount(activeCat ? activeCat.amount : totalAmount, cur)}
+                    </Text>
+                    {activeCat && (
+                        <Text style={{ fontSize: 11, fontFamily: fonts.body, color: colors.textMuted, marginTop: 2 }}>
+                            {activeCat.name}
+                        </Text>
                     )}
                 </View>
             </View>
 
-            {/* Legend — ~55% */}
-            <View style={{ flex: 1, paddingLeft: 8, gap: 8 }}>
-                {visibleLegend.map((cat) => {
+            {/* Category rows with icons, %, amount, change */}
+            <View style={{ width: '100%', gap: 0 }}>
+                {visibleLegend.map((cat, idx) => {
                     const catIdx = categories.findIndex(c => c.id === cat.id);
                     const isActive = active === catIdx;
                     const dimmed = active !== null && !isActive;
+                    const prevCat = prevCategories?.find(c => c.id === cat.id);
+                    const prevAmt = prevCat?.amount ?? 0;
+                    const diff = prevAmt > 0 ? ((cat.amount - prevAmt) / prevAmt) * 100 : null;
                     return (
                         <TouchableOpacity key={cat.id} activeOpacity={0.7}
                             onPress={() => onCategoryPress ? onCategoryPress(cat) : onPress(isActive ? null : catIdx)}
-                            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, opacity: dimmed ? 0.35 : 1 }}>
-                            <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: cat.color + '26', alignItems: 'center', justifyContent: 'center' }}>
-                                <CategoryIcon iconName={cat.icon} color={cat.color} size={14} />
+                            style={{
+                                flexDirection: 'row', alignItems: 'center', opacity: dimmed ? 0.3 : 1,
+                                paddingVertical: 12,
+                                borderBottomWidth: idx < visibleLegend.length - 1 ? 1 : 0,
+                                borderBottomColor: 'rgba(255,255,255,0.04)',
+                            }}>
+                            <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: cat.color + '22', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                <CategoryIcon iconName={cat.icon} color={cat.color} size={18} />
                             </View>
-                            <Text style={{ fontSize: 12, color: colors.textPrimary, flex: 1 }} numberOfLines={1}>{cat.name}</Text>
-                            <Text style={{ fontSize: 11, color: cat.color, fontWeight: '600' }}>{Math.round(cat.percent)}%</Text>
-                            <Text style={{ fontSize: 11, color: colors.textMuted }}>{formatAmount(cat.amount, cur)}</Text>
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ fontSize: 14, fontFamily: fonts.body, color: colors.textPrimary }} numberOfLines={1}>{cat.name}</Text>
+                                <Text style={{ fontSize: 11, fontFamily: fonts.body, color: colors.textMuted, marginTop: 2 }}>
+                                    {cat.percent.toFixed(1)}% {t('analytics.ofExpenses')}
+                                </Text>
+                            </View>
+                            <View style={{ alignItems: 'flex-end' }}>
+                                <Text style={{ fontSize: 14, fontFamily: fonts.bodySemiBold, color: '#f87171' }}>
+                                    −{formatAmount(cat.amount, cur)}
+                                </Text>
+                                {diff !== null && (
+                                    <Text style={{ fontSize: 11, fontFamily: fonts.body, color: diff > 0 ? '#f87171' : '#22c55e', marginTop: 2 }}>
+                                        {diff > 0 ? '↑' : '↓'}{Math.abs(diff).toFixed(0)}%
+                                    </Text>
+                                )}
+                            </View>
                         </TouchableOpacity>
                     );
                 })}
                 {hiddenCount > 0 && onMorePress && (
-                    <TouchableOpacity onPress={onMorePress} style={{ marginTop: 4 }}>
-                        <Text style={{ fontSize: 12, color: '#7C6FFF', fontWeight: '600' }}>{t('analytics.moreN', { n: hiddenCount })}</Text>
+                    <TouchableOpacity onPress={onMorePress} style={{ paddingVertical: 12, alignItems: 'center' }}>
+                        <Text style={{ fontSize: 12, fontFamily: fonts.bodySemiBold, color: '#7C6FFF' }}>{t('analytics.moreN', { n: hiddenCount })}</Text>
                     </TouchableOpacity>
                 )}
             </View>
@@ -996,6 +1011,66 @@ export default function AnalyticsScreen() {
     const [forecastData, setForecastData] = useState<ForecastData | null>(null);
     const [goalsState, setGoalsState] = useState<GoalItem[]>([]);
 
+    // ── What If simulator ──────────────────────────────────────────────────
+    type WhatIfPeriod = 1 | 3 | 6 | 12;
+    interface WhatIfScenario {
+        categoryOverrides: Record<string, number>;
+        tagOverrides: Record<string, number>;
+        incomeOverride: number | null;
+        creditOverride: number | null;
+        subscriptionSavings: number;
+    }
+    const [whatIfPeriod, setWhatIfPeriod] = useState<WhatIfPeriod>(3);
+    const [whatIfScenario, setWhatIfScenario] = useState<WhatIfScenario>({
+        categoryOverrides: {},
+        tagOverrides: {},
+        incomeOverride: null,
+        creditOverride: null,
+        subscriptionSavings: 0,
+    });
+    const [showWhatIf, setShowWhatIf] = useState(false);
+
+    // ── What If computation ───────────────────────────────────────────────
+    function computeWhatIf() {
+        const currentIncome = (overviewByPeriod['month'] ?? overviewByPeriod[summaryPeriod])?.income ?? 0;
+        const currentCredit = loans.reduce((s, l) => s + (l.monthlyPayment ?? 0), 0);
+        const newIncome = whatIfScenario.incomeOverride ?? currentIncome;
+
+        const monthData = overviewByPeriod['month'] ?? overviewByPeriod[summaryPeriod];
+        const catSavings = Object.entries(whatIfScenario.categoryOverrides)
+            .reduce((sum, [catId, newAmount]) => {
+                const fromExtra = extraCategories.find(c => c.categoryId === catId)?.spent;
+                const fromOverview = monthData?.categories?.find(c => c.id === catId)?.amount;
+                const current = fromExtra ?? fromOverview ?? 0;
+                return sum + Math.max(0, current - newAmount);
+            }, 0);
+        const tagSavings = Object.entries(whatIfScenario.tagOverrides ?? {})
+            .reduce((sum, [tagId, newAmount]) => {
+                const current = extraCategories.flatMap(c => c.tags).find(t => t.tagId === tagId)?.spent ?? 0;
+                return sum + Math.max(0, current - newAmount);
+            }, 0);
+
+        const extraCreditPayment = whatIfScenario.creditOverride ?? 0;
+        const subscriptionSavings = whatIfScenario.subscriptionSavings;
+
+        const totalMonthlySavings = (newIncome - currentIncome) + catSavings + tagSavings + subscriptionSavings - extraCreditPayment;
+        const totalSavings = totalMonthlySavings * whatIfPeriod;
+
+        const totalCreditDebt = loans.reduce((s, l) => s + ((l as any).remaining_balance ?? (l.totalAmount - l.paidAmount)), 0);
+        const monthsEarlier = extraCreditPayment > 0 && totalCreditDebt > 0 && currentCredit > 0
+            ? Math.floor(totalCreditDebt / currentCredit - totalCreditDebt / (currentCredit + extraCreditPayment))
+            : 0;
+
+        return {
+            monthlySavings: totalMonthlySavings,
+            totalSavings,
+            monthsEarlier: Math.abs(monthsEarlier),
+            catSavings,
+            subscriptionSavings,
+            incomeGain: newIncome - currentIncome,
+        };
+    }
+
     // ── Watched categories ─────────────────────────────────────────────────
 
     async function toggleWatchedCategory(id: string) {
@@ -1283,14 +1358,15 @@ export default function AnalyticsScreen() {
         const { start, end, prevStart, prevEnd } = getDateRange(p, now);
 
         type TxnRow = {
-            amount: number; amount_base: number | null;
+            id: string; amount: number; amount_base: number | null;
             type: string; date: string; created_at: string; category_id: string;
+            is_split: boolean;
             category: { name: string; icon: string | null; color: string | null } | null;
         };
 
         const [{ data: txns }, { data: prevTxns }, { data: goalsRaw }] = await Promise.all([
             supabase.from('transactions')
-                .select('amount, amount_base, type, date, created_at, category_id, category:categories(name, icon, color)')
+                .select('id, amount, amount_base, type, date, created_at, category_id, is_split, category:categories(name, icon, color)')
                 .eq('household_id', hid)
                 .in('type', ['income', 'expense'])
                 .eq('is_deleted', false)
@@ -1357,19 +1433,50 @@ export default function AnalyticsScreen() {
             return { label: bucket.label, income: bI, expenses: bE };
         });
 
+        // Fetch split transaction items
+        const splitIds = rows.filter(t => t.is_split && t.type === 'expense').map(t => t.id);
+        type SplitItemRow = { transaction_id: string; category_id: string | null; tag_id: string | null; amount: number; amount_base: number | null; category: { name: string; icon: string | null; color: string | null } | null };
+        let splitItemsByTx: Record<string, SplitItemRow[]> = {};
+        if (splitIds.length > 0) {
+            const { data: siData } = await supabase
+                .from('transaction_items')
+                .select('transaction_id, category_id, tag_id, amount, amount_base, category:categories(name, icon, color)')
+                .in('transaction_id', splitIds);
+            ((siData ?? []) as unknown as SplitItemRow[]).forEach(si => {
+                if (!splitItemsByTx[si.transaction_id]) splitItemsByTx[si.transaction_id] = [];
+                splitItemsByTx[si.transaction_id].push(si);
+            });
+        }
+
         // Category breakdown
         const expRows = rows.filter(t => t.type === 'expense');
         const catMap: Record<string, { name: string; icon: string; color: string; total: number }> = {};
         expRows.forEach(t => {
-            const id = t.category_id;
-            if (!id) return;
-            if (!catMap[id]) catMap[id] = {
-                name: t.category?.name ?? i18n.t('analytics.otherCategory'),
-                icon: t.category?.icon ?? '📦',
-                color: getCategoryColor(t.category?.name ?? i18n.t('analytics.otherCategory'), t.category?.color ?? null, id),
-                total: 0,
-            };
-            catMap[id].total += getAmt(t);
+            if (t.is_split && splitItemsByTx[t.id]) {
+                // Use split items for category breakdown
+                splitItemsByTx[t.id].forEach(si => {
+                    const id = si.category_id;
+                    if (!id) return;
+                    const amt = si.amount_base ?? si.amount;
+                    if (!catMap[id]) catMap[id] = {
+                        name: si.category?.name ?? i18n.t('analytics.otherCategory'),
+                        icon: si.category?.icon ?? '📦',
+                        color: getCategoryColor(si.category?.name ?? i18n.t('analytics.otherCategory'), si.category?.color ?? null, id),
+                        total: 0,
+                    };
+                    catMap[id].total += amt;
+                });
+            } else {
+                const id = t.category_id;
+                if (!id) return;
+                if (!catMap[id]) catMap[id] = {
+                    name: t.category?.name ?? i18n.t('analytics.otherCategory'),
+                    icon: t.category?.icon ?? '📦',
+                    color: getCategoryColor(t.category?.name ?? i18n.t('analytics.otherCategory'), t.category?.color ?? null, id),
+                    total: 0,
+                };
+                catMap[id].total += getAmt(t);
+            }
         });
 
         const catEntries = Object.entries(catMap).sort((a, b) => b[1].total - a[1].total);
@@ -1697,22 +1804,52 @@ export default function AnalyticsScreen() {
         // 2) Load spending per category+tag for the period
         const { data: txns } = await supabase
             .from('transactions')
-            .select('category_id, tag_id, amount, amount_base')
+            .select('id, category_id, tag_id, amount, amount_base, is_split')
             .eq('household_id', hid)
             .eq('type', 'expense')
             .eq('is_deleted', false)
             .gte('date', format(periodStart, 'yyyy-MM-dd'))
             .lte('date', format(periodEnd, 'yyyy-MM-dd'));
 
+        // Fetch split transaction items
+        const splitIds = (txns ?? []).filter(t => t.is_split).map(t => t.id as string);
+        type SplitItemRow = { transaction_id: string; category_id: string | null; tag_id: string | null; amount: number; amount_base: number | null };
+        let splitItemsByTx: Record<string, SplitItemRow[]> = {};
+        if (splitIds.length > 0) {
+            const { data: siData } = await supabase
+                .from('transaction_items')
+                .select('transaction_id, category_id, tag_id, amount, amount_base')
+                .in('transaction_id', splitIds);
+            ((siData ?? []) as unknown as SplitItemRow[]).forEach(si => {
+                if (!splitItemsByTx[si.transaction_id]) splitItemsByTx[si.transaction_id] = [];
+                splitItemsByTx[si.transaction_id].push(si);
+            });
+        }
+
         // Spend by "catId" and "catId:tagId"
         const spendMap: Record<string, number> = {};
         txns?.forEach(t => {
-            const amt = (t.amount_base as number | null) ?? (t.amount as number);
-            const cid = t.category_id as string;
-            spendMap[cid] = (spendMap[cid] ?? 0) + amt;
-            if (t.tag_id) {
-                const key = `${cid}:${t.tag_id}`;
-                spendMap[key] = (spendMap[key] ?? 0) + amt;
+            if (t.is_split && splitItemsByTx[t.id as string]) {
+                // Use split items for category/tag breakdown
+                splitItemsByTx[t.id as string].forEach(si => {
+                    const amt = si.amount_base ?? si.amount;
+                    const cid = si.category_id as string;
+                    if (!cid) return;
+                    spendMap[cid] = (spendMap[cid] ?? 0) + amt;
+                    if (si.tag_id) {
+                        const key = `${cid}:${si.tag_id}`;
+                        spendMap[key] = (spendMap[key] ?? 0) + amt;
+                    }
+                });
+            } else {
+                const amt = (t.amount_base as number | null) ?? (t.amount as number);
+                const cid = t.category_id as string;
+                if (!cid) return;
+                spendMap[cid] = (spendMap[cid] ?? 0) + amt;
+                if (t.tag_id) {
+                    const key = `${cid}:${t.tag_id}`;
+                    spendMap[key] = (spendMap[key] ?? 0) + amt;
+                }
             }
         });
 
@@ -2980,40 +3117,90 @@ export default function AnalyticsScreen() {
                                 <Text style={{ fontSize: 14, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>{t('analytics.summary')}</Text>
                                 <PeriodPills value={summaryPeriod} onChange={setSummaryPeriod} />
                             </View>
-                            {fetchingPeriods.has(summaryPeriod) && !summaryData ? <Spinner /> : summaryData ? (
-                                <>
-                                    <View style={{ flexDirection: 'row', gap: 16, marginBottom: 16 }}>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={{ fontSize: 10, color: colors.textMuted, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('analytics.income')}</Text>
-                                            <Text style={{ fontSize: 20, fontFamily: fonts.heading, color: '#4FFFB0' }}>
-                                                +{formatAmount(summaryData.income, currency)}
-                                            </Text>
-                                            {summaryData.prevIncome > 0 && (
-                                                <Text style={{ fontSize: 10, color: incomeChange >= 0 ? '#4FFFB0' : '#FF6B6B', marginTop: 3 }}>
-                                                    {t('analytics.vsLastPeriod', { pct: `${incomeChange >= 0 ? '↑' : '↓'} ${Math.abs(incomeChange)}` })}
+                            {fetchingPeriods.has(summaryPeriod) && !summaryData ? <Spinner /> : summaryData ? (() => {
+                                const inc = summaryData.income;
+                                const exp = summaryData.expenses;
+                                const tot = inc + exp || 1;
+                                // Ensure min 8% visual for smaller segment so it's always visible
+                                const rawIncFrac = inc / tot;
+                                const rawExpFrac = exp / tot;
+                                const MIN_FRAC = 0.08;
+                                let incFrac = rawIncFrac, expFrac = rawExpFrac;
+                                if (inc > 0 && exp > 0) {
+                                    if (rawIncFrac < MIN_FRAC) { incFrac = MIN_FRAC; expFrac = 1 - MIN_FRAC; }
+                                    if (rawExpFrac < MIN_FRAC) { expFrac = MIN_FRAC; incFrac = 1 - MIN_FRAC; }
+                                }
+
+                                const RING = 160;
+                                const rcx = RING / 2, rcy = RING / 2, rr = 62, rsw = 16;
+                                const rC = 2 * Math.PI * rr;
+                                const hasTwo = inc > 0 && exp > 0;
+                                const gap = hasTwo ? rsw + 4 : 0;
+                                const avail = rC - (gap * (hasTwo ? 2 : 0));
+                                const incLen = incFrac * avail;
+                                const expLen = expFrac * avail;
+
+                                const polXY = (deg: number) => {
+                                    const rad = (deg - 90) * (Math.PI / 180);
+                                    return { x: rcx + rr * Math.cos(rad), y: rcy + rr * Math.sin(rad) };
+                                };
+
+                                const incSweepDeg = (incLen / rC) * 360;
+                                const gapDeg = (gap / rC) * 360;
+                                const expStartDeg = incSweepDeg + gapDeg;
+                                const expSweepDeg = (expLen / rC) * 360;
+
+                                const makeArc = (startDeg: number, sweepDeg: number) => {
+                                    const s = polXY(startDeg);
+                                    const e = polXY(startDeg + sweepDeg);
+                                    return `M ${s.x} ${s.y} A ${rr} ${rr} 0 ${sweepDeg > 180 ? 1 : 0} 1 ${e.x} ${e.y}`;
+                                };
+
+                                return (
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        {/* Donut — left */}
+                                        <View style={{ width: RING, height: RING }}>
+                                            <Svg width={RING} height={RING} viewBox={`0 0 ${RING} ${RING}`}>
+                                                <Circle cx={rcx} cy={rcy} r={rr} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth={rsw} />
+                                                {inc > 0 && <Path d={makeArc(0, incSweepDeg)} fill="none" stroke="#4CAF50" strokeWidth={rsw} strokeLinecap="round" />}
+                                                {exp > 0 && <Path d={makeArc(expStartDeg, expSweepDeg)} fill="none" stroke="#7B61FF" strokeWidth={rsw} strokeLinecap="round" />}
+                                            </Svg>
+                                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+                                                <Text style={{ fontSize: 14, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>
+                                                    {balance >= 0 ? '+' : '−'}{formatAmount(Math.abs(balance), currency)}
                                                 </Text>
-                                            )}
+                                                <Text style={{ fontSize: 10, fontFamily: fonts.body, color: colors.textMuted, marginTop: 2 }}>
+                                                    {t('analytics.balanceLabel')}
+                                                </Text>
+                                            </View>
                                         </View>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={{ fontSize: 10, color: colors.textMuted, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('analytics.expenses')}</Text>
-                                            <Text style={{ fontSize: 20, fontFamily: fonts.heading, color: '#FF6B6B' }}>
-                                                −{formatAmount(summaryData.expenses, currency)}
-                                            </Text>
-                                            {summaryData.prevExpenses > 0 && (
-                                                <Text style={{ fontSize: 10, color: expChange <= 0 ? '#4FFFB0' : '#FF6B6B', marginTop: 3 }}>
-                                                    {t('analytics.vsLastPeriod', { pct: `${expChange >= 0 ? '↑' : '↓'} ${Math.abs(expChange)}` })}
+
+                                        {/* Legend — right side */}
+                                        <View style={{ flex: 1, paddingLeft: 16, gap: 14 }}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#4CAF50' }} />
+                                                <View>
+                                                    <Text style={{ fontSize: 12, fontFamily: fonts.body, color: colors.textMuted }}>{t('analytics.income')}</Text>
+                                                    <Text style={{ fontSize: 15, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>{formatAmount(inc, currency)}</Text>
+                                                </View>
+                                            </View>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#7B61FF' }} />
+                                                <View>
+                                                    <Text style={{ fontSize: 12, fontFamily: fonts.body, color: colors.textMuted }}>{t('analytics.expenses')}</Text>
+                                                    <Text style={{ fontSize: 15, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>{formatAmount(exp, currency)}</Text>
+                                                </View>
+                                            </View>
+                                            <View style={{ marginLeft: 16 }}>
+                                                <Text style={{ fontSize: 12, fontFamily: fonts.body, color: colors.textMuted }}>{t('analytics.netBalance')}</Text>
+                                                <Text style={{ fontSize: 15, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>
+                                                    {balance >= 0 ? '+' : '−'}{formatAmount(Math.abs(balance), currency)}
                                                 </Text>
-                                            )}
+                                            </View>
                                         </View>
                                     </View>
-                                    <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)', paddingTop: 14 }}>
-                                        <Text style={{ fontSize: 10, color: colors.textMuted, marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('analytics.netBalance')}</Text>
-                                        <Text style={{ fontSize: 24, fontWeight: '800', color: balance >= 0 ? '#4FFFB0' : '#FF6B6B' }}>
-                                            {balance >= 0 ? '+' : '−'}{formatAmount(Math.abs(balance), currency)}
-                                        </Text>
-                                    </View>
-                                </>
-                            ) : null}
+                                );
+                            })() : null}
                         </Card>
 
                         {/* Deposit interest block */}
@@ -3052,29 +3239,6 @@ export default function AnalyticsScreen() {
                                 </Card>
                             </TouchableOpacity>
                         )}
-
-                        {/* Bar chart */}
-                        <Card>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                                <Text style={{ fontSize: 14, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>{t('analytics.dynamics')}</Text>
-                                <PeriodPills value={chartPeriod} onChange={setChartPeriod} />
-                            </View>
-                            {fetchingPeriods.has(chartPeriod) && !chartData ? <Spinner /> : chartData ? (
-                                <>
-                                    <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                            <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: '#4FFFB0' }} />
-                                            <Text style={{ fontSize: 10, color: colors.textMuted }}>{t('analytics.income')}</Text>
-                                        </View>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                            <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: '#FF6B6B' }} />
-                                            <Text style={{ fontSize: 10, color: colors.textMuted }}>{t('analytics.expenses')}</Text>
-                                        </View>
-                                    </View>
-                                    <BarChart data={chartData.chart} currency={currency} />
-                                </>
-                            ) : null}
-                        </Card>
 
                         {/* Donut + Categories */}
                         <Card>
@@ -3127,7 +3291,7 @@ export default function AnalyticsScreen() {
                                         ))}
                                     </>
                                 ) : (
-                                    /* Collapsed: horizontal donut + legend */
+                                    /* Collapsed: vertical donut + legend */
                                     <DonutChart
                                         categories={catData.categories}
                                         totalAmount={totalExp}
@@ -3138,6 +3302,7 @@ export default function AnalyticsScreen() {
                                         visibleLegend={catData.categories.slice(0, COLLAPSED_COUNT)}
                                         hiddenCount={hiddenCount}
                                         onMorePress={hiddenCount > 0 ? () => setCatExpanded(true) : undefined}
+                                        prevCategories={overviewByPeriod[catPeriod === 'day' ? 'day' : catPeriod === 'week' ? 'week' : catPeriod === 'year' ? 'year' : 'month']?.categories}
                                     />
                                 );
                             })() : catData ? (
@@ -3147,54 +3312,89 @@ export default function AnalyticsScreen() {
                             ) : null}
                         </Card>
 
-                        {/* Watched categories */}
+                        {/* Extra categories */}
                         <Card>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                                <Text style={{ fontSize: 14, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>{t('analytics.myCategories')}</Text>
-                                <TouchableOpacity onPress={() => setShowAddWatchedSheet(true)}
-                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.bgTertiary, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 }}>
-                                    <Text style={{ color: '#7C6FFF', fontSize: 12, fontWeight: '600' }}>+ {t('analytics.addCategory')}</Text>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                <Text style={{ fontSize: 14, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>{t('analytics.extraCategories')}</Text>
+                                <TouchableOpacity onPress={async () => {
+                                    // Init draft with all categories + load existing settings
+                                    const draft: Record<string, { active: boolean; amount: string }> = {};
+                                    allCategories.forEach(cat => {
+                                        draft[`cat:${cat.id}`] = { active: false, amount: '' };
+                                        cat.tags.forEach(tag => {
+                                            draft[`tag:${tag.id}`] = { active: false, amount: '' };
+                                        });
+                                    });
+                                    // Load existing active extras
+                                    if (householdId) {
+                                        const { data: existing } = await supabase
+                                            .from('category_extras')
+                                            .select('category_id, tag_id, comfortable_amount')
+                                            .eq('household_id', householdId)
+                                            .eq('is_active', true);
+                                        (existing ?? []).forEach((e: any) => {
+                                            const key = e.tag_id ? `tag:${e.tag_id}` : `cat:${e.category_id}`;
+                                            if (draft[key]) {
+                                                draft[key] = { active: true, amount: String(e.comfortable_amount) };
+                                            }
+                                        });
+                                    }
+                                    setExtraDraft(draft);
+                                    setShowExtrasModal(true);
+                                }}>
+                                    <Text style={{ fontSize: 12, fontFamily: fonts.bodySemiBold, color: '#7C6FFF' }}>{t('analytics.configure')}</Text>
                                 </TouchableOpacity>
                             </View>
 
-                            {(() => {
-                                const watched = (catData?.categories ?? []).filter(c => watchedCategoryIds.includes(c.id));
-                                if (watched.length === 0) return (
-                                    <TouchableOpacity onPress={() => setShowAddWatchedSheet(true)}
-                                        style={{ padding: 20, alignItems: 'center', borderWidth: 1.5, borderColor: colors.borderLight, borderStyle: 'dashed', borderRadius: 14 }}>
-                                        <Text style={{ color: colors.textMuted, fontSize: 13 }}>{t('analytics.addCategoryHint')}</Text>
-                                    </TouchableOpacity>
-                                );
-
-                                const prevData = overviewByPeriod[catPeriod === 'day' ? 'day' : catPeriod === 'week' ? 'week' : catPeriod === 'year' ? 'year' : 'month'];
-
-                                return watched.map((cat, idx) => {
-                                    const prevCat = prevData?.categories?.find(c => c.id === cat.id);
-                                    const prevAmt = prevCat?.amount ?? 0;
-                                    const diff = prevAmt > 0 ? ((cat.amount - prevAmt) / prevAmt) * 100 : null;
-                                    return (
-                                        <TouchableOpacity key={cat.id} activeOpacity={0.7}
-                                            onPress={() => openCategoryDetail(cat)}
-                                            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: idx < watched.length - 1 ? 1 : 0, borderBottomColor: 'rgba(255,255,255,0.04)' }}>
-                                            <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: cat.color + '22', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                                                <CategoryIcon iconName={cat.icon} color={cat.color} size={18} />
-                                            </View>
-                                            <View style={{ flex: 1 }}>
-                                                <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '500' }}>{cat.name}</Text>
-                                                <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>{cat.percent.toFixed(1)}% {t('analytics.ofExpenses')}</Text>
-                                            </View>
-                                            <View style={{ alignItems: 'flex-end' }}>
-                                                <Text style={{ color: '#f87171', fontSize: 14, fontWeight: '700' }}>−{formatAmount(cat.amount, currency)}</Text>
-                                                {diff !== null && (
-                                                    <Text style={{ color: diff > 0 ? '#f87171' : '#22c55e', fontSize: 11, marginTop: 2 }}>
-                                                        {diff > 0 ? '↑' : '↓'}{Math.abs(diff).toFixed(0)}%
+                            {extraCategories.length > 0 ? (
+                                <>
+                                    {extraCategories.map(ec => {
+                                        const ratio = ec.scaledComfortable > 0 ? Math.min(ec.spent / ec.scaledComfortable, 1.5) : 0;
+                                        const barPct = Math.min(ratio * 100, 100);
+                                        const isOver = ec.spent > ec.scaledComfortable;
+                                        return (
+                                            <View key={ec.categoryId} style={{ marginBottom: 14 }}>
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                                                    <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: ec.color + '22', alignItems: 'center', justifyContent: 'center' }}>
+                                                        <CategoryIcon iconName={ec.icon} color={ec.color} size={16} />
+                                                    </View>
+                                                    <Text style={{ fontSize: 13, fontFamily: fonts.bodySemiBold, color: colors.textPrimary, flex: 1 }}>{ec.name}</Text>
+                                                    <Text style={{ fontSize: 12, fontFamily: fonts.body, color: colors.textSecondary }}>
+                                                        {formatAmount(ec.spent, currency)}
+                                                        <Text style={{ color: colors.textDisabled }}> / {formatAmount(ec.scaledComfortable, currency)}</Text>
+                                                    </Text>
+                                                </View>
+                                                <View style={{ height: 5, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 3, overflow: 'hidden' }}>
+                                                    <View style={{ height: 5, width: `${barPct}%`, backgroundColor: isOver ? '#FF6B6B' : ec.color, borderRadius: 3 }} />
+                                                </View>
+                                                {ec.extra > 0 && (
+                                                    <Text style={{ fontSize: 11, fontFamily: fonts.body, color: '#FF6B6B', marginTop: 3 }}>
+                                                        {t('analytics.extraAmount', { amount: formatAmount(ec.extra, currency) })}
                                                     </Text>
                                                 )}
                                             </View>
-                                        </TouchableOpacity>
-                                    );
-                                });
-                            })()}
+                                        );
+                                    })}
+                                    {(() => {
+                                        const totalExtra = extraCategories.reduce((s, e) => s + e.extra, 0);
+                                        if (totalExtra <= 0) return null;
+                                        return (
+                                            <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)', paddingTop: 10, marginTop: 4 }}>
+                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                                    <Text style={{ fontSize: 13, fontFamily: fonts.body, color: colors.textMuted }}>{t('analytics.total')}:</Text>
+                                                    <Text style={{ fontSize: 14, fontFamily: fonts.bodyBold, color: '#FF6B6B' }}>{formatAmount(totalExtra, currency)}</Text>
+                                                </View>
+                                            </View>
+                                        );
+                                    })()}
+                                </>
+                            ) : (
+                                <View style={{ alignItems: 'center', paddingVertical: 16 }}>
+                                    <Text style={{ fontSize: 12, fontFamily: fonts.body, color: colors.textDisabled, textAlign: 'center' }}>
+                                        {t('analytics.configureHint')}
+                                    </Text>
+                                </View>
+                            )}
                         </Card>
                     </>
                 )}
@@ -3692,6 +3892,424 @@ export default function AnalyticsScreen() {
                                             </Card>
                                         );
                                     })()}
+
+                                    {/* ── What If Simulator ──────────────────── */}
+                                    <Card>
+                                        <TouchableOpacity
+                                            onPress={() => setShowWhatIf(!showWhatIf)}
+                                            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+                                        >
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                                <Text style={{ fontSize: 18 }}>🔮</Text>
+                                                <Text style={{ fontSize: 15, fontWeight: '700', color: colors.textPrimary }}>Что если?</Text>
+                                            </View>
+                                            <ChevronDown
+                                                color={colors.textMuted}
+                                                size={18}
+                                                style={{ transform: [{ rotate: showWhatIf ? '180deg' : '0deg' }] } as any}
+                                            />
+                                        </TouchableOpacity>
+
+                                        {showWhatIf && (() => {
+                                            const whatIfResult = computeWhatIf();
+                                            const wiCatFromExtra = extraCategories
+                                                .filter(e => e.spent > 0)
+                                                .sort((a, b) => b.spent - a.spent)
+                                                .slice(0, 5);
+                                            const wiCatFromData = (catData?.categories ?? [])
+                                                .slice(0, 5)
+                                                .map(c => {
+                                                    const full = allCategories.find(ac => ac.id === c.id);
+                                                    return {
+                                                        categoryId: c.id,
+                                                        name: c.name,
+                                                        icon: c.icon ?? '',
+                                                        color: c.color ?? colors.textMuted,
+                                                        spent: c.amount,
+                                                        tags: full?.tags ?? [],
+                                                    };
+                                                });
+                                            const wiCategories = wiCatFromExtra.length > 0 ? wiCatFromExtra : wiCatFromData;
+
+                                            const currentIncome = (overviewByPeriod['month'] ?? overviewByPeriod[summaryPeriod])?.income ?? 0;
+                                            const incomeOn = whatIfScenario.incomeOverride !== null;
+                                            const creditOn = whatIfScenario.creditOverride !== null;
+                                            const subsOn = whatIfScenario.subscriptionSavings > 0;
+
+                                            const wiRowStyle = { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' };
+                                            const wiExpandBg = { backgroundColor: 'rgba(124,111,255,0.06)', borderRadius: 10, padding: 10, marginBottom: 10 };
+                                            const wiInputStyle = {
+                                                backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 8,
+                                                paddingHorizontal: 10, paddingVertical: 6,
+                                                color: colors.textPrimary, fontSize: 13,
+                                                fontFamily: fonts.body, width: '100%' as const,
+                                            };
+                                            const wiPresetStyle = (active: boolean) => ({
+                                                flex: 1, paddingVertical: 6, borderRadius: 8, alignItems: 'center' as const,
+                                                backgroundColor: active ? 'rgba(124,111,255,0.25)' : 'rgba(255,255,255,0.05)',
+                                                borderWidth: 1,
+                                                borderColor: active ? 'rgba(124,111,255,0.4)' : 'rgba(255,255,255,0.08)',
+                                            });
+
+                                            return (
+                                                <View style={{ marginTop: 16 }}>
+                                                    {/* Period selector */}
+                                                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 18 }}>
+                                                        {([1, 3, 6, 12] as WhatIfPeriod[]).map(p => (
+                                                            <TouchableOpacity
+                                                                key={p}
+                                                                onPress={() => setWhatIfPeriod(p)}
+                                                                style={{
+                                                                    flex: 1, paddingVertical: 8, borderRadius: 10, alignItems: 'center',
+                                                                    backgroundColor: whatIfPeriod === p ? 'rgba(124,111,255,0.25)' : 'rgba(255,255,255,0.05)',
+                                                                    borderWidth: 1.5,
+                                                                    borderColor: whatIfPeriod === p ? 'rgba(124,111,255,0.4)' : 'rgba(255,255,255,0.08)',
+                                                                }}
+                                                            >
+                                                                <Text style={{ fontSize: 12, fontWeight: '600', color: whatIfPeriod === p ? '#7C6FFF' : colors.textDisabled }}>
+                                                                    {p === 12 ? '1 год' : `${p} мес`}
+                                                                </Text>
+                                                            </TouchableOpacity>
+                                                        ))}
+                                                    </View>
+
+                                                    {/* Income */}
+                                                    <View style={wiRowStyle}>
+                                                        <TouchableOpacity
+                                                            onPress={() => setWhatIfScenario(s => ({ ...s, incomeOverride: incomeOn ? null : currentIncome }))}
+                                                            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 }}
+                                                        >
+                                                            <Text style={{ fontSize: 16 }}>💰</Text>
+                                                            <View style={{ flex: 1 }}>
+                                                                <Text style={{ fontSize: 13, color: colors.textPrimary, fontFamily: fonts.body }}>Доход</Text>
+                                                                <Text style={{ fontSize: 11, color: colors.textDisabled, fontFamily: fonts.body }}>
+                                                                    {formatAmount(currentIncome, currency)}/мес
+                                                                </Text>
+                                                            </View>
+                                                            <Switch
+                                                                value={incomeOn}
+                                                                onValueChange={v => setWhatIfScenario(s => ({ ...s, incomeOverride: v ? currentIncome : null }))}
+                                                                trackColor={{ false: 'rgba(255,255,255,0.1)', true: 'rgba(124,111,255,0.4)' }}
+                                                                thumbColor={incomeOn ? '#7C6FFF' : '#555'}
+                                                            />
+                                                        </TouchableOpacity>
+                                                        {incomeOn && (
+                                                            <View style={wiExpandBg}>
+                                                                <TextInput
+                                                                    style={wiInputStyle}
+                                                                    keyboardType="decimal-pad"
+                                                                    placeholder={String(Math.round(currentIncome))}
+                                                                    placeholderTextColor={colors.textDisabled}
+                                                                    value={whatIfScenario.incomeOverride !== null ? String(whatIfScenario.incomeOverride) : ''}
+                                                                    onChangeText={v => {
+                                                                        const num = parseFloat(v.replace(/[^0-9.,]/g, '').replace(',', '.'));
+                                                                        setWhatIfScenario(s => ({ ...s, incomeOverride: v === '' ? 0 : (isNaN(num) ? s.incomeOverride : num) }));
+                                                                    }}
+                                                                />
+                                                                {whatIfScenario.incomeOverride !== null && whatIfScenario.incomeOverride !== currentIncome && (
+                                                                    <Text style={{ fontSize: 11, marginTop: 4, color: whatIfScenario.incomeOverride > currentIncome ? '#4FFFB0' : '#f87171' }}>
+                                                                        {whatIfScenario.incomeOverride > currentIncome ? '+' : ''}
+                                                                        {formatAmount(whatIfScenario.incomeOverride - currentIncome, currency)}/мес
+                                                                    </Text>
+                                                                )}
+                                                            </View>
+                                                        )}
+                                                    </View>
+
+                                                    {/* Credit */}
+                                                    {loans.length > 0 && (
+                                                        <View style={wiRowStyle}>
+                                                            <TouchableOpacity
+                                                                onPress={() => setWhatIfScenario(s => ({ ...s, creditOverride: creditOn ? null : 0 }))}
+                                                                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 }}
+                                                            >
+                                                                <Text style={{ fontSize: 16 }}>💳</Text>
+                                                                <View style={{ flex: 1 }}>
+                                                                    <Text style={{ fontSize: 13, color: colors.textPrimary, fontFamily: fonts.body }}>Доплата по кредиту</Text>
+                                                                    <Text style={{ fontSize: 11, color: colors.textDisabled, fontFamily: fonts.body }}>
+                                                                        Платёж: {formatAmount(loans.reduce((s, l) => s + (l.monthlyPayment ?? 0), 0), currency)}/мес
+                                                                    </Text>
+                                                                </View>
+                                                                <Switch
+                                                                    value={creditOn}
+                                                                    onValueChange={v => setWhatIfScenario(s => ({ ...s, creditOverride: v ? 0 : null }))}
+                                                                    trackColor={{ false: 'rgba(255,255,255,0.1)', true: 'rgba(124,111,255,0.4)' }}
+                                                                    thumbColor={creditOn ? '#7C6FFF' : '#555'}
+                                                                />
+                                                            </TouchableOpacity>
+                                                            {creditOn && (
+                                                                <View style={wiExpandBg}>
+                                                                    <Text style={{ fontSize: 11, color: colors.textDisabled, marginBottom: 6, fontFamily: fonts.body }}>Доплата сверх обычного платежа</Text>
+                                                                    <TextInput
+                                                                        style={wiInputStyle}
+                                                                        keyboardType="decimal-pad"
+                                                                        placeholder="0"
+                                                                        placeholderTextColor={colors.textDisabled}
+                                                                        value={whatIfScenario.creditOverride ? String(whatIfScenario.creditOverride) : ''}
+                                                                        onChangeText={v => {
+                                                                            const num = parseFloat(v.replace(/[^0-9.,]/g, '').replace(',', '.'));
+                                                                            setWhatIfScenario(s => ({ ...s, creditOverride: isNaN(num) ? 0 : num }));
+                                                                        }}
+                                                                    />
+                                                                </View>
+                                                            )}
+                                                        </View>
+                                                    )}
+
+                                                    {/* Subscriptions */}
+                                                    <View style={wiRowStyle}>
+                                                        <TouchableOpacity
+                                                            onPress={() => setWhatIfScenario(s => ({ ...s, subscriptionSavings: subsOn ? 0 : 1 }))}
+                                                            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 }}
+                                                        >
+                                                            <Text style={{ fontSize: 16 }}>📱</Text>
+                                                            <View style={{ flex: 1 }}>
+                                                                <Text style={{ fontSize: 13, color: colors.textPrimary, fontFamily: fonts.body }}>Подписки</Text>
+                                                                <Text style={{ fontSize: 11, color: colors.textDisabled, fontFamily: fonts.body }}>Сколько сэкономить</Text>
+                                                            </View>
+                                                            <Switch
+                                                                value={subsOn}
+                                                                onValueChange={v => setWhatIfScenario(s => ({ ...s, subscriptionSavings: v ? 1 : 0 }))}
+                                                                trackColor={{ false: 'rgba(255,255,255,0.1)', true: 'rgba(124,111,255,0.4)' }}
+                                                                thumbColor={subsOn ? '#7C6FFF' : '#555'}
+                                                            />
+                                                        </TouchableOpacity>
+                                                        {subsOn && (
+                                                            <View style={wiExpandBg}>
+                                                                <TextInput
+                                                                    style={wiInputStyle}
+                                                                    keyboardType="decimal-pad"
+                                                                    placeholder="0"
+                                                                    placeholderTextColor={colors.textDisabled}
+                                                                    value={whatIfScenario.subscriptionSavings > 0 ? String(whatIfScenario.subscriptionSavings) : ''}
+                                                                    onChangeText={v => {
+                                                                        const num = parseFloat(v.replace(/[^0-9.,]/g, '').replace(',', '.'));
+                                                                        setWhatIfScenario(s => ({ ...s, subscriptionSavings: isNaN(num) ? 0 : num }));
+                                                                    }}
+                                                                />
+                                                            </View>
+                                                        )}
+                                                    </View>
+
+                                                    {/* Categories */}
+                                                    {wiCategories.map((cat, idx) => {
+                                                        const catOn = whatIfScenario.categoryOverrides[cat.categoryId] !== undefined;
+                                                        const currentVal = whatIfScenario.categoryOverrides[cat.categoryId] ?? Math.round(cat.spent);
+                                                        const catTags = (cat.tags ?? []).map((t: any) => ({ id: t.tagId ?? t.id, name: t.tagName ?? t.name }));
+                                                        const isLast = idx === wiCategories.length - 1;
+                                                        return (
+                                                            <View key={cat.categoryId} style={isLast ? undefined : wiRowStyle}>
+                                                                <TouchableOpacity
+                                                                    onPress={() => setWhatIfScenario(s => {
+                                                                        const next = { ...s.categoryOverrides };
+                                                                        if (catOn) { delete next[cat.categoryId]; } else { next[cat.categoryId] = Math.round(cat.spent); }
+                                                                        return { ...s, categoryOverrides: next };
+                                                                    })}
+                                                                    style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 }}
+                                                                >
+                                                                    <CategoryIcon iconName={cat.icon} color={cat.color ?? colors.textMuted} size={16} />
+                                                                    <View style={{ flex: 1 }}>
+                                                                        <Text style={{ fontSize: 13, color: colors.textPrimary, fontFamily: fonts.body }} numberOfLines={1}>{cat.name}</Text>
+                                                                        <Text style={{ fontSize: 11, color: colors.textDisabled, fontFamily: fonts.body }}>
+                                                                            {formatAmount(cat.spent, currency)}/мес
+                                                                        </Text>
+                                                                    </View>
+                                                                    <Switch
+                                                                        value={catOn}
+                                                                        onValueChange={v => setWhatIfScenario(s => {
+                                                                            const next = { ...s.categoryOverrides };
+                                                                            if (!v) { delete next[cat.categoryId]; } else { next[cat.categoryId] = Math.round(cat.spent); }
+                                                                            return { ...s, categoryOverrides: next };
+                                                                        })}
+                                                                        trackColor={{ false: 'rgba(255,255,255,0.1)', true: 'rgba(124,111,255,0.4)' }}
+                                                                        thumbColor={catOn ? '#7C6FFF' : '#555'}
+                                                                    />
+                                                                </TouchableOpacity>
+                                                                {catOn && (
+                                                                    <View style={wiExpandBg}>
+                                                                        {catTags.length > 0 && (
+                                                                            <View style={{ marginBottom: 8 }}>
+                                                                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginBottom: 4 }}>
+                                                                                    {catTags.slice(0, 4).map((tag: { id: string; name: string; spent?: number }) => {
+                                                                                        const tagOn = whatIfScenario.tagOverrides[tag.id] !== undefined;
+                                                                                        return (
+                                                                                            <TouchableOpacity
+                                                                                                key={tag.id}
+                                                                                                onPress={() => setWhatIfScenario(s => {
+                                                                                                    const next = { ...s.tagOverrides };
+                                                                                                    if (tagOn) { delete next[tag.id]; } else { next[tag.id] = Math.round(tag.spent ?? 0); }
+                                                                                                    return { ...s, tagOverrides: next };
+                                                                                                })}
+                                                                                                style={{
+                                                                                                    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
+                                                                                                    backgroundColor: tagOn ? (cat.color ?? '#7C6FFF') + '44' : (cat.color ?? '#7C6FFF') + '22',
+                                                                                                    borderWidth: tagOn ? 1 : 0,
+                                                                                                    borderColor: cat.color ?? '#7C6FFF',
+                                                                                                }}
+                                                                                            >
+                                                                                                <Text style={{ fontSize: 11, color: cat.color ?? '#7C6FFF', fontFamily: fonts.body }}>{tag.name}</Text>
+                                                                                            </TouchableOpacity>
+                                                                                        );
+                                                                                    })}
+                                                                                </View>
+                                                                                {catTags.slice(0, 4).map((tag: { id: string; name: string; spent?: number }) => {
+                                                                                    const tagOn = whatIfScenario.tagOverrides[tag.id] !== undefined;
+                                                                                    const tagVal = whatIfScenario.tagOverrides[tag.id] ?? Math.round(tag.spent ?? 0);
+                                                                                    if (!tagOn) return null;
+                                                                                    return (
+                                                                                        <View key={tag.id} style={{ backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: 8, marginTop: 4 }}>
+                                                                                            <Text style={{ fontSize: 11, color: colors.textDisabled, marginBottom: 6, fontFamily: fonts.body }}>{tag.name}: {formatAmount(tag.spent ?? 0, currency)}/мес</Text>
+                                                                                            <View style={{ flexDirection: 'row', gap: 5, marginBottom: 6 }}>
+                                                                                                {([-25, -10, 10, 25] as const).map(pct => {
+                                                                                                    const pVal = Math.round((tag.spent ?? 0) * (1 + pct / 100));
+                                                                                                    const isAct = tagVal === pVal;
+                                                                                                    return (
+                                                                                                        <TouchableOpacity key={pct}
+                                                                                                            onPress={() => setWhatIfScenario(s => ({ ...s, tagOverrides: { ...s.tagOverrides, [tag.id]: pVal } }))}
+                                                                                                            style={{ flex: 1, paddingVertical: 5, borderRadius: 7, alignItems: 'center', backgroundColor: isAct ? 'rgba(124,111,255,0.25)' : 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: isAct ? 'rgba(124,111,255,0.4)' : 'rgba(255,255,255,0.08)' }}>
+                                                                                                            <Text style={{ fontSize: 10, fontWeight: '600', color: isAct ? '#7C6FFF' : (pct < 0 ? '#4FFFB0' : '#f87171') }}>{pct > 0 ? '+' : ''}{pct}%</Text>
+                                                                                                        </TouchableOpacity>
+                                                                                                    );
+                                                                                                })}
+                                                                                            </View>
+                                                                                            <TextInput
+                                                                                                style={{ backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 7, paddingHorizontal: 8, paddingVertical: 5, color: colors.textPrimary, fontSize: 12, fontFamily: fonts.body, width: '100%' }}
+                                                                                                keyboardType="decimal-pad"
+                                                                                                placeholder={String(Math.round(tag.spent ?? 0))}
+                                                                                                placeholderTextColor={colors.textDisabled}
+                                                                                                value={String(tagVal)}
+                                                                                                onChangeText={v => {
+                                                                                                    const num = parseFloat(v.replace(/[^0-9.,]/g, '').replace(',', '.'));
+                                                                                                    setWhatIfScenario(s => ({ ...s, tagOverrides: { ...s.tagOverrides, [tag.id]: v === '' ? 0 : (isNaN(num) ? tagVal : num) } }));
+                                                                                                }}
+                                                                                            />
+                                                                                            {tagVal !== Math.round(tag.spent ?? 0) && (
+                                                                                                <Text style={{ fontSize: 10, marginTop: 3, color: tagVal < (tag.spent ?? 0) ? '#4FFFB0' : '#f87171' }}>
+                                                                                                    {tagVal < (tag.spent ?? 0) ? '−' : '+'}{formatAmount(Math.abs(tagVal - (tag.spent ?? 0)), currency)}/мес
+                                                                                                </Text>
+                                                                                            )}
+                                                                                        </View>
+                                                                                    );
+                                                                                })}
+                                                                            </View>
+                                                                        )}
+                                                                        {/* Show category-level controls only if NO tags are selected */}
+                                                                        {!catTags.some((tag: { id: string }) => whatIfScenario.tagOverrides?.[tag.id] !== undefined) && (
+                                                                            <>
+                                                                                <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+                                                                                    {([-25, -10, 10, 25] as const).map(pct => {
+                                                                                        const presetVal = Math.round(cat.spent * (1 + pct / 100));
+                                                                                        const isActive = currentVal === presetVal;
+                                                                                        return (
+                                                                                            <TouchableOpacity
+                                                                                                key={pct}
+                                                                                                onPress={() => setWhatIfScenario(s => ({
+                                                                                                    ...s,
+                                                                                                    categoryOverrides: { ...s.categoryOverrides, [cat.categoryId]: presetVal },
+                                                                                                }))}
+                                                                                                style={wiPresetStyle(isActive)}
+                                                                                            >
+                                                                                                <Text style={{ fontSize: 11, fontWeight: '600', color: isActive ? '#7C6FFF' : (pct < 0 ? '#4FFFB0' : '#f87171') }}>
+                                                                                                    {pct > 0 ? '+' : ''}{pct}%
+                                                                                                </Text>
+                                                                                            </TouchableOpacity>
+                                                                                        );
+                                                                                    })}
+                                                                                </View>
+                                                                                <TextInput
+                                                                                    style={wiInputStyle}
+                                                                                    keyboardType="decimal-pad"
+                                                                                    placeholder={String(Math.round(cat.spent))}
+                                                                                    placeholderTextColor={colors.textDisabled}
+                                                                                    value={String(currentVal)}
+                                                                                    onChangeText={v => {
+                                                                                        const num = parseFloat(v.replace(/[^0-9.,]/g, '').replace(',', '.'));
+                                                                                        setWhatIfScenario(s => ({
+                                                                                            ...s,
+                                                                                            categoryOverrides: {
+                                                                                                ...s.categoryOverrides,
+                                                                                                [cat.categoryId]: v === '' ? 0 : (isNaN(num) ? currentVal : num),
+                                                                                            },
+                                                                                        }));
+                                                                                    }}
+                                                                                />
+                                                                                {currentVal !== Math.round(cat.spent) && (
+                                                                                    <Text style={{ fontSize: 11, marginTop: 4, color: currentVal < cat.spent ? '#4FFFB0' : '#f87171' }}>
+                                                                                        {currentVal < cat.spent ? '−' : '+'}
+                                                                                        {formatAmount(Math.abs(currentVal - cat.spent), currency)}/мес
+                                                                                    </Text>
+                                                                                )}
+                                                                            </>
+                                                                        )}
+                                                                    </View>
+                                                                )}
+                                                            </View>
+                                                        );
+                                                    })}
+
+                                                    {/* Reset */}
+                                                    <TouchableOpacity
+                                                        onPress={() => {
+                                                            setWhatIfScenario({ categoryOverrides: {}, tagOverrides: {}, incomeOverride: null, creditOverride: null, subscriptionSavings: 0 });
+                                                            setWhatIfPeriod(3);
+                                                        }}
+                                                        style={{ alignSelf: 'flex-end', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.06)', marginTop: 12, marginBottom: 16 }}
+                                                    >
+                                                        <Text style={{ fontSize: 12, color: colors.textMuted, fontWeight: '600' }}>Сбросить</Text>
+                                                    </TouchableOpacity>
+
+                                                    {/* Results */}
+                                                    <View style={{
+                                                        backgroundColor: whatIfResult.totalSavings >= 0 ? 'rgba(79,255,176,0.06)' : 'rgba(255,107,107,0.06)',
+                                                        borderRadius: 14, padding: 14,
+                                                        borderWidth: 1,
+                                                        borderColor: whatIfResult.totalSavings >= 0 ? 'rgba(79,255,176,0.15)' : 'rgba(255,107,107,0.15)',
+                                                    }}>
+                                                        <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary, marginBottom: 10 }}>Результат</Text>
+                                                        {[
+                                                            {
+                                                                label: 'Экономия / мес',
+                                                                value: (whatIfResult.monthlySavings >= 0 ? '+' : '') + formatAmount(whatIfResult.monthlySavings, currency),
+                                                                color: whatIfResult.monthlySavings >= 0 ? '#22c55e' : '#ef4444',
+                                                            },
+                                                            {
+                                                                label: `Итого за ${whatIfPeriod === 12 ? '1 год' : whatIfPeriod + ' мес'}`,
+                                                                value: (whatIfResult.totalSavings >= 0 ? '+' : '') + formatAmount(whatIfResult.totalSavings, currency),
+                                                                color: whatIfResult.totalSavings >= 0 ? '#22c55e' : '#ef4444',
+                                                            },
+                                                            ...(whatIfResult.monthsEarlier > 0 ? [{
+                                                                label: 'Кредит закроете раньше на',
+                                                                value: `${whatIfResult.monthsEarlier} мес`,
+                                                                color: '#4FFFB0',
+                                                            }] : []),
+                                                        ].map((row, i) => (
+                                                            <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5, borderTopWidth: i > 0 ? 1 : 0, borderTopColor: 'rgba(255,255,255,0.06)' }}>
+                                                                <Text style={{ fontSize: 13, color: colors.textMuted }}>{row.label}</Text>
+                                                                <Text style={{ fontSize: 14, color: row.color, fontWeight: '700' }}>{row.value}</Text>
+                                                            </View>
+                                                        ))}
+                                                        {whatIfResult.totalSavings > 0 && goalsState.length > 0 && (() => {
+                                                            const openGoal = goalsState.find(g => g.saved < g.target);
+                                                            if (!openGoal) return null;
+                                                            const remaining = openGoal.target - openGoal.saved;
+                                                            const coverage = Math.min(100, Math.round((whatIfResult.totalSavings / remaining) * 100));
+                                                            return (
+                                                                <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' }}>
+                                                                    <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 4 }}>
+                                                                        Цель «{openGoal.name}»: покрытие {coverage}%
+                                                                    </Text>
+                                                                    <View style={{ height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                                                                        <View style={{ width: `${coverage}%`, height: '100%', backgroundColor: '#7C6FFF', borderRadius: 3 }} />
+                                                                    </View>
+                                                                </View>
+                                                            );
+                                                        })()}
+                                                    </View>
+                                                </View>
+                                            );
+                                        })()}
+                                    </Card>
+
                                 </>
                             )}
                         </>
@@ -5728,14 +6346,17 @@ export default function AnalyticsScreen() {
                                                 <>
                                                     {catDraft.active && (
                                                         <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
-                                                            <TextInput
-                                                                style={{ width: 70, height: 32, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 8, color: colors.textPrimary, fontSize: 13, textAlign: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}
-                                                                keyboardType="numeric"
-                                                                placeholder="0"
-                                                                placeholderTextColor={colors.textDisabled}
-                                                                value={catDraft.amount}
-                                                                onChangeText={v => setExtraDraft(prev => ({ ...prev, [`cat:${cat.id}`]: { ...prev[`cat:${cat.id}`], amount: v } }))}
-                                                            />
+                                                            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 6, height: 30 }}>
+                                                                <Text style={{ fontSize: 12, color: colors.textDisabled }}>{getCurrencySymbol(currency)}</Text>
+                                                                <TextInput
+                                                                    style={{ width: 36, height: 30, color: colors.textPrimary, fontSize: 12, textAlign: 'center' }}
+                                                                    keyboardType="numeric"
+                                                                    placeholder="0"
+                                                                    placeholderTextColor={colors.textDisabled}
+                                                                    value={catDraft.amount}
+                                                                    onChangeText={v => setExtraDraft(prev => ({ ...prev, [`cat:${cat.id}`]: { ...prev[`cat:${cat.id}`], amount: v.replace(/[^0-9.]/g, '') } }))}
+                                                                />
+                                                            </View>
                                                             <Text style={{ fontSize: 10, color: colors.textDisabled, marginLeft: 4 }}>{t('analytics.perMonth')}</Text>
                                                         </View>
                                                     )}
@@ -5762,14 +6383,17 @@ export default function AnalyticsScreen() {
                                                         <Text style={{ flex: 1, fontSize: 13, color: colors.textSecondary }}>{t('analytics.wholeCategory')}</Text>
                                                         {catDraft.active && (
                                                             <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
-                                                                <TextInput
-                                                                    style={{ width: 60, height: 28, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 6, color: colors.textPrimary, fontSize: 12, textAlign: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}
-                                                                    keyboardType="numeric"
-                                                                    placeholder="0"
-                                                                    placeholderTextColor={colors.textDisabled}
-                                                                    value={catDraft.amount}
-                                                                    onChangeText={v => setExtraDraft(prev => ({ ...prev, [`cat:${cat.id}`]: { ...prev[`cat:${cat.id}`], amount: v } }))}
-                                                                />
+                                                                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 6, height: 28 }}>
+                                                                    <Text style={{ fontSize: 12, color: colors.textDisabled }}>{getCurrencySymbol(currency)}</Text>
+                                                                    <TextInput
+                                                                        style={{ width: 40, height: 28, color: colors.textPrimary, fontSize: 12, textAlign: 'center' }}
+                                                                        keyboardType="numeric"
+                                                                        placeholder="0"
+                                                                        placeholderTextColor={colors.textDisabled}
+                                                                        value={catDraft.amount}
+                                                                        onChangeText={v => setExtraDraft(prev => ({ ...prev, [`cat:${cat.id}`]: { ...prev[`cat:${cat.id}`], amount: v.replace(/[^0-9.]/g, '') } }))}
+                                                                    />
+                                                                </View>
                                                                 <Text style={{ fontSize: 9, color: colors.textDisabled, marginLeft: 3 }}>{t('analytics.perMonth')}</Text>
                                                             </View>
                                                         )}
@@ -5792,14 +6416,17 @@ export default function AnalyticsScreen() {
                                                             <Text style={{ flex: 1, fontSize: 13, color: colors.textPrimary }}>{tag.name}</Text>
                                                             {tagDraft.active && (
                                                                 <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
-                                                                    <TextInput
-                                                                        style={{ width: 60, height: 28, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 6, color: colors.textPrimary, fontSize: 12, textAlign: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}
-                                                                        keyboardType="numeric"
-                                                                        placeholder="0"
-                                                                        placeholderTextColor={colors.textDisabled}
-                                                                        value={tagDraft.amount}
-                                                                        onChangeText={v => setExtraDraft(prev => ({ ...prev, [`tag:${tag.id}`]: { ...prev[`tag:${tag.id}`], amount: v } }))}
-                                                                    />
+                                                                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 6, height: 28 }}>
+                                                                        <Text style={{ fontSize: 12, color: colors.textDisabled }}>{getCurrencySymbol(currency)}</Text>
+                                                                        <TextInput
+                                                                            style={{ width: 40, height: 28, color: colors.textPrimary, fontSize: 12, textAlign: 'center' }}
+                                                                            keyboardType="numeric"
+                                                                            placeholder="0"
+                                                                            placeholderTextColor={colors.textDisabled}
+                                                                            value={tagDraft.amount}
+                                                                            onChangeText={v => setExtraDraft(prev => ({ ...prev, [`tag:${tag.id}`]: { ...prev[`tag:${tag.id}`], amount: v.replace(/[^0-9.]/g, '') } }))}
+                                                                        />
+                                                                    </View>
                                                                     <Text style={{ fontSize: 9, color: colors.textDisabled, marginLeft: 3 }}>{t('analytics.perMonth')}</Text>
                                                                 </View>
                                                             )}
@@ -5822,11 +6449,11 @@ export default function AnalyticsScreen() {
 
                         <TouchableOpacity
                             onPress={() => householdId && saveExtras(householdId)}
-                            disabled={savingExtras}
+                            disabled={savingExtras || !Object.values(extraDraft).some(d => d.active && parseFloat(d.amount) > 0)}
                             style={{
                                 marginTop: 16, paddingVertical: 14,
                                 backgroundColor: '#7C6FFF', borderRadius: 14,
-                                alignItems: 'center', opacity: savingExtras ? 0.5 : 1,
+                                alignItems: 'center', opacity: savingExtras || !Object.values(extraDraft).some(d => d.active && parseFloat(d.amount) > 0) ? 0.35 : 1,
                             }}>
                             <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '700' }}>
                                 {savingExtras ? `${t('common.save')}…` : t('common.save')}

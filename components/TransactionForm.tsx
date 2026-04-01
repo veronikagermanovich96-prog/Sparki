@@ -100,6 +100,7 @@ export interface EditingTx {
     account_id: string;
     category_id: string | null;
     tag_id: string | null;
+    is_split?: boolean;
 }
 
 export interface TransactionFormProps {
@@ -181,6 +182,30 @@ function UndoTimer({ duration }: { duration: number }) {
     );
 }
 
+// ─── Split item label (resolves tag name) ────────────────────────────────────
+
+function SplitItemLabel({ item, cat, isEditing }: { item: { categoryId: string; tagId: string }; cat: CategoryLight | undefined; isEditing: boolean }) {
+    const { colors, fonts } = useTheme();
+    const { t } = useTranslation();
+    const [tagName, setTagName] = useState('');
+
+    useEffect(() => {
+        if (!item.tagId) { setTagName(''); return; }
+        supabase.from('category_tags').select('name').eq('id', item.tagId).single()
+            .then(({ data }) => setTagName(data?.name ?? ''));
+    }, [item.tagId]);
+
+    const label = cat
+        ? (tagName ? `${cat.name} → ${tagName}` : cat.name)
+        : t('transactionForm.selectCategory');
+
+    return (
+        <Text style={{ color: isEditing ? '#7C6FFF' : cat ? colors.textPrimary : colors.textDisabled, fontSize: 13, fontFamily: fonts.body, flex: 1 }} numberOfLines={1}>
+            {label}
+        </Text>
+    );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function TransactionForm({
@@ -228,8 +253,15 @@ export default function TransactionForm({
     const [saving,           setSaving]           = useState(false);
     const [undoDelete, setUndoDelete] = useState<{ cat: CategoryLight; timer: ReturnType<typeof setTimeout> } | null>(null);
 
-    // ── Tags (not yet in new compact UI, but state used in save logic) ─────
-    const [, setCategoryTags]   = useState<TagLight[]>([]);
+    // ── Split mode ─────────────────────────────────────────────────────────
+    const [isSplitMode, setIsSplitMode] = useState(false);
+    const [splitItems, setSplitItems] = useState<{ categoryId: string; tagId: string; amount: string; note: string }[]>([]);
+    const [editingSplitIndex, setEditingSplitIndex] = useState<number | null>(null);
+    const [splitPickerStep, setSplitPickerStep] = useState<'category' | 'tag'>('category');
+    const [splitPickerTags, setSplitPickerTags] = useState<TagLight[]>([]);
+
+    // ── Tags ────────────────────────────────────────────────────────────────
+    const [categoryTags, setCategoryTags] = useState<TagLight[]>([]);
     const [selectedTagId,  setSelectedTagId]  = useState('');
     const [, setNewTagText]     = useState('');
     const [, setAddingTag]      = useState(false);
@@ -288,6 +320,28 @@ export default function TransactionForm({
             setReceiptUri(editingTx.receipt_url ?? null);
             setReceiptUploadUrl(editingTx.receipt_url ?? null);
             setSelectedTagId(editingTx.tag_id ?? '');
+            // Load split items if editing a split transaction
+            if (editingTx.is_split) {
+                setIsSplitMode(true);
+                supabase
+                    .from('transaction_items')
+                    .select('category_id, tag_id, amount, note, sort_order')
+                    .eq('transaction_id', editingTx.id)
+                    .order('sort_order')
+                    .then(({ data }) => {
+                        if (data && data.length > 0) {
+                            setSplitItems(data.map(item => ({
+                                categoryId: item.category_id ?? '',
+                                tagId: item.tag_id ?? '',
+                                amount: String(item.amount),
+                                note: item.note ?? '',
+                            })));
+                        }
+                    });
+            } else {
+                setIsSplitMode(false);
+                setSplitItems([]);
+            }
         } else {
             const defType = initialType ?? 'expense';
             const defAccId = initialAccountId ?? accounts[0]?.id ?? '';
@@ -317,6 +371,8 @@ export default function TransactionForm({
             setEditingReceiptItemIdx(null);
             setReceiptCollapsed(new Set());
             setSelectedTagId('');
+            setIsSplitMode(false);
+            setSplitItems([]);
         }
         setActivePanel('numpad');
         setFormView('form');
@@ -326,6 +382,7 @@ export default function TransactionForm({
         setCatFormVisible(false);
         setCurrencyOpen(false);
         setCurrencySearch('');
+        setEditingSplitIndex(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [visible, editingTx]);
 
@@ -756,6 +813,97 @@ export default function TransactionForm({
         const resolved = hasExpr ? evaluateExpression(formAmount) : formAmount;
         const amount = parseFloat(resolved);
         if (isNaN(amount) || amount <= 0) return;
+
+        // ── Split mode save ─────────────────────────────────────────────────
+        if (isSplitMode && formType !== 'transfer') {
+            // Validate split items
+            if (splitItems.length < 2) { Alert.alert(t('common.error'), t('transactionForm.splitMinItems')); return; }
+            const invalidItem = splitItems.find(it => !it.categoryId || !it.amount || parseFloat(it.amount.replace(',', '.')) <= 0);
+            if (invalidItem) { Alert.alert(t('common.error'), t('transactionForm.splitItemInvalid')); return; }
+            const allocatedTotal = splitItems.reduce((s, it) => s + (parseFloat(it.amount.replace(',', '.')) || 0), 0);
+            if (Math.abs(allocatedTotal - amount) >= 0.01) { Alert.alert(t('common.error'), t('transactionForm.splitSumMismatch')); return; }
+
+            setSaving(true);
+            const rate = showRate && formRate ? parseFloat(formRate) : null;
+            const amountBase = rate ? amount * rate : amount;
+            const acc = accounts.find(a => a.id === formAccountId);
+
+            try {
+                if (editingTx) {
+                    // Update parent transaction
+                    await supabase.from('transactions').update({
+                        household_id: householdId, account_id: formAccountId, category_id: null,
+                        user_id: userId, type: formType, amount, currency: formCurrency,
+                        amount_base: amountBase, exchange_rate: rate,
+                        note: formNote.trim() || null, date: formDate,
+                        receipt_url: receiptUploadUrl || null, is_split: true,
+                        tag_id: null,
+                    }).eq('id', editingTx.id);
+                    // Delete old items
+                    await supabase.from('transaction_items').delete().eq('transaction_id', editingTx.id);
+                    // Insert new items
+                    await supabase.from('transaction_items').insert(
+                        splitItems.map((it, idx) => {
+                            const itemAmt = parseFloat(it.amount.replace(',', '.'));
+                            return {
+                                transaction_id: editingTx.id,
+                                category_id: it.categoryId || null,
+                                tag_id: it.tagId || null,
+                                amount: itemAmt,
+                                amount_base: rate ? itemAmt * rate : itemAmt,
+                                note: it.note || null,
+                                sort_order: idx,
+                            };
+                        })
+                    );
+                    // Update account balance
+                    if (acc) {
+                        const revert = editingTx.type === 'income' ? -editingTx.amount : +editingTx.amount;
+                        const apply = formType === 'income' ? +amount : -amount;
+                        await supabase.from('accounts').update({ balance: acc.balance + revert + apply }).eq('id', acc.id);
+                    }
+                } else {
+                    // Insert parent transaction
+                    const { data: txData, error: txErr } = await supabase.from('transactions').insert({
+                        household_id: householdId, account_id: formAccountId, category_id: null,
+                        user_id: userId, type: formType, amount, currency: formCurrency,
+                        amount_base: amountBase, exchange_rate: rate,
+                        note: formNote.trim() || null, date: formDate,
+                        receipt_url: receiptUploadUrl || null, is_split: true,
+                        tag_id: null,
+                    }).select('id').single();
+                    if (txErr) { Alert.alert(t('common.error'), txErr.message); setSaving(false); return; }
+                    // Insert split items
+                    await supabase.from('transaction_items').insert(
+                        splitItems.map((it, idx) => {
+                            const itemAmt = parseFloat(it.amount.replace(',', '.'));
+                            return {
+                                transaction_id: txData.id,
+                                category_id: it.categoryId || null,
+                                tag_id: it.tagId || null,
+                                amount: itemAmt,
+                                amount_base: rate ? itemAmt * rate : itemAmt,
+                                note: it.note || null,
+                                sort_order: idx,
+                            };
+                        })
+                    );
+                    // Update account balance
+                    if (acc) {
+                        await supabase.from('accounts').update({
+                            balance: formType === 'income' ? acc.balance + amount : acc.balance - amount,
+                        }).eq('id', acc.id);
+                    }
+                }
+            } catch (e: any) {
+                Alert.alert(t('common.error'), e.message);
+            }
+            setSaving(false);
+            onClose();
+            onSaved();
+            return;
+        }
+
         if (formType !== 'transfer' && !formCategoryId) return;
         setSaving(true);
 
@@ -1145,30 +1293,207 @@ export default function TransactionForm({
                     {/* ── Category section ── */}
                     {formType !== 'transfer' && (
                         <View style={{ marginBottom: 6, paddingHorizontal: 16 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                                <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: fonts.bodySemiBold }}>{t('transactionForm.category')}</Text>
-                                <TouchableOpacity onPress={openCatForm}
-                                    style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.bgTertiary, alignItems: 'center', justifyContent: 'center' }}>
-                                    <Plus color={colors.textMuted} size={16} />
-                                </TouchableOpacity>
-                            </View>
-                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
-                                {formCats.slice(0, 12).map(cat => {
-                                    const sel = formCategoryId === cat.id;
-                                    return (
-                                        <TouchableOpacity key={cat.id} onPress={() => onCatSelect(cat.id)}
-                                            onLongPress={() => deleteCategory(cat)}
-                                            style={{ paddingHorizontal: 8, paddingVertical: 5 }}>
-                                            <Text style={{ color: sel ? '#fff' : colors.textSecondary, fontSize: 14, fontFamily: sel ? fonts.bodySemiBold : fonts.body }}>{cat.name}</Text>
+                            {isSplitMode ? (
+                                /* ═══ Split mode UI ═══ */
+                                <>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                        <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: fonts.bodySemiBold }}>{t('transactionForm.splitByCategories')}</Text>
+                                        <TouchableOpacity onPress={() => { setIsSplitMode(false); setSplitItems([]); setEditingSplitIndex(null); setSplitPickerStep('category'); setSplitPickerTags([]); }}
+                                            style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.bgTertiary, alignItems: 'center', justifyContent: 'center' }}>
+                                            <X color={colors.textMuted} size={16} />
                                         </TouchableOpacity>
-                                    );
-                                })}
-                            </View>
-                            {formCats.length > 12 && (
-                                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 4, marginTop: 6 }}>
-                                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' }} />
-                                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.3)' }} />
-                                </View>
+                                    </View>
+                                    {/* Split items list */}
+                                    {splitItems.map((item, idx) => {
+                                        const cat = formCats.find(c => c.id === item.categoryId);
+                                        const isEditingCat = editingSplitIndex === idx;
+                                        return (
+                                            <View key={idx} style={{ marginBottom: 6 }}>
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.bgTertiary, borderRadius: 10, padding: 8 }}>
+                                                    {/* Category name (tappable) */}
+                                                    <TouchableOpacity activeOpacity={0.6} onPress={() => { setEditingSplitIndex(isEditingCat ? null : idx); setSplitPickerStep('category'); setSplitPickerTags([]); }} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                        <SplitItemLabel item={item} cat={cat} isEditing={isEditingCat} />
+                                                        <Text style={{ color: colors.textDisabled, fontSize: 10 }}>{isEditingCat ? '▲' : '▼'}</Text>
+                                                    </TouchableOpacity>
+                                                    {/* Amount input */}
+                                                    <TextInput
+                                                        value={item.amount}
+                                                        onChangeText={(val) => setSplitItems(prev => prev.map((it, i) => i === idx ? { ...it, amount: val } : it))}
+                                                        placeholder="0"
+                                                        placeholderTextColor={colors.textDisabled}
+                                                        keyboardType="decimal-pad"
+                                                        style={{ width: 80, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, color: colors.textPrimary, fontSize: 14, fontFamily: fonts.body, textAlign: 'right' }}
+                                                    />
+                                                    {/* Delete button (only if more than 2 items) */}
+                                                    {splitItems.length > 2 && (
+                                                        <TouchableOpacity onPress={() => { setSplitItems(prev => prev.filter((_, i) => i !== idx)); if (editingSplitIndex === idx) setEditingSplitIndex(null); }}
+                                                            hitSlop={6} style={{ padding: 4 }}>
+                                                            <Trash2 color="#ef4444" size={14} />
+                                                        </TouchableOpacity>
+                                                    )}
+                                                </View>
+                                                {/* Category/tag picker for this item */}
+                                                {isEditingCat && (
+                                                    <View style={{ marginTop: 4, paddingLeft: 4 }}>
+                                                        {splitPickerStep === 'tag' && splitPickerTags.length > 0 ? (
+                                                            /* Tag selection step */
+                                                            <>
+                                                                <TouchableOpacity onPress={() => { setSplitPickerStep('category'); setSplitPickerTags([]); }}
+                                                                    style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                                                                    <Text style={{ color: colors.textMuted, fontSize: 14, marginRight: 6 }}>‹</Text>
+                                                                    <Text style={{ color: colors.textPrimary, fontSize: 12, fontFamily: fonts.bodySemiBold }}>
+                                                                        {formCats.find(c => c.id === item.categoryId)?.name}
+                                                                    </Text>
+                                                                </TouchableOpacity>
+                                                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                                                                    <TouchableOpacity
+                                                                        onPress={() => { setSplitItems(prev => prev.map((it, i) => i === idx ? { ...it, tagId: '' } : it)); setEditingSplitIndex(null); setSplitPickerStep('category'); setSplitPickerTags([]); }}
+                                                                        style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: !item.tagId ? '#7C6FFF22' : 'rgba(255,255,255,0.06)' }}>
+                                                                        <Text style={{ color: !item.tagId ? '#7C6FFF' : colors.textSecondary, fontSize: 12, fontFamily: !item.tagId ? fonts.bodySemiBold : fonts.body }}>Всё</Text>
+                                                                    </TouchableOpacity>
+                                                                    {splitPickerTags.map(tag => {
+                                                                        const sel = item.tagId === tag.id;
+                                                                        return (
+                                                                            <TouchableOpacity key={tag.id}
+                                                                                onPress={() => { setSplitItems(prev => prev.map((it, i) => i === idx ? { ...it, tagId: tag.id } : it)); setEditingSplitIndex(null); setSplitPickerStep('category'); setSplitPickerTags([]); }}
+                                                                                style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: sel ? '#7C6FFF22' : 'rgba(255,255,255,0.06)' }}>
+                                                                                <Text style={{ color: sel ? '#7C6FFF' : colors.textSecondary, fontSize: 12, fontFamily: sel ? fonts.bodySemiBold : fonts.body }}>{tag.name}</Text>
+                                                                            </TouchableOpacity>
+                                                                        );
+                                                                    })}
+                                                                </View>
+                                                            </>
+                                                        ) : (
+                                                            /* Category selection step */
+                                                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                                                                {formCats.map(c => {
+                                                                    const sel = item.categoryId === c.id;
+                                                                    return (
+                                                                        <TouchableOpacity key={c.id}
+                                                                            onPress={async () => {
+                                                                                setSplitItems(prev => prev.map((it, i) => i === idx ? { ...it, categoryId: c.id, tagId: '' } : it));
+                                                                                // Check if category has tags
+                                                                                const { data: tags } = await supabase
+                                                                                    .from('category_tags')
+                                                                                    .select('id, name')
+                                                                                    .eq('category_id', c.id)
+                                                                                    .order('sort_order');
+                                                                                if (tags && tags.length > 0) {
+                                                                                    setSplitPickerTags(tags as TagLight[]);
+                                                                                    setSplitPickerStep('tag');
+                                                                                } else {
+                                                                                    setEditingSplitIndex(null);
+                                                                                }
+                                                                            }}
+                                                                            style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: sel ? '#7C6FFF22' : 'rgba(255,255,255,0.06)' }}>
+                                                                            <Text style={{ color: sel ? '#7C6FFF' : colors.textSecondary, fontSize: 12, fontFamily: sel ? fonts.bodySemiBold : fonts.body }}>{c.name}</Text>
+                                                                        </TouchableOpacity>
+                                                                    );
+                                                                })}
+                                                            </View>
+                                                        )}
+                                                    </View>
+                                                )}
+                                            </View>
+                                        );
+                                    })}
+                                    {/* Add item button */}
+                                    <TouchableOpacity onPress={() => setSplitItems(prev => [...prev, { categoryId: '', tagId: '', amount: '', note: '' }])}
+                                        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, borderRadius: 10, backgroundColor: 'rgba(124,111,255,0.08)', marginTop: 2 }}>
+                                        <Plus color="#7C6FFF" size={14} />
+                                        <Text style={{ color: '#7C6FFF', fontSize: 13, fontFamily: fonts.bodySemiBold }}>{t('transactionForm.splitAddItem')}</Text>
+                                    </TouchableOpacity>
+                                    {/* Summary line */}
+                                    {(() => {
+                                        const allocated = splitItems.reduce((s, it) => s + (parseFloat(it.amount.replace(',', '.')) || 0), 0);
+                                        const total = parseFloat(resolvedAmt) || 0;
+                                        const matches = total > 0 && Math.abs(allocated - total) < 0.01;
+                                        return (
+                                            <Text style={{ color: matches ? '#22c55e' : '#ef4444', fontSize: 12, fontFamily: fonts.bodySemiBold, marginTop: 6, textAlign: 'right' }}>
+                                                {t('transactionForm.splitTotal')}: {allocated.toFixed(2)} / {total.toFixed(2)}
+                                            </Text>
+                                        );
+                                    })()}
+                                </>
+                            ) : (
+                                /* ═══ Normal category mode ═══ */
+                                <>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                        <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: fonts.bodySemiBold }}>{t('transactionForm.category')}</Text>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                            {/* Split button */}
+                                            <TouchableOpacity onPress={() => {
+                                                setIsSplitMode(true);
+                                                const initial: { categoryId: string; tagId: string; amount: string; note: string }[] = [];
+                                                if (formCategoryId) {
+                                                    initial.push({ categoryId: formCategoryId, tagId: '', amount: '', note: '' });
+                                                }
+                                                initial.push({ categoryId: '', tagId: '', amount: '', note: '' });
+                                                if (initial.length < 2) initial.push({ categoryId: '', tagId: '', amount: '', note: '' });
+                                                setSplitItems(initial);
+                                                setFormCategoryId('');
+                                            }}
+                                                style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: 'rgba(124,111,255,0.1)' }}>
+                                                <Text style={{ color: '#7C6FFF', fontSize: 12, fontFamily: fonts.bodySemiBold }}>{t('transactionForm.splitBtn')}</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity onPress={openCatForm}
+                                                style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.bgTertiary, alignItems: 'center', justifyContent: 'center' }}>
+                                                <Plus color={colors.textMuted} size={16} />
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                    {categoryTags.length > 0 && formCategoryId ? (
+                                        /* Tags view — show selected category + its tags */
+                                        <>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                                                <TouchableOpacity onPress={() => { setCategoryTags([]); setSelectedTagId(''); }}
+                                                    style={{ marginRight: 8 }}>
+                                                    <Text style={{ color: colors.textMuted, fontSize: 18 }}>‹</Text>
+                                                </TouchableOpacity>
+                                                <Text style={{ color: '#fff', fontSize: 14, fontFamily: fonts.bodySemiBold }}>
+                                                    {formCats.find(c => c.id === formCategoryId)?.name}
+                                                </Text>
+                                            </View>
+                                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                                                {categoryTags.map(tag => {
+                                                    const sel = selectedTagId === tag.id;
+                                                    return (
+                                                        <TouchableOpacity key={tag.id} onPress={() => setSelectedTagId(sel ? '' : tag.id)}
+                                                            style={{
+                                                                paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+                                                                backgroundColor: sel ? '#7C6FFF22' : colors.bgTertiary,
+                                                                borderWidth: 1, borderColor: sel ? '#7C6FFF' : 'transparent',
+                                                            }}>
+                                                            <Text style={{ fontSize: 13, fontFamily: sel ? fonts.bodySemiBold : fonts.body, color: sel ? '#7C6FFF' : colors.textMuted }}>{tag.name}</Text>
+                                                        </TouchableOpacity>
+                                                    );
+                                                })}
+                                            </View>
+                                        </>
+                                    ) : (
+                                        /* Categories list */
+                                        <>
+                                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                                                {formCats.slice(0, 12).map(cat => {
+                                                    const sel = formCategoryId === cat.id;
+                                                    return (
+                                                        <TouchableOpacity key={cat.id} onPress={() => onCatSelect(cat.id)}
+                                                            onLongPress={() => deleteCategory(cat)}
+                                                            style={{ paddingHorizontal: 8, paddingVertical: 5 }}>
+                                                            <Text style={{ color: sel ? '#fff' : colors.textSecondary, fontSize: 14, fontFamily: sel ? fonts.bodySemiBold : fonts.body }}>{cat.name}</Text>
+                                                        </TouchableOpacity>
+                                                    );
+                                                })}
+                                            </View>
+                                            {formCats.length > 12 && (
+                                                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 4, marginTop: 6 }}>
+                                                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' }} />
+                                                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.3)' }} />
+                                                </View>
+                                            )}
+                                        </>
+                                    )}
+                                </>
                             )}
                         </View>
                     )}
@@ -1471,7 +1796,7 @@ export default function TransactionForm({
 
                         {/* Confirm/Save button */}
                         <TouchableOpacity onPress={saveForm}
-                            disabled={formView === 'history' || saving || !formAmount || (formType !== 'transfer' && !formCategoryId) || !formAccountId}
+                            disabled={formView === 'history' || saving || !formAmount || (formType !== 'transfer' && !isSplitMode && !formCategoryId) || !formAccountId}
                             style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center',
                                 backgroundColor: formView === 'history' || !formAmount ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.15)' }}>
                             <Check color={formView === 'history' || !formAmount ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.7)'} size={20} />

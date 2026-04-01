@@ -62,6 +62,6 @@ export function formatAmount(amount: number, currencyCode: string): string {
     const abs = Math.abs(amount).toLocaleString('ru-RU', {
         minimumFractionDigits: 0,
         maximumFractionDigits: 2,
-    });
-    return amount < 0 ? `−${sym} ${abs}` : `${sym} ${abs}`;
+    }).replace(/\s/g, '\u2009'); // thin space as thousands separator
+    return amount < 0 ? `−${sym}\u2009${abs}` : `${sym}\u2009${abs}`;
 }

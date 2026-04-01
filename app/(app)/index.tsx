@@ -7,6 +7,7 @@ import {
     Smartphone, Trash2, TrendingDown, TrendingUp, Wallet, X,
 } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { Circle as SvgCircle, Path as SvgPath, Svg } from 'react-native-svg';
 import { useTheme } from '@/context/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n';
@@ -18,8 +19,8 @@ import {
 import { BaseBottomSheet } from '@/components/ui/BaseBottomSheet';
 import { router, useFocusEffect } from 'expo-router';
 import {
-    addDays, addWeeks, differenceInMonths, format, getDaysInMonth,
-    startOfDay, startOfMonth, startOfWeek, startOfYear,
+    addDays, addMonths, addWeeks, differenceInMonths, format, getDay, getDaysInMonth,
+    isFuture, isToday, startOfDay, startOfMonth, startOfWeek, startOfYear, subMonths,
 } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 import { formatAmount, CURRENCIES as CURRENCY_LIST } from '@/constants/currencies';
@@ -195,6 +196,14 @@ export default function Dashboard() {
 
     // ── Icon Array ───────────────────────────────────────────────────────────
     const [period,       setPeriod]       = useState<Period>('month');
+    const [balanceMonth, setBalanceMonth] = useState(new Date());
+    type BalancePeriod = 'day' | 'week' | 'month' | 'year' | 'last7' | 'last30' | 'all' | 'custom';
+    const [balancePeriod, setBalancePeriod] = useState<BalancePeriod>('month');
+    const [showPeriodPicker, setShowPeriodPicker] = useState(false);
+    const [customFrom, setCustomFrom] = useState(startOfMonth(new Date()));
+    const [customTo, setCustomTo] = useState(new Date());
+    const [showCustomFromPicker, setShowCustomFromPicker] = useState(false);
+    const [showCustomToPicker, setShowCustomToPicker] = useState(false);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [incomeTx,     setIncomeTx]     = useState<Transaction[]>([]);
     const [dailyLimit,   setDailyLimit]   = useState(0);
@@ -692,202 +701,480 @@ export default function Dashboard() {
 
                 {/* ── Balance ── */}
                 <View style={{ marginTop: 16, marginBottom: 32 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{t('dashboard.activeBalance')}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <Text style={{ color: colors.textSecondary, fontSize: 14, fontFamily: fonts.body }}>{t('dashboard.activeBalance')}</Text>
                         <TouchableOpacity onPress={() => setHidden(h => !h)} hitSlop={8}>
-                            {hidden ? <EyeOff color={colors.textMuted} size={18} /> : <Eye color={colors.textMuted} size={18} />}
+                            {hidden ? <EyeOff color={colors.textMuted} size={20} /> : <Eye color={colors.textMuted} size={20} />}
                         </TouchableOpacity>
                     </View>
                     {loading ? (
                         <ActivityIndicator color={colors.textPrimary} style={{ alignSelf: 'flex-start', marginVertical: 10 }} />
                     ) : (
                         <>
-                            <Text style={{ color: colors.textPrimary, fontSize: 44, fontFamily: fonts.heading, marginBottom: 4 }}>
+                            <Text style={{ color: colors.textPrimary, fontSize: 40, fontFamily: fonts.heading, letterSpacing: -1, marginBottom: 6 }}>
                                 {hidden ? '••••••' : formatAmount(activeBalance, currency)}
                             </Text>
-                            <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+                            <Text style={{ color: colors.textMuted, fontSize: 14, fontFamily: fonts.body }}>
                                 {t('dashboard.totalOnAccounts', { amount: hidden ? '••••' : formatAmount(totalBalance, currency) })}
                             </Text>
                         </>
                     )}
 
                     {/* Account cards */}
-                    <Text style={{ color: colors.textPrimary, fontSize: 16, fontFamily: fonts.bodySemiBold, marginTop: 20, marginBottom: 12 }}>{t('dashboard.accounts')}</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                        keyboardShouldPersistTaps="handled"
-                        style={{ marginHorizontal: -24, paddingHorizontal: 24 }}>
-                        {accounts.map(account => {
-                            const IC = ICON_MAP[account.icon ?? 'CreditCard'] ?? CreditCard;
-                            const col = account.color ?? '#3b82f6';
-                            return (
-                                <TouchableOpacity
-                                    key={account.id}
-                                    onPress={() => setActionAccount(account)}
-                                    onLongPress={() => setMenuAccount(account)}
-                                    delayLongPress={400}
-                                    activeOpacity={0.85}
-                                    style={{
-                                        backgroundColor: colors.bgSecondary, borderWidth: 1,
-                                        borderColor: account.exclude_from_dashboard ? colors.borderLight : colors.bgTertiary,
-                                        borderRadius: 16, padding: 16, marginRight: 16, width: 160,
-                                        opacity: account.exclude_from_dashboard ? 0.55 : 1,
-                                    }}
-                                >
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <IC color={col} size={24} />
-                                        <TouchableOpacity onPress={() => toggleExclude(account)} hitSlop={8}>
-                                            {account.exclude_from_dashboard
-                                                ? <EyeOff color={colors.textDisabled} size={16} />
-                                                : <Eye color={colors.textMuted} size={16} />}
-                                        </TouchableOpacity>
-                                    </View>
-                                    <Text style={{ color: colors.textPrimary, fontFamily: fonts.bodyMedium, marginTop: 16, marginBottom: 4 }} numberOfLines={1}>
-                                        {account.name}
-                                    </Text>
-                                    <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
-                                        {hidden ? '••••' : formatAmount(account.balance, account.currency)}
-                                    </Text>
-                                </TouchableOpacity>
-                            );
-                        })}
+                    <View style={{ marginTop: 20 }}>
+                        <Text style={{ color: colors.textPrimary, fontSize: 15, fontFamily: fonts.bodySemiBold, marginBottom: 12 }}>{t('dashboard.accounts')}</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -24, paddingHorizontal: 24 }}>
+                            {accounts.map(account => {
+                                const IC = ICON_MAP[account.icon ?? 'CreditCard'] ?? CreditCard;
+                                const col = account.color ?? '#3b82f6';
+                                const excluded = account.exclude_from_dashboard;
+                                return (
+                                    <TouchableOpacity
+                                        key={account.id}
+                                        onPress={() => setActionAccount(account)}
+                                        onLongPress={() => setMenuAccount(account)}
+                                        delayLongPress={400}
+                                        activeOpacity={0.85}
+                                        style={{
+                                            backgroundColor: colors.bgTertiary,
+                                            borderRadius: 16, padding: 14, marginRight: 10, width: 155, height: 140,
+                                            justifyContent: 'space-between',
+                                            opacity: excluded ? 0.5 : 1,
+                                        }}
+                                    >
+                                        {/* Top row: icon + hide toggle */}
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: col + '22', alignItems: 'center', justifyContent: 'center' }}>
+                                                <IC color={col} size={18} />
+                                            </View>
+                                            <TouchableOpacity onPress={() => toggleExclude(account)} hitSlop={8}>
+                                                {excluded
+                                                    ? <EyeOff color={colors.textDisabled} size={16} />
+                                                    : <Eye color={colors.textMuted} size={16} />}
+                                            </TouchableOpacity>
+                                        </View>
 
-                        <TouchableOpacity onPress={openAdd} activeOpacity={0.7}
-                            style={{ backgroundColor: colors.bgSecondary, borderWidth: 1, borderColor: colors.borderLight, borderStyle: 'dashed', borderRadius: 16, padding: 16, marginRight: 24, width: 160, height: 120, justifyContent: 'center', alignItems: 'center' }}>
-                            <Plus color={colors.textDisabled} size={28} />
-                            <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 8 }}>{t('dashboard.add')}</Text>
-                        </TouchableOpacity>
-                    </ScrollView>
+                                        {/* Bottom: amount + name */}
+                                        <View>
+                                            <Text style={{ color: colors.textPrimary, fontSize: 18, fontFamily: fonts.bodySemiBold, marginBottom: 2 }} numberOfLines={1}>
+                                                {hidden ? '••••' : formatAmount(account.balance, account.currency)}
+                                            </Text>
+                                            <Text style={{ color: colors.textMuted, fontSize: 13, fontFamily: fonts.body }} numberOfLines={1}>
+                                                {account.name}
+                                            </Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                );
+                            })}
+
+                            <TouchableOpacity onPress={openAdd} activeOpacity={0.7}
+                                style={{ backgroundColor: colors.bgTertiary, borderWidth: 1.5, borderColor: colors.borderLight, borderStyle: 'dashed', borderRadius: 16, width: 155, height: 140, justifyContent: 'center', alignItems: 'center' }}>
+                                <Plus color={colors.textDisabled} size={24} />
+                                <Text style={{ color: colors.textMuted, fontSize: 12, fontFamily: fonts.body, marginTop: 6 }}>{t('dashboard.add')}</Text>
+                            </TouchableOpacity>
+                        </ScrollView>
+                    </View>
                 </View>
 
-                {/* ── Category breakdown (Аналитика) ── */}
+                {/* ── Balance + Efficiency ── */}
                 {!loadingTx && (() => {
-                    return (
-                        <View style={{ marginBottom: 40 }}>
-                            <TouchableOpacity
-                                onPress={() => router.push('/analytics')}
-                                activeOpacity={0.7}
-                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}
-                            >
-                                <Text style={{ color: colors.textPrimary, fontSize: 16, fontFamily: fonts.bodySemiBold }}>{t('dashboard.analytics')}</Text>
-                                <Text style={{ color: '#3b82f6', fontSize: 13 }}>{t('dashboard.moreDetails')}</Text>
-                            </TouchableOpacity>
+                    const realNow = new Date();
+                    const viewMonth = balanceMonth;
+                    const mStart = startOfMonth(viewMonth);
+                    const daysInMonth = getDaysInMonth(viewMonth);
+                    const isCurrentMonth = viewMonth.getMonth() === realNow.getMonth() && viewMonth.getFullYear() === realNow.getFullYear();
+                    const todayNum = isCurrentMonth ? realNow.getDate() : daysInMonth;
+                    const firstDow = (getDay(mStart) + 6) % 7;
+                    const dayNames = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+                    const viewM = viewMonth.getMonth();
+                    const viewY = viewMonth.getFullYear();
 
-                            {/* Period tabs */}
-                            <View style={{ flexDirection: 'row', backgroundColor: colors.bgSecondary, borderRadius: 12, padding: 4, marginBottom: 12 }}>
-                                {(['day', 'week', 'month', 'year'] as AnalyticsPeriod[]).map(p => (
-                                    <TouchableOpacity key={p} onPress={() => setAnalyticsPeriod(p)}
-                                        style={{ flex: 1, paddingVertical: 8, borderRadius: 8, backgroundColor: analyticsPeriod === p ? colors.bgTertiary : 'transparent', alignItems: 'center' }}>
-                                        <Text style={{ color: analyticsPeriod === p ? colors.textPrimary : colors.textMuted, fontSize: 12, fontWeight: analyticsPeriod === p ? '700' : '400' }}>
-                                            {ANALYTICS_LABELS[p]}
+                    // Period range calculation
+                    const periodLabels: Record<BalancePeriod, string> = {
+                        day: t('dashboard.periodDay'), week: t('dashboard.periodWeek'),
+                        month: t('dashboard.periodMonth'), year: t('dashboard.periodYear'),
+                        last7: t('dashboard.last7Days'), last30: t('dashboard.last30Days'),
+                        all: t('dashboard.allTime'),
+                        custom: `${format(customFrom, 'dd.MM')} – ${format(customTo, 'dd.MM')}`,
+                    };
+                    function getPeriodRange(p: BalancePeriod): { from: string; to: string } {
+                        const today = format(realNow, 'yyyy-MM-dd');
+                        switch (p) {
+                            case 'day': return { from: today, to: today };
+                            case 'week': return { from: format(startOfWeek(realNow, { weekStartsOn: 1 }), 'yyyy-MM-dd'), to: today };
+                            case 'month': return { from: format(startOfMonth(viewMonth), 'yyyy-MM-dd'), to: format(new Date(viewY, viewM + 1, 0), 'yyyy-MM-dd') };
+                            case 'year': return { from: format(startOfYear(realNow), 'yyyy-MM-dd'), to: today };
+                            case 'last7': return { from: format(addDays(realNow, -6), 'yyyy-MM-dd'), to: today };
+                            case 'last30': return { from: format(addDays(realNow, -29), 'yyyy-MM-dd'), to: today };
+                            case 'all': return { from: '2000-01-01', to: today };
+                            case 'custom': return { from: format(customFrom, 'yyyy-MM-dd'), to: format(customTo, 'yyyy-MM-dd') };
+                        }
+                    }
+                    const range = getPeriodRange(balancePeriod);
+
+                    // Build daily spending map (always for viewMonth for calendar)
+                    const dailySpend: Record<number, number> = {};
+                    transactions.forEach(t => {
+                        const d = new Date(t.date);
+                        if (d.getMonth() === viewM && d.getFullYear() === viewY) {
+                            const day = d.getDate();
+                            dailySpend[day] = (dailySpend[day] ?? 0) + (t.amount_base ?? t.amount);
+                        }
+                    });
+
+                    // Income/expenses for selected period
+                    const periodIncome = incomeTx.filter(t => t.date >= range.from && t.date <= range.to)
+                        .reduce((s, t) => s + (t.amount_base ?? t.amount), 0);
+                    const periodExpenses = transactions.filter(t => t.date >= range.from && t.date <= range.to)
+                        .reduce((s, t) => s + (t.amount_base ?? t.amount), 0);
+                    const periodNet = periodIncome - periodExpenses;
+
+                    // Color logic for each day
+                    function dayColor(day: number): string {
+                        if (day > todayNum) return 'transparent'; // future
+                        const spent = dailySpend[day] ?? 0;
+                        if (dailyLimit <= 0) return spent > 0 ? '#22c55e44' : 'transparent';
+                        const ratio = spent / dailyLimit;
+                        if (ratio <= 0.7) return '#22c55e'; // saved >30%
+                        if (ratio <= 1) return '#4ade8066'; // saved <30%
+                        if (ratio <= 1.15) return '#f97316'; // overspent <15%
+                        return '#ef4444'; // overspent >15%
+                    }
+
+                    function dayBorderColor(day: number): string {
+                        if (day > todayNum) return 'transparent';
+                        const c = dayColor(day);
+                        return c === 'transparent' ? 'transparent' : c;
+                    }
+
+                    // Calendar grid: 6 weeks max
+                    const cells: (number | null)[] = [];
+                    for (let i = 0; i < firstDow; i++) cells.push(null);
+                    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+                    while (cells.length % 7 !== 0) cells.push(null);
+
+                    return (
+                        <View style={{ backgroundColor: colors.bgSecondary, borderRadius: 20, padding: 16, marginBottom: 24, zIndex: 10 }}>
+                            {/* Balance header with period picker */}
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                                <Text style={{ fontSize: 15, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>Balance</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgTertiary, borderRadius: 20, paddingVertical: 6 }}>
+                                    <TouchableOpacity onPress={() => {
+                                        if (balancePeriod === 'month') setBalanceMonth(prev => subMonths(prev, 1));
+                                    }} style={{ paddingHorizontal: 10, opacity: balancePeriod === 'month' ? 1 : 0.3 }}>
+                                        <Text style={{ color: colors.textMuted, fontSize: 16 }}>‹</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity onPress={() => setShowPeriodPicker(v => !v)}>
+                                        <Text style={{ fontSize: 13, fontFamily: fonts.bodySemiBold, color: colors.textPrimary, minWidth: 70, textAlign: 'center' }}>
+                                            {balancePeriod === 'month' ? format(viewMonth, 'MMMM') : periodLabels[balancePeriod]}
                                         </Text>
                                     </TouchableOpacity>
-                                ))}
+                                    <TouchableOpacity onPress={() => {
+                                        if (balancePeriod === 'month') {
+                                            const next = addMonths(viewMonth, 1);
+                                            if (next <= realNow) setBalanceMonth(next);
+                                        }
+                                    }} style={{ paddingHorizontal: 10, opacity: balancePeriod === 'month' ? (isCurrentMonth ? 0.3 : 1) : 0.3 }}>
+                                        <Text style={{ color: colors.textMuted, fontSize: 16 }}>›</Text>
+                                    </TouchableOpacity>
+                                </View>
                             </View>
 
-                            {/* Summary card */}
-                            <View style={{ backgroundColor: colors.bgSecondary, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.bgTertiary, marginBottom: 12 }}>
-                                <View style={{ flexDirection: 'row', gap: 16, marginBottom: 12 }}>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={{ fontSize: 10, color: colors.textMuted, marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('dashboard.income')}</Text>
-                                        <Text style={{ fontSize: 18, fontWeight: '800', color: '#4FFFB0' }}>
-                                            +{formatAmount(periodSummary.income, currency)}
-                                        </Text>
+                            {/* Period dropdown overlay */}
+                            {showPeriodPicker && (
+                                <>
+                                    <TouchableOpacity activeOpacity={1} onPress={() => setShowPeriodPicker(false)}
+                                        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: -500, zIndex: 98 }} />
+                                    <View style={{ position: 'absolute', top: 48, left: 16, right: 16, zIndex: 99, backgroundColor: colors.bgTertiary, borderRadius: 14, overflow: 'hidden',
+                                        shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 16, elevation: 10 }}>
+                                        {(['day', 'week', 'month', 'year', 'all'] as BalancePeriod[]).map((p, i) => (
+                                            <TouchableOpacity key={p} onPress={() => { setBalancePeriod(p); setShowPeriodPicker(false); if (p === 'month') setBalanceMonth(new Date()); }}
+                                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' }}>
+                                                <Text style={{ fontSize: 15, fontFamily: fonts.body, color: colors.textPrimary }}>{periodLabels[p]}</Text>
+                                                {balancePeriod === p && <Check color="#7C6FFF" size={18} />}
+                                            </TouchableOpacity>
+                                        ))}
+                                        {/* Custom period */}
+                                        <View style={{ paddingHorizontal: 16, paddingVertical: 13 }}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: balancePeriod === 'custom' ? 10 : 0 }}>
+                                                <Text style={{ fontSize: 15, fontFamily: fonts.body, color: colors.textMuted }}>Custom</Text>
+                                                {balancePeriod === 'custom' && <Check color="#7C6FFF" size={18} />}
+                                            </View>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                                <TouchableOpacity onPress={() => { setShowCustomFromPicker(v => !v); setShowCustomToPicker(false); }}
+                                                    style={{ flex: 1, backgroundColor: showCustomFromPicker ? 'rgba(124,111,255,0.15)' : 'rgba(255,255,255,0.06)', borderRadius: 8, paddingVertical: 8, alignItems: 'center', borderWidth: showCustomFromPicker ? 1 : 0, borderColor: '#7C6FFF' }}>
+                                                    <Text style={{ fontSize: 13, fontFamily: fonts.body, color: colors.textPrimary }}>{format(customFrom, 'dd.MM.yy')}</Text>
+                                                </TouchableOpacity>
+                                                <Text style={{ color: colors.textDisabled }}>–</Text>
+                                                <TouchableOpacity onPress={() => { setShowCustomToPicker(v => !v); setShowCustomFromPicker(false); }}
+                                                    style={{ flex: 1, backgroundColor: showCustomToPicker ? 'rgba(124,111,255,0.15)' : 'rgba(255,255,255,0.06)', borderRadius: 8, paddingVertical: 8, alignItems: 'center', borderWidth: showCustomToPicker ? 1 : 0, borderColor: '#7C6FFF' }}>
+                                                    <Text style={{ fontSize: 13, fontFamily: fonts.body, color: colors.textPrimary }}>{format(customTo, 'dd.MM.yy')}</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity onPress={() => { setBalancePeriod('custom'); setShowPeriodPicker(false); setShowCustomFromPicker(false); setShowCustomToPicker(false); }}
+                                                    style={{ backgroundColor: '#7C6FFF', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 }}>
+                                                    <Text style={{ fontSize: 12, fontFamily: fonts.bodySemiBold, color: '#fff' }}>OK</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                            {(showCustomFromPicker || showCustomToPicker) && (
+                                                <View style={{ marginTop: 8 }}>
+                                                    <DateTimePicker
+                                                        mode="date" display="inline" themeVariant="dark"
+                                                        value={showCustomFromPicker ? customFrom : customTo}
+                                                        maximumDate={new Date()}
+                                                        onChange={(_, date) => {
+                                                            if (!date) return;
+                                                            if (showCustomFromPicker) { setCustomFrom(date); if (date > customTo) setCustomTo(date); }
+                                                            else { setCustomTo(date); if (date < customFrom) setCustomFrom(date); }
+                                                        }}
+                                                    />
+                                                </View>
+                                            )}
+                                        </View>
                                     </View>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={{ fontSize: 10, color: colors.textMuted, marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('dashboard.expenses')}</Text>
-                                        <Text style={{ fontSize: 18, fontWeight: '800', color: '#FF6B6B' }}>
-                                            −{formatAmount(periodSummary.expenses, currency)}
-                                        </Text>
-                                    </View>
-                                </View>
-                                <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 }}>
-                                    <Text style={{ fontSize: 10, color: colors.textMuted, marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('dashboard.netBalance')}</Text>
-                                    <Text style={{ fontSize: 20, fontFamily: fonts.heading, color: periodSummary.net >= 0 ? '#4FFFB0' : '#FF6B6B' }}>
-                                        {periodSummary.net >= 0 ? '+' : '−'}{formatAmount(Math.abs(periodSummary.net), currency)}
+                                </>
+                            )}
+
+                            {/* Income / Expense / Remaining */}
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
+                                <View>
+                                    <Text style={{ fontSize: 20, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>
+                                        {formatAmount(periodIncome, currency)}
                                     </Text>
+                                    <Text style={{ fontSize: 11, fontFamily: fonts.body, color: colors.textMuted }}>{t('dashboard.income')}</Text>
+                                </View>
+                                <View>
+                                    <Text style={{ fontSize: 20, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>
+                                        {formatAmount(periodExpenses, currency)}
+                                    </Text>
+                                    <Text style={{ fontSize: 11, fontFamily: fonts.body, color: colors.textMuted }}>{t('dashboard.expenses')}</Text>
+                                </View>
+                                <View>
+                                    <Text style={{ fontSize: 20, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>
+                                        {formatAmount(Math.abs(periodNet), currency)}
+                                    </Text>
+                                    <Text style={{ fontSize: 11, fontFamily: fonts.body, color: colors.textMuted }}>{t('dashboard.remaining')}</Text>
                                 </View>
                             </View>
 
+                            {/* Divider */}
+                            <View style={{ height: 1, backgroundColor: colors.bgTertiary, marginBottom: 16 }} />
+
+                            {/* Efficiency title */}
+                            <Text style={{ fontSize: 15, fontFamily: fonts.bodySemiBold, color: colors.textPrimary, marginBottom: 12 }}>Efficiency</Text>
+
+                            {balancePeriod === 'year' || balancePeriod === 'all' ? (
+                                /* ── Year view: 12 month pills ── */
+                                <>
+                                    {[0, 1].map(row => (
+                                        <View key={row} style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                                            {Array.from({ length: 6 }, (_, i) => {
+                                                const mIdx = row * 6 + i;
+                                                const mDate = new Date(realNow.getFullYear(), mIdx, 1);
+                                                const mName = format(mDate, 'MMM').toLowerCase();
+                                                const isFut = mIdx > realNow.getMonth();
+                                                const isCur = mIdx === realNow.getMonth();
+
+                                                // Monthly spending for this month
+                                                const mStart2 = format(mDate, 'yyyy-MM-dd');
+                                                const mEnd = format(new Date(realNow.getFullYear(), mIdx + 1, 0), 'yyyy-MM-dd');
+                                                const mSpent = transactions.filter(t2 => t2.date >= mStart2 && t2.date <= mEnd)
+                                                    .reduce((s, t2) => s + (t2.amount_base ?? t2.amount), 0);
+                                                const mInc = incomeTx.filter(t2 => t2.date >= mStart2 && t2.date <= mEnd)
+                                                    .reduce((s, t2) => s + (t2.amount_base ?? t2.amount), 0);
+
+                                                let borderCol = 'rgba(255,255,255,0.15)';
+                                                let textCol = colors.textDisabled;
+                                                if (!isFut) {
+                                                    textCol = colors.textPrimary;
+                                                    if (mInc > 0 || mSpent > 0) {
+                                                        const ratio = mInc > 0 ? mSpent / mInc : (mSpent > 0 ? 2 : 0);
+                                                        if (ratio <= 0.7) borderCol = '#22c55e';
+                                                        else if (ratio <= 1) borderCol = '#4ade80';
+                                                        else if (ratio <= 1.15) borderCol = '#f97316';
+                                                        else borderCol = '#ef4444';
+                                                    }
+                                                }
+
+                                                return (
+                                                    <TouchableOpacity key={mIdx}
+                                                        onPress={() => { setBalancePeriod('month'); setBalanceMonth(mDate); }}
+                                                        style={{
+                                                            flex: 1, paddingVertical: 10, borderRadius: 20,
+                                                            borderWidth: 1.5, borderColor: borderCol,
+                                                            backgroundColor: isCur ? colors.bgTertiary : 'transparent',
+                                                            alignItems: 'center',
+                                                        }}>
+                                                        <Text style={{ fontSize: 12, fontFamily: isCur ? fonts.bodySemiBold : fonts.body, color: textCol }}>{mName}</Text>
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
+                                        </View>
+                                    ))}
+                                </>
+                            ) : (
+                                /* ── Month/other view: daily calendar ── */
+                                <>
+                                    {/* Day headers */}
+                                    <View style={{ flexDirection: 'row', marginBottom: 8 }}>
+                                        {dayNames.map(d => (
+                                            <View key={d} style={{ flex: 1, alignItems: 'center' }}>
+                                                <Text style={{ fontSize: 10, fontFamily: fonts.body, color: colors.textDisabled }}>{d}</Text>
+                                            </View>
+                                        ))}
+                                    </View>
+
+                                    {/* Calendar grid */}
+                                    {Array.from({ length: cells.length / 7 }, (_, week) => (
+                                        <View key={week} style={{ flexDirection: 'row', marginBottom: 8 }}>
+                                            {cells.slice(week * 7, week * 7 + 7).map((day, i) => {
+                                                if (day === null) return <View key={`e${i}`} style={{ flex: 1, alignItems: 'center' }} />;
+                                                const isFut = day > todayNum;
+                                                const isT = day === todayNum && isCurrentMonth;
+                                                const col = dayColor(day);
+                                                const hasBorder = !isFut && col !== 'transparent';
+                                                return (
+                                                    <View key={day} style={{ flex: 1, alignItems: 'center' }}>
+                                                        <View style={{
+                                                            width: 34, height: 34, borderRadius: 17,
+                                                            borderWidth: hasBorder ? 2 : 0,
+                                                            borderColor: hasBorder ? col : 'transparent',
+                                                            backgroundColor: isT ? colors.bgTertiary : 'transparent',
+                                                            alignItems: 'center', justifyContent: 'center',
+                                                        }}>
+                                                            <Text style={{
+                                                                fontSize: 13, fontFamily: isT ? fonts.bodySemiBold : fonts.body,
+                                                                color: isFut ? colors.textDisabled : colors.textPrimary,
+                                                            }}>{day}</Text>
+                                                        </View>
+                                                    </View>
+                                                );
+                                            })}
+                                        </View>
+                                    ))}
+                                </>
+                            )}
+
+                            {/* Legend */}
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#22c55e' }} />
+                                    <Text style={{ fontSize: 9, fontFamily: fonts.body, color: colors.textDisabled }}>Saved &gt;30%</Text>
+                                </View>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#4ade80' }} />
+                                    <Text style={{ fontSize: 9, fontFamily: fonts.body, color: colors.textDisabled }}>Saved &lt;30%</Text>
+                                </View>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.textDisabled }} />
+                                    <Text style={{ fontSize: 9, fontFamily: fonts.body, color: colors.textDisabled }}>Upcoming</Text>
+                                </View>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#f97316' }} />
+                                    <Text style={{ fontSize: 9, fontFamily: fonts.body, color: colors.textDisabled }}>Overspent &lt;15%</Text>
+                                </View>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#ef4444' }} />
+                                    <Text style={{ fontSize: 9, fontFamily: fonts.body, color: colors.textDisabled }}>Overspent &gt;15%</Text>
+                                </View>
+                            </View>
                         </View>
                     );
                 })()}
 
-                {/* ── Icon Array (Расходы) ── */}
-                <View style={{ marginBottom: 40 }}>
-                    <Text style={{ color: colors.textPrimary, fontSize: 16, fontFamily: fonts.bodySemiBold, marginBottom: 14 }}>{t('dashboard.expenses')}</Text>
 
-                    <View style={{ flexDirection: 'row', backgroundColor: colors.bgSecondary, borderRadius: 12, padding: 4, marginBottom: 24 }}>
-                        {(['week', 'month', 'quarter', 'year'] as Period[]).map(p => (
-                            <TouchableOpacity key={p} onPress={() => { setPeriod(p); setSelectedDot(null); }}
-                                style={{ flex: 1, paddingVertical: 8, borderRadius: 8, backgroundColor: period === p ? colors.bgTertiary : 'transparent', alignItems: 'center' }}>
-                                <Text style={{ color: period === p ? colors.textPrimary : colors.textMuted, fontSize: 12, fontWeight: period === p ? '700' : '400' }}>
-                                    {PERIOD_LABELS[p]}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
+                {/* ── Summary donut (Сводка) ── */}
+                {!loadingTx && (() => {
+                    const inc = periodSummary.income;
+                    const exp = periodSummary.expenses;
+                    const bal = periodSummary.net;
+                    const tot = inc + exp || 1;
+                    const MIN_FRAC = 0.08;
+                    let incFrac = inc / tot, expFrac = exp / tot;
+                    if (inc > 0 && exp > 0) {
+                        if (incFrac < MIN_FRAC) { incFrac = MIN_FRAC; expFrac = 1 - MIN_FRAC; }
+                        if (expFrac < MIN_FRAC) { expFrac = MIN_FRAC; incFrac = 1 - MIN_FRAC; }
+                    }
+                    const RING = 160, rcx = RING / 2, rcy = RING / 2, rr = 62, rsw = 16;
+                    const rC = 2 * Math.PI * rr;
+                    const hasTwo = inc > 0 && exp > 0;
+                    const gap = hasTwo ? rsw + 4 : 0;
+                    const avail = rC - (gap * (hasTwo ? 2 : 0));
+                    const incLen = incFrac * avail;
+                    const expLen = expFrac * avail;
+                    const polXY = (deg: number) => {
+                        const rad = (deg - 90) * (Math.PI / 180);
+                        return { x: rcx + rr * Math.cos(rad), y: rcy + rr * Math.sin(rad) };
+                    };
+                    const incSweepDeg = (incLen / rC) * 360;
+                    const gapDeg = (gap / rC) * 360;
+                    const expStartDeg = incSweepDeg + gapDeg;
+                    const expSweepDeg = (expLen / rC) * 360;
+                    const makeArc = (sDeg: number, swDeg: number) => {
+                        const s = polXY(sDeg), e = polXY(sDeg + swDeg);
+                        return `M ${s.x} ${s.y} A ${rr} ${rr} 0 ${swDeg > 180 ? 1 : 0} 1 ${e.x} ${e.y}`;
+                    };
 
-                    {loadingTx ? (
-                        <ActivityIndicator color={colors.textPrimary} style={{ marginVertical: 24 }} />
-                    ) : (
-                        <>
-                            <View style={{ alignItems: 'center' }}>
-                                <IconArray dots={dotsForPeriod} columns={PERIOD_COLS[period]} dotSize={PERIOD_DOT[period]} gap={PERIOD_GAP[period]}
-                                    onDotPress={(dot) => {
-                                        if (dot.state !== 'future') setSelectedDot(prev => prev === dot.meta ? null : dot.meta as DotMeta);
-                                    }} />
+                    return (
+                        <View style={{ backgroundColor: colors.bgSecondary, borderRadius: 20, padding: 16, marginBottom: 24 }}>
+                            {/* Header: title + period pills */}
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                                <Text style={{ fontSize: 15, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>{t('analytics.summary')}</Text>
+                                <View style={{ flexDirection: 'row', backgroundColor: colors.bgTertiary, borderRadius: 10, padding: 3 }}>
+                                    {(['day', 'week', 'month', 'quarter', 'year'] as AnalyticsPeriod[]).map(p => (
+                                        <TouchableOpacity key={p} onPress={() => setAnalyticsPeriod(p)}
+                                            style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: analyticsPeriod === p ? colors.bgSecondary : 'transparent' }}>
+                                            <Text style={{ fontSize: 11, fontFamily: analyticsPeriod === p ? fonts.bodySemiBold : fonts.body, color: analyticsPeriod === p ? colors.textPrimary : colors.textMuted }}>
+                                                {ANALYTICS_LABELS[p]}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
                             </View>
 
-                            {selectedDot ? (
-                                <View style={{ marginTop: 20, backgroundColor: colors.bgSecondary, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: colors.bgTertiary }}>
-                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                                        <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{selectedDot.slot.label}</Text>
-                                        <TouchableOpacity onPress={() => setSelectedDot(null)} hitSlop={8}><X color={colors.textDisabled} size={16} /></TouchableOpacity>
+                            {/* Donut + Legend row */}
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                {/* Donut */}
+                                <View style={{ width: RING, height: RING }}>
+                                    <Svg width={RING} height={RING} viewBox={`0 0 ${RING} ${RING}`}>
+                                        <SvgCircle cx={rcx} cy={rcy} r={rr} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth={rsw} />
+                                        {inc > 0 && <SvgPath d={makeArc(0, incSweepDeg)} fill="none" stroke="#4CAF50" strokeWidth={rsw} strokeLinecap="round" />}
+                                        {exp > 0 && <SvgPath d={makeArc(expStartDeg, expSweepDeg)} fill="none" stroke="#7B61FF" strokeWidth={rsw} strokeLinecap="round" />}
+                                    </Svg>
+                                    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+                                        <Text style={{ fontSize: 13, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>
+                                            {bal >= 0 ? '+' : '−'}{formatAmount(Math.abs(bal), currency)}
+                                        </Text>
+                                        <Text style={{ fontSize: 9, fontFamily: fonts.body, color: colors.textMuted, marginTop: 1 }}>{t('analytics.balanceLabel')}</Text>
                                     </View>
-                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                </View>
+                                {/* Legend */}
+                                <View style={{ flex: 1, paddingLeft: 14, gap: 14 }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#4CAF50' }} />
                                         <View>
-                                            <Text style={{ color: colors.textMuted, fontSize: 11, marginBottom: 2 }}>{t('dashboard.spent')}</Text>
-                                            <Text style={{ color: selectedDot.limit > 0 && selectedDot.spent > selectedDot.limit ? '#ef4444' : colors.textPrimary, fontSize: 15, fontWeight: '600' }}>
-                                                {formatAmount(selectedDot.spent, currency)}
-                                            </Text>
-                                        </View>
-                                        <View style={{ alignItems: 'flex-end' }}>
-                                            <Text style={{ color: colors.textMuted, fontSize: 11, marginBottom: 2 }}>{t('dashboard.limit')}</Text>
-                                            <Text style={{ color: colors.textSecondary, fontSize: 15, fontWeight: '600' }}>
-                                                {selectedDot.limit > 0 ? formatAmount(selectedDot.limit, currency) : '—'}
-                                            </Text>
+                                            <Text style={{ fontSize: 11, fontFamily: fonts.body, color: colors.textMuted }}>{t('dashboard.income')}</Text>
+                                            <Text style={{ fontSize: 16, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>{formatAmount(inc, currency)}</Text>
                                         </View>
                                     </View>
-                                    {selectedDot.limit > 0 && (
-                                        <View style={{ marginTop: 10, height: 4, backgroundColor: colors.bgTertiary, borderRadius: 2 }}>
-                                            <View style={{ width: `${Math.min(100, (selectedDot.spent / selectedDot.limit) * 100)}%` as any, height: 4, borderRadius: 2, backgroundColor: selectedDot.spent > selectedDot.limit ? '#ef4444' : selectedDot.spent > selectedDot.limit * 0.8 ? '#f97316' : '#22c55e' }} />
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#7B61FF' }} />
+                                        <View>
+                                            <Text style={{ fontSize: 11, fontFamily: fonts.body, color: colors.textMuted }}>{t('dashboard.expenses')}</Text>
+                                            <Text style={{ fontSize: 16, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>{formatAmount(exp, currency)}</Text>
                                         </View>
-                                    )}
-                                </View>
-                            ) : (
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 }}>
-                                    <View>
-                                        <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 4 }}>{t('accounts.dailyLimit')}</Text>
-                                        <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '600' }}>{dailyLimit > 0 ? formatAmount(dailyLimit, currency) : '—'}</Text>
                                     </View>
-                                    <View style={{ alignItems: 'flex-end' }}>
-                                        <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 4 }}>{t('dashboard.spentToday')}</Text>
-                                        <Text style={{ color: dailyLimit > 0 && todaySpent > dailyLimit ? '#ef4444' : colors.textPrimary, fontSize: 15, fontWeight: '600' }}>{formatAmount(todaySpent, currency)}</Text>
+                                    <View style={{ marginLeft: 16 }}>
+                                        <Text style={{ fontSize: 11, fontFamily: fonts.body, color: colors.textMuted }}>{t('dashboard.netBalance')}</Text>
+                                        <Text style={{ fontSize: 16, fontFamily: fonts.bodySemiBold, color: colors.textPrimary }}>
+                                            {bal >= 0 ? '+' : '−'}{formatAmount(Math.abs(bal), currency)}
+                                        </Text>
                                     </View>
                                 </View>
-                            )}
-
-                            <View style={{ flexDirection: 'row', gap: 16, marginTop: 16, justifyContent: 'center' }}>
-                                {[{ color: '#22c55e', label: t('dashboard.legendOk') }, { color: '#f97316', label: t('dashboard.legendWarning') }, { color: '#ef4444', label: t('dashboard.legendOverflow') }, { color: '#4b5563', label: period === 'quarter' ? t('dashboard.legendThisWeek') : period === 'year' ? t('dashboard.legendThisMonth') : t('dashboard.legendToday') }].map(({ color, label }) => (
-                                    <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
-                                        <Text style={{ color: colors.textMuted, fontSize: 11 }}>{label}</Text>
-                                    </View>
-                                ))}
                             </View>
-                        </>
-                    )}
-                </View>
+                        </View>
+                    );
+                })()}
+
 
                 {/* ── Savings goals ── */}
                 <View style={{ marginBottom: 48 }}>

@@ -112,7 +112,7 @@ const QUESTIONS: QuizQuestion[] = [
 
 export default function CategoriesQuiz() {
     const router = useRouter();
-    const { colors } = useTheme();
+    const { colors, fonts } = useTheme();
     const { t } = useTranslation();
 
     const [step, setStep] = useState(-1); // -1 = intro
@@ -197,13 +197,13 @@ export default function CategoriesQuiz() {
             <SafeAreaView style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
                 <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 }}>
                     <Text style={{ fontSize: 48, marginBottom: 24 }}>🎯</Text>
-                    <Text style={{ color: colors.textPrimary, fontSize: 26, fontWeight: '700', textAlign: 'center', marginBottom: 16 }}>
+                    <Text style={{ color: colors.textPrimary, fontSize: 26, fontWeight: '700', textAlign: 'center', marginBottom: 16, fontFamily: fonts.heading }}>
                         {t('quiz.title')}
                     </Text>
-                    <Text style={{ color: colors.textSecondary, fontSize: 16, textAlign: 'center', lineHeight: 24, marginBottom: 48 }}>
+                    <Text style={{ color: colors.textSecondary, fontSize: 16, textAlign: 'center', lineHeight: 24, marginBottom: 48, fontFamily: fonts.body }}>
                         {t('quiz.desc')}
                     </Text>
-                    <Text style={{ color: colors.textMuted, fontSize: 14, textAlign: 'center', marginBottom: 40 }}>
+                    <Text style={{ color: colors.textMuted, fontSize: 14, textAlign: 'center', marginBottom: 40, fontFamily: fonts.body }}>
                         {t('quiz.hint')}
                     </Text>
 
@@ -220,11 +220,11 @@ export default function CategoriesQuiz() {
                             marginBottom: 16,
                         }}
                     >
-                        <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>{t('quiz.startSetup')}</Text>
+                        <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', fontFamily: fonts.bodySemiBold }}>{t('quiz.startSetup')}</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity onPress={skip} activeOpacity={0.7}>
-                        <Text style={{ color: colors.textMuted, fontSize: 15 }}>{t('quiz.skipSetup')}</Text>
+                        <Text style={{ color: colors.textMuted, fontSize: 15, fontFamily: fonts.body }}>{t('quiz.skipSetup')}</Text>
                     </TouchableOpacity>
                 </View>
             </SafeAreaView>
@@ -237,13 +237,13 @@ export default function CategoriesQuiz() {
             <SafeAreaView style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
                 <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 }}>
                     <Text style={{ fontSize: 48, marginBottom: 24 }}>✅</Text>
-                    <Text style={{ color: colors.textPrimary, fontSize: 26, fontWeight: '700', textAlign: 'center', marginBottom: 16 }}>
+                    <Text style={{ color: colors.textPrimary, fontSize: 26, fontWeight: '700', textAlign: 'center', marginBottom: 16, fontFamily: fonts.heading }}>
                         {t('quiz.doneTitle')}
                     </Text>
-                    <Text style={{ color: colors.textSecondary, fontSize: 16, textAlign: 'center', lineHeight: 24, marginBottom: 12 }}>
+                    <Text style={{ color: colors.textSecondary, fontSize: 16, textAlign: 'center', lineHeight: 24, marginBottom: 12, fontFamily: fonts.body }}>
                         {t('quiz.doneDesc')}
                     </Text>
-                    <Text style={{ color: colors.textMuted, fontSize: 14, textAlign: 'center', marginBottom: 48 }}>
+                    <Text style={{ color: colors.textMuted, fontSize: 14, textAlign: 'center', marginBottom: 48, fontFamily: fonts.body }}>
                         {t('quiz.doneHint')}
                     </Text>
 
@@ -261,7 +261,7 @@ export default function CategoriesQuiz() {
                             opacity: saving ? 0.5 : 1,
                         }}
                     >
-                        <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>
+                        <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', fontFamily: fonts.bodySemiBold }}>
                             {saving ? t('common.saving') : t('quiz.startUsing')}
                         </Text>
                     </TouchableOpacity>
@@ -279,7 +279,7 @@ export default function CategoriesQuiz() {
             <View style={{ flex: 1, paddingHorizontal: 24, paddingTop: 20 }}>
                 {/* Progress */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                    <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '600' }}>
+                    <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>
                         {t('quiz.stepOf', { step: step + 1, total: QUESTIONS.length })}
                     </Text>
                 </View>
@@ -289,12 +289,12 @@ export default function CategoriesQuiz() {
 
                 {/* Icon + Category */}
                 <Text style={{ fontSize: 48, textAlign: 'center', marginBottom: 12 }}>{q.icon}</Text>
-                <Text style={{ color: colors.textPrimary, fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 24 }}>
+                <Text style={{ color: colors.textPrimary, fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 24, fontFamily: fonts.heading }}>
                     {t(q.categoryKey)}
                 </Text>
 
                 {/* Question */}
-                <Text style={{ color: colors.textSecondary, fontSize: 16, textAlign: 'center', marginBottom: 32, lineHeight: 24 }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 16, textAlign: 'center', marginBottom: 32, lineHeight: 24, fontFamily: fonts.body }}>
                     {t(q.questionKey)}
                 </Text>
 
@@ -320,7 +320,7 @@ export default function CategoriesQuiz() {
                                     paddingHorizontal: 20,
                                 }}
                             >
-                                <Text style={{ color: selected ? '#c4b5fd' : '#d1d5db', fontSize: 15, lineHeight: 22 }}>
+                                <Text style={{ color: selected ? '#c4b5fd' : '#d1d5db', fontSize: 15, lineHeight: 22, fontFamily: fonts.body }}>
                                     {t(opt.labelKey)}
                                 </Text>
                             </TouchableOpacity>
@@ -344,7 +344,7 @@ export default function CategoriesQuiz() {
                             alignItems: 'center',
                         }}
                     >
-                        <Text style={{ color: colors.textSecondary, fontSize: 16, fontWeight: '600' }}>{t('quiz.back')}</Text>
+                        <Text style={{ color: colors.textSecondary, fontSize: 16, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>{t('quiz.back')}</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -363,6 +363,7 @@ export default function CategoriesQuiz() {
                             color: currentAnswer !== null ? '#fff' : colors.textMuted,
                             fontSize: 16,
                             fontWeight: '600',
+                            fontFamily: fonts.bodySemiBold,
                         }}>
                             {t('quiz.next')}
                         </Text>

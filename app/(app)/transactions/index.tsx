@@ -70,6 +70,14 @@ const CAT_ICONS = ICON_KEYS.reduce<Record<string, IconComp>>((acc, k) => {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface SplitItem {
+    id: string;
+    category_id: string | null;
+    category_name: string;
+    category_color: string | null;
+    amount: number;
+}
+
 interface TxRow {
     id: string;
     type: 'income' | 'expense' | 'transfer';
@@ -91,6 +99,8 @@ interface TxRow {
     expense_type: string | null;
     tag_id: string | null;
     tag_name: string | null;
+    is_split: boolean;
+    split_items?: SplitItem[];
 }
 
 type AccountLight   = { id: string; name: string; color: string | null; currency: string; balance: number };
@@ -206,7 +216,7 @@ export default function TransactionsScreen() {
         const { from, to } = getPeriodRange(period, cFrom, cTo);
         let q = supabase
             .from('transactions')
-            .select('id, type, amount, currency, amount_base, exchange_rate, date, note, receipt_url, recurring_id, account_id, category_id, tag_id, category_tags(name), categories(name, icon, color, expense_type), accounts(name, color)')
+            .select('id, type, amount, currency, amount_base, exchange_rate, date, note, receipt_url, recurring_id, account_id, category_id, tag_id, is_split, category_tags(name), categories(name, icon, color, expense_type), accounts(name, color)')
             .eq('household_id', hid).eq('is_deleted', false)
             .order('date', { ascending: false }).order('created_at', { ascending: false }).limit(500);
 
@@ -221,7 +231,7 @@ export default function TransactionsScreen() {
         if (tagId)                           q = q.eq('tag_id', tagId);
 
         const { data } = await q;
-        setTxs((data ?? []).map((t: any) => ({
+        const rows: TxRow[] = (data ?? []).map((t: any) => ({
             id: t.id, type: t.type,
             amount: t.amount, currency: t.currency,
             amount_base: t.amount_base, exchange_rate: t.exchange_rate,
@@ -234,7 +244,41 @@ export default function TransactionsScreen() {
             expense_type:   t.categories?.expense_type ?? null,
             tag_id:   t.tag_id ?? null,
             tag_name: t.category_tags?.name ?? null,
-        })));
+            is_split: !!t.is_split,
+        }));
+
+        // Fetch split items for split transactions
+        const splitIds = rows.filter(r => r.is_split).map(r => r.id);
+        if (splitIds.length > 0) {
+            const { data: items } = await supabase
+                .from('transaction_items')
+                .select('id, transaction_id, category_id, amount, categories(name, color)')
+                .in('transaction_id', splitIds)
+                .order('sort_order');
+            if (items) {
+                const itemsByTx = new Map<string, SplitItem[]>();
+                for (const it of items as any[]) {
+                    const arr = itemsByTx.get(it.transaction_id) ?? [];
+                    arr.push({
+                        id: it.id,
+                        category_id: it.category_id,
+                        category_name: it.categories?.name ?? '—',
+                        category_color: it.categories?.color ?? null,
+                        amount: it.amount,
+                    });
+                    itemsByTx.set(it.transaction_id, arr);
+                }
+                for (const row of rows) {
+                    if (row.is_split && itemsByTx.has(row.id)) {
+                        const si = itemsByTx.get(row.id)!;
+                        row.split_items = si;
+                        row.category_name = si.map(i => i.category_name).join(' + ');
+                    }
+                }
+            }
+        }
+
+        setTxs(rows);
     }
 
     async function reloadCategories(hid: string) {
@@ -304,7 +348,7 @@ export default function TransactionsScreen() {
         return (
             <TouchableOpacity onPress={() => deleteTx(id)}
                 style={{ backgroundColor: '#ef4444', justifyContent: 'center', alignItems: 'center', width: 88 }}>
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>{t('common.delete')}</Text>
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13, fontFamily: fonts.bodySemiBold }}>{t('common.delete')}</Text>
             </TouchableOpacity>
         );
     }
@@ -314,24 +358,33 @@ export default function TransactionsScreen() {
         const iconColor   = item.category_color ?? colors.textMuted;
         const amountColor = item.type === 'income' ? '#22c55e' : item.type === 'transfer' ? colors.textMuted : '#ef4444';
         const prefix      = item.type === 'income' ? '+' : item.type === 'expense' ? '−' : '⇄';
+        const isSplit     = item.is_split && item.split_items && item.split_items.length > 0;
 
         return (
             <ReanimatedSwipeable renderRightActions={() => renderRightActions(item.id)}>
                 <TouchableOpacity onPress={() => openForm(item)} activeOpacity={0.8}
                     style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: colors.bgPrimary, borderBottomWidth: 1, borderBottomColor: colors.bgSecondary }}>
-                    <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: iconColor + '22', alignItems: 'center', justifyContent: 'center' }}>
-                        {Ic ? <Ic color={iconColor} size={19} /> : <ArrowRightLeft color={iconColor} size={19} />}
-                    </View>
+                    {isSplit ? (
+                        <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: colors.bgTertiary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 3, padding: 6 }}>
+                            {item.split_items!.slice(0, 6).map((si, idx) => (
+                                <View key={si.id ?? idx} style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: si.category_color ?? colors.textMuted }} />
+                            ))}
+                        </View>
+                    ) : (
+                        <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: iconColor + '22', alignItems: 'center', justifyContent: 'center' }}>
+                            {Ic ? <Ic color={iconColor} size={19} /> : <ArrowRightLeft color={iconColor} size={19} />}
+                        </View>
+                    )}
                     <View style={{ flex: 1, marginLeft: 12 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                             <Text style={{ color: colors.textPrimary, fontSize: 15, fontFamily: fonts.bodyMedium }}>{item.category_name}</Text>
                             {item.tag_name && (
                                 <View style={{ backgroundColor: '#172554', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 }}>
-                                    <Text style={{ color: '#60a5fa', fontSize: 11 }}>{item.tag_name}</Text>
+                                    <Text style={{ color: '#60a5fa', fontSize: 11, fontFamily: fonts.body }}>{item.tag_name}</Text>
                                 </View>
                             )}
                         </View>
-                        <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 2 }} numberOfLines={1}>
+                        <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 2, fontFamily: fonts.body }} numberOfLines={1}>
                             {item.account_name}{item.note ? ` · ${item.note}` : ''}
                         </Text>
                     </View>
@@ -362,7 +415,7 @@ export default function TransactionsScreen() {
                 <Text style={{ color: colors.textSecondary, fontSize: 12, textTransform: 'capitalize', fontFamily: fonts.bodySemiBold }}>{label}</Text>
                 <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                     {filterType === 'transfer'
-                        ? <Text style={{ color: colors.textMuted, fontSize: 12 }}>{t('transactions.transferCount', { count: transfers })}</Text>
+                        ? <Text style={{ color: colors.textMuted, fontSize: 12, fontFamily: fonts.body }}>{t('transactions.transferCount', { count: transfers })}</Text>
                         : <>
                             {totalExpense > 0 && <Text style={{ color: '#ef4444', fontSize: 12, fontFamily: fonts.bodySemiBold }}>−{formatAmount(totalExpense, cur)}</Text>}
                             {totalIncome  > 0 && <Text style={{ color: '#22c55e', fontSize: 12, fontFamily: fonts.bodySemiBold }}>+{formatAmount(totalIncome, cur)}</Text>}
@@ -415,7 +468,7 @@ export default function TransactionsScreen() {
                 <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
                     <TextInput value={search} onChangeText={setSearch} placeholder={t('transactions.searchPlaceholder')}
                         placeholderTextColor={colors.textDisabled} autoFocus
-                        style={{ backgroundColor: colors.bgSecondary, color: colors.textPrimary, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15 }}
+                        style={{ backgroundColor: colors.bgSecondary, color: colors.textPrimary, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, fontFamily: fonts.body }}
                     />
                 </View>
             )}
@@ -427,7 +480,7 @@ export default function TransactionsScreen() {
                 {typeFilters.map(f => (
                     <TouchableOpacity key={f.value} onPress={() => setFilterType(f.value)}
                         style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: filterType === f.value ? '#7C6FFF' : colors.bgTertiary }}>
-                        <Text style={{ color: filterType === f.value ? '#ffffff' : colors.textPrimary, fontSize: 13, fontWeight: '500' }}>{f.label}</Text>
+                        <Text style={{ color: filterType === f.value ? '#ffffff' : colors.textPrimary, fontSize: 13, fontWeight: '500', fontFamily: fonts.body }}>{f.label}</Text>
                     </TouchableOpacity>
                 ))}
             </ScrollView>
@@ -441,7 +494,7 @@ export default function TransactionsScreen() {
 
                 const badge = (label: string, onClear: () => void) => (
                     <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 10, paddingRight: 6, paddingVertical: 5, borderRadius: 20, backgroundColor: '#172554', borderWidth: 1.5, borderColor: '#3b82f6' }}>
-                        <Text style={{ color: '#60a5fa', fontSize: 12, fontWeight: '600' }}>{label}</Text>
+                        <Text style={{ color: '#60a5fa', fontSize: 12, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>{label}</Text>
                         <TouchableOpacity onPress={onClear} hitSlop={6}>
                             <X color="#60a5fa" size={12} />
                         </TouchableOpacity>
@@ -455,12 +508,12 @@ export default function TransactionsScreen() {
                                 <TouchableOpacity onPress={() => setActiveSheet('filters')}
                                     style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: hasExtraFilters ? '#3b82f6' : colors.borderLight, backgroundColor: hasExtraFilters ? '#172554' : colors.bgTertiary }}>
                                     <SlidersHorizontal size={13} color={hasExtraFilters ? '#60a5fa' : colors.textSecondary} />
-                                    <Text style={{ color: hasExtraFilters ? '#60a5fa' : colors.textSecondary, fontSize: 12, fontWeight: hasExtraFilters ? '600' : '400' }}>{t('transactions.filters')}</Text>
+                                    <Text style={{ color: hasExtraFilters ? '#60a5fa' : colors.textSecondary, fontSize: 12, fontWeight: hasExtraFilters ? '600' : '400', fontFamily: fonts.body }}>{t('transactions.filters')}</Text>
                                 </TouchableOpacity>
                             </View>
                             <TouchableOpacity onPress={() => setPeriodSheetVisible(true)}
                                 style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, marginHorizontal: 8, borderRadius: 20, borderWidth: 1.5, borderColor: '#2563eb', backgroundColor: '#172554' }}>
-                                <Text style={{ color: '#60a5fa', fontSize: 12, fontWeight: '600' }}>{periodChipLabel()}</Text>
+                                <Text style={{ color: '#60a5fa', fontSize: 12, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>{periodChipLabel()}</Text>
                                 <ChevronDown color="#60a5fa" size={11} />
                             </TouchableOpacity>
                         </View>
@@ -496,10 +549,10 @@ export default function TransactionsScreen() {
                 </View>
             ) : sections.length === 0 ? (
                 <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    <Text style={{ color: colors.textMuted, fontSize: 16 }}>
+                    <Text style={{ color: colors.textMuted, fontSize: 16, fontFamily: fonts.body }}>
                         {search.trim() ? t('transactions.notFound') : hasExtraFilters || filterPeriod !== 'month' ? t('common.nothingFound') : t('transactions.noTransactions')}
                     </Text>
-                    <Text style={{ color: colors.textDisabled, fontSize: 14 }}>
+                    <Text style={{ color: colors.textDisabled, fontSize: 14, fontFamily: fonts.body }}>
                         {search.trim()
                             ? t('transactions.searchNoResults', { query: search.trim() })
                             : hasExtraFilters || filterPeriod !== 'month'
@@ -525,7 +578,7 @@ export default function TransactionsScreen() {
 
             {/* ════ PeriodSheet ════ */}
             <BaseBottomSheet visible={periodSheetVisible} onClose={() => setPeriodSheetVisible(false)} scrollable={false}>
-                            <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700', marginBottom: 16 }}>{t('transactions.period')}</Text>
+                            <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700', marginBottom: 16, fontFamily: fonts.heading }}>{t('transactions.period')}</Text>
                             {([
                                 { value: 'today'     as const, label: t('transactions.today') },
                                 { value: 'yesterday' as const, label: t('transactions.yesterday') },
@@ -535,28 +588,28 @@ export default function TransactionsScreen() {
                             ]).map(p => (
                                 <TouchableOpacity key={p.value} onPress={() => { setFilterPeriod(p.value); setCustomFrom(null); setCustomTo(null); setPeriodSheetVisible(false); }}
                                     style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
-                                    <Text style={{ color: filterPeriod === p.value ? '#60a5fa' : colors.textPrimary, fontSize: 16, fontWeight: filterPeriod === p.value ? '600' : '400' }}>{p.label}</Text>
+                                    <Text style={{ color: filterPeriod === p.value ? '#60a5fa' : colors.textPrimary, fontSize: 16, fontWeight: filterPeriod === p.value ? '600' : '400', fontFamily: fonts.body }}>{p.label}</Text>
                                     {filterPeriod === p.value && <Check color="#3b82f6" size={18} />}
                                 </TouchableOpacity>
                             ))}
                             <View style={{ height: 1, backgroundColor: colors.borderLight, marginVertical: 8 }} />
                             <TouchableOpacity onPress={() => setFilterPeriod('custom')}
                                 style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14 }}>
-                                <Text style={{ color: filterPeriod === 'custom' ? '#60a5fa' : colors.textPrimary, fontSize: 16, fontWeight: filterPeriod === 'custom' ? '600' : '400' }}>{t('transactions.customPeriod')}</Text>
+                                <Text style={{ color: filterPeriod === 'custom' ? '#60a5fa' : colors.textPrimary, fontSize: 16, fontWeight: filterPeriod === 'custom' ? '600' : '400', fontFamily: fonts.body }}>{t('transactions.customPeriod')}</Text>
                                 {filterPeriod === 'custom' && <Check color="#3b82f6" size={18} />}
                             </TouchableOpacity>
                             {filterPeriod === 'custom' && (
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                                     <TouchableOpacity onPress={() => setShowCustomFrom(true)}
                                         style={{ flex: 1, backgroundColor: colors.bgTertiary, borderRadius: 12, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: customFrom ? '#3b82f6' : colors.borderLight }}>
-                                        <Text style={{ color: customFrom ? colors.textPrimary : colors.textMuted, fontSize: 14 }}>
+                                        <Text style={{ color: customFrom ? colors.textPrimary : colors.textMuted, fontSize: 14, fontFamily: fonts.body }}>
                                             {customFrom ? format(customFrom, 'd MMM yyyy', { locale: ru }) : t('transactions.fromDate')}
                                         </Text>
                                     </TouchableOpacity>
-                                    <Text style={{ color: colors.textDisabled }}>—</Text>
+                                    <Text style={{ color: colors.textDisabled, fontFamily: fonts.body }}>—</Text>
                                     <TouchableOpacity onPress={() => setShowCustomTo(true)}
                                         style={{ flex: 1, backgroundColor: colors.bgTertiary, borderRadius: 12, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: customTo ? '#3b82f6' : colors.borderLight }}>
-                                        <Text style={{ color: customTo ? colors.textPrimary : colors.textMuted, fontSize: 14 }}>
+                                        <Text style={{ color: customTo ? colors.textPrimary : colors.textMuted, fontSize: 14, fontFamily: fonts.body }}>
                                             {customTo ? format(customTo, 'd MMM yyyy', { locale: ru }) : t('transactions.toDate')}
                                         </Text>
                                     </TouchableOpacity>
@@ -576,7 +629,7 @@ export default function TransactionsScreen() {
                             {filterPeriod === 'custom' && (customFrom || customTo) && (
                                 <TouchableOpacity onPress={() => setPeriodSheetVisible(false)}
                                     style={{ backgroundColor: '#2563eb', borderRadius: 16, paddingVertical: 14, alignItems: 'center', marginTop: 8 }}>
-                                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{t('common.apply')}</Text>
+                                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15, fontFamily: fonts.bodySemiBold }}>{t('common.apply')}</Text>
                                 </TouchableOpacity>
                             )}
             </BaseBottomSheet>
@@ -584,7 +637,7 @@ export default function TransactionsScreen() {
             {/* ════ Dropdown Sheet (account / category / expensetype / recurring) ════ */}
             <BaseBottomSheet visible={activeSheet !== null} onClose={() => setActiveSheet(null)} maxHeight={activeSheet === 'filters' ? '90%' : '75%'}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                                <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700' }}>
+                                <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700', fontFamily: fonts.heading }}>
                                     {activeSheet === 'filters' ? t('transactions.filters') : activeSheet === 'account' ? t('transactions.account') : activeSheet === 'category' ? t('transactions.category') : activeSheet === 'expensetype' ? t('transactions.expenseType') : t('transactions.recurrence')}
                                 </Text>
                                 <TouchableOpacity onPress={() => setActiveSheet(null)} hitSlop={8}><X color={colors.textMuted} size={20} /></TouchableOpacity>
@@ -593,7 +646,7 @@ export default function TransactionsScreen() {
                                 {/* ── Unified Filters ── */}
                                 {activeSheet === 'filters' && (() => {
                                     const secHeader = (label: string) => (
-                                        <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 10, marginTop: 20 }}>{label}</Text>
+                                        <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 10, marginTop: 20, fontFamily: fonts.bodySemiBold }}>{label}</Text>
                                     );
                                     return (
                                         <View>
@@ -605,7 +658,7 @@ export default function TransactionsScreen() {
                                                     return (
                                                         <TouchableOpacity key={acc.id ?? '__all__'} onPress={() => setFilterAccountId(acc.id)}
                                                             style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: active ? '#3b82f6' : colors.borderLight, backgroundColor: active ? '#172554' : colors.bgTertiary }}>
-                                                            <Text style={{ color: active ? '#60a5fa' : colors.textSecondary, fontSize: 13, fontWeight: active ? '600' : '400' }}>{acc.name}</Text>
+                                                            <Text style={{ color: active ? '#60a5fa' : colors.textSecondary, fontSize: 13, fontWeight: active ? '600' : '400', fontFamily: fonts.body }}>{acc.name}</Text>
                                                         </TouchableOpacity>
                                                     );
                                                 })}
@@ -618,7 +671,7 @@ export default function TransactionsScreen() {
                                                 if (next.has('category')) next.delete('category'); else next.add('category');
                                                 return next;
                                             })} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
-                                                <Text style={{ color: filterCategoryId === null ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: '600' }}>
+                                                <Text style={{ color: filterCategoryId === null ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>
                                                     {filterCategoryId === null ? t('transactions.allCategories') : categories.find(c => c.id === filterCategoryId)?.name ?? t('transactions.allCategories')}
                                                 </Text>
                                                 {collapsedSections.has('category')
@@ -646,7 +699,7 @@ export default function TransactionsScreen() {
                                                                           </View>
                                                                         : cat.color ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: cat.color }} /> : null
                                                                     }
-                                                                    <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: active ? '600' : '400' }}>{cat.name}</Text>
+                                                                    <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: active ? '600' : '400', fontFamily: fonts.body }}>{cat.name}</Text>
                                                                 </View>
                                                                 {active && <Check color="#3b82f6" size={16} />}
                                                             </TouchableOpacity>
@@ -657,7 +710,7 @@ export default function TransactionsScreen() {
                                                                         return (
                                                                             <TouchableOpacity key={tag.id} onPress={() => setFilterTagId(tagActive ? null : tag.id)}
                                                                                 style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, borderWidth: 1.5, borderColor: tagActive ? '#3b82f6' : colors.borderLight, backgroundColor: tagActive ? '#172554' : colors.bgTertiary }}>
-                                                                                <Text style={{ color: tagActive ? '#60a5fa' : colors.textSecondary, fontSize: 12, fontWeight: tagActive ? '600' : '400' }}>{tag.name}</Text>
+                                                                                <Text style={{ color: tagActive ? '#60a5fa' : colors.textSecondary, fontSize: 12, fontWeight: tagActive ? '600' : '400', fontFamily: fonts.body }}>{tag.name}</Text>
                                                                             </TouchableOpacity>
                                                                         );
                                                                     })}
@@ -675,7 +728,7 @@ export default function TransactionsScreen() {
                                                 if (next.has('expType')) next.delete('expType'); else next.add('expType');
                                                 return next;
                                             })} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
-                                                <Text style={{ color: filterExpenseType === 'all' ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: '600' }}>
+                                                <Text style={{ color: filterExpenseType === 'all' ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>
                                                     {filterExpenseType === 'all' ? t('transactions.allTypes') :
                                                      filterExpenseType === 'base' ? t('transactions.base') :
                                                      filterExpenseType === 'everyday' ? t('transactions.everyday') :
@@ -702,7 +755,7 @@ export default function TransactionsScreen() {
                                                     return (
                                                         <TouchableOpacity key={opt.value} onPress={() => setFilterExpenseType(opt.value)}
                                                             style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
-                                                            <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: active ? '600' : '400' }}>{opt.label}</Text>
+                                                            <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: active ? '600' : '400', fontFamily: fonts.body }}>{opt.label}</Text>
                                                             {active && <Check color="#3b82f6" size={16} />}
                                                         </TouchableOpacity>
                                                     );
@@ -716,7 +769,7 @@ export default function TransactionsScreen() {
                                                 if (next.has('recurrence')) next.delete('recurrence'); else next.add('recurrence');
                                                 return next;
                                             })} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
-                                                <Text style={{ color: filterRecurring === 'all' ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: '600' }}>
+                                                <Text style={{ color: filterRecurring === 'all' ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>
                                                     {filterRecurring === 'all' ? t('transactions.allPayments') :
                                                      filterRecurring === 'recurring' ? t('transactions.recurring') : t('transactions.oneTime')}
                                                 </Text>
@@ -735,7 +788,7 @@ export default function TransactionsScreen() {
                                                     return (
                                                         <TouchableOpacity key={opt.value} onPress={() => setFilterRecurring(opt.value)}
                                                             style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
-                                                            <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: active ? '600' : '400' }}>{opt.label}</Text>
+                                                            <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 15, fontWeight: active ? '600' : '400', fontFamily: fonts.body }}>{opt.label}</Text>
                                                             {active && <Check color="#3b82f6" size={16} />}
                                                         </TouchableOpacity>
                                                     );
@@ -747,11 +800,11 @@ export default function TransactionsScreen() {
                                                 <TouchableOpacity
                                                     onPress={() => { setFilterAccountId(null); setFilterCategoryId(null); setFilterTagId(null); setFilterSheetTags([]); setFilterExpenseType('all'); setFilterRecurring('all'); setActiveSheet(null); }}
                                                     style={{ flex: 1, borderRadius: 16, paddingVertical: 13, alignItems: 'center', borderWidth: 1.5, borderColor: colors.borderLight }}>
-                                                    <Text style={{ color: colors.textSecondary, fontWeight: '600', fontSize: 15 }}>{t('transactions.reset')}</Text>
+                                                    <Text style={{ color: colors.textSecondary, fontWeight: '600', fontSize: 15, fontFamily: fonts.bodySemiBold }}>{t('transactions.reset')}</Text>
                                                 </TouchableOpacity>
                                                 <TouchableOpacity onPress={() => setActiveSheet(null)}
                                                     style={{ flex: 2, borderRadius: 16, paddingVertical: 13, alignItems: 'center', backgroundColor: '#2563eb' }}>
-                                                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{t('common.apply')}</Text>
+                                                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15, fontFamily: fonts.bodySemiBold }}>{t('common.apply')}</Text>
                                                 </TouchableOpacity>
                                             </View>
                                         </View>
@@ -768,7 +821,7 @@ export default function TransactionsScreen() {
                                                     style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
                                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                                                         {acc.color && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: acc.color }} />}
-                                                        <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 16, fontWeight: active ? '600' : '400' }}>{acc.name}</Text>
+                                                        <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 16, fontWeight: active ? '600' : '400', fontFamily: fonts.body }}>{acc.name}</Text>
                                                     </View>
                                                     {active && <Check color="#3b82f6" size={18} />}
                                                 </TouchableOpacity>
@@ -809,7 +862,7 @@ export default function TransactionsScreen() {
                                                                     ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: cat.color }} />
                                                                     : null
                                                             }
-                                                            <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 16, fontWeight: active ? '600' : '400' }}>{cat.name}</Text>
+                                                            <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 16, fontWeight: active ? '600' : '400', fontFamily: fonts.body }}>{cat.name}</Text>
                                                         </View>
                                                         {active && <Check color="#3b82f6" size={18} />}
                                                     </TouchableOpacity>
@@ -818,7 +871,7 @@ export default function TransactionsScreen() {
                                                     {active && cat.id !== null && (
                                                         <View style={{ paddingHorizontal: 4, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
                                                             {filterSheetTags.length === 0
-                                                                ? <Text style={{ color: colors.textDisabled, fontSize: 13 }}>{t('common.noData')}</Text>
+                                                                ? <Text style={{ color: colors.textDisabled, fontSize: 13, fontFamily: fonts.body }}>{t('common.noData')}</Text>
                                                                 : <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                                                                     {filterSheetTags.map(tag => {
                                                                         const tagActive = filterTagId === tag.id;
@@ -826,7 +879,7 @@ export default function TransactionsScreen() {
                                                                             <TouchableOpacity key={tag.id}
                                                                                 onPress={() => { setFilterTagId(tagActive ? null : tag.id); setActiveSheet(null); }}
                                                                                 style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5, borderColor: tagActive ? '#3b82f6' : colors.borderLight, backgroundColor: tagActive ? '#172554' : colors.bgTertiary }}>
-                                                                                <Text style={{ color: tagActive ? '#60a5fa' : colors.textSecondary, fontSize: 13, fontWeight: tagActive ? '600' : '400' }}>{tag.name}</Text>
+                                                                                <Text style={{ color: tagActive ? '#60a5fa' : colors.textSecondary, fontSize: 13, fontWeight: tagActive ? '600' : '400', fontFamily: fonts.body }}>{tag.name}</Text>
                                                                             </TouchableOpacity>
                                                                         );
                                                                     })}
@@ -857,8 +910,8 @@ export default function TransactionsScreen() {
                                                 <TouchableOpacity key={opt.value} onPress={() => { setFilterExpenseType(opt.value); setActiveSheet(null); }}
                                                     style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
                                                     <View>
-                                                        <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 16, fontWeight: active ? '600' : '400' }}>{opt.label}</Text>
-                                                        {opt.sub ? <Text style={{ color: colors.textDisabled, fontSize: 12, marginTop: 2 }}>{opt.sub}</Text> : null}
+                                                        <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 16, fontWeight: active ? '600' : '400', fontFamily: fonts.body }}>{opt.label}</Text>
+                                                        {opt.sub ? <Text style={{ color: colors.textDisabled, fontSize: 12, marginTop: 2, fontFamily: fonts.body }}>{opt.sub}</Text> : null}
                                                     </View>
                                                     {active && <Check color="#3b82f6" size={18} />}
                                                 </TouchableOpacity>
@@ -880,8 +933,8 @@ export default function TransactionsScreen() {
                                                 <TouchableOpacity key={opt.value} onPress={() => { setFilterRecurring(opt.value); setActiveSheet(null); }}
                                                     style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.bgTertiary }}>
                                                     <View>
-                                                        <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 16, fontWeight: active ? '600' : '400' }}>{opt.label}</Text>
-                                                        {opt.sub ? <Text style={{ color: colors.textDisabled, fontSize: 12, marginTop: 2 }}>{opt.sub}</Text> : null}
+                                                        <Text style={{ color: active ? '#60a5fa' : '#e5e7eb', fontSize: 16, fontWeight: active ? '600' : '400', fontFamily: fonts.body }}>{opt.label}</Text>
+                                                        {opt.sub ? <Text style={{ color: colors.textDisabled, fontSize: 12, marginTop: 2, fontFamily: fonts.body }}>{opt.sub}</Text> : null}
                                                     </View>
                                                     {active && <Check color="#3b82f6" size={18} />}
                                                 </TouchableOpacity>

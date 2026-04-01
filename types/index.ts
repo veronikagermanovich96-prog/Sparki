@@ -59,7 +59,20 @@ export interface Transaction {
     receipt_url: string | null;
     date: string;
     recurring_id: string | null;
+    is_split: boolean;
     is_deleted: boolean;
+    created_at: string;
+}
+
+export interface TransactionItem {
+    id: string;
+    transaction_id: string;
+    category_id: string | null;
+    tag_id: string | null;
+    amount: number;
+    amount_base: number | null;
+    note: string | null;
+    sort_order: number;
     created_at: string;
 }
 

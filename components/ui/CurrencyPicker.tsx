@@ -21,7 +21,7 @@ interface CurrencyPickerProps {
 }
 
 export function CurrencyPicker({ value, onSelect, renderTrigger }: CurrencyPickerProps) {
-    const { colors } = useTheme();
+    const { colors, fonts } = useTheme();
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -72,11 +72,11 @@ export function CurrencyPicker({ value, onSelect, renderTrigger }: CurrencyPicke
             >
                 <Text style={{ fontSize: 20, marginRight: 10 }}>{selected?.flag ?? '🌐'}</Text>
                 <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '600' }}>
+                    <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>
                         {selected?.code ?? value}
                     </Text>
                     {selected && (
-                        <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 1 }}>
+                        <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 1, fontFamily: fonts.body }}>
                             {selected.name}
                         </Text>
                     )}
@@ -121,7 +121,7 @@ export function CurrencyPicker({ value, onSelect, renderTrigger }: CurrencyPicke
                         paddingHorizontal: 20,
                         marginBottom: 16,
                     }}>
-                        <Text style={{ color: colors.textPrimary, fontSize: 20, fontWeight: '700', flex: 1 }}>
+                        <Text style={{ color: colors.textPrimary, fontSize: 20, fontWeight: '700', flex: 1, fontFamily: fonts.heading }}>
                             {t('currencyPicker.title')}
                         </Text>
                         <TouchableOpacity onPress={() => setOpen(false)}>
@@ -152,6 +152,7 @@ export function CurrencyPicker({ value, onSelect, renderTrigger }: CurrencyPicke
                                 fontSize: 16,
                                 paddingVertical: 12,
                                 paddingHorizontal: 10,
+                                fontFamily: fonts.body,
                             }}
                             autoCapitalize="characters"
                             returnKeyType="search"
@@ -169,6 +170,7 @@ export function CurrencyPicker({ value, onSelect, renderTrigger }: CurrencyPicke
                         fontSize: 12,
                         marginHorizontal: 20,
                         marginBottom: 8,
+                        fontFamily: fonts.body,
                     }}>
                         {t('currencyPicker.count', { count: filtered.length })}
                     </Text>
@@ -191,6 +193,7 @@ export function CurrencyPicker({ value, onSelect, renderTrigger }: CurrencyPicke
                                 textAlign: 'center',
                                 marginTop: 32,
                                 fontSize: 15,
+                                fontFamily: fonts.body,
                             }}>
                                 {t('currencyPicker.noResults')}
                             </Text>
@@ -213,7 +216,7 @@ function CurrencyRow({
     selected: boolean;
     onPress: () => void;
 }) {
-    const { colors } = useTheme();
+    const { colors, fonts } = useTheme();
     return (
         <TouchableOpacity
             onPress={onPress}
@@ -230,12 +233,12 @@ function CurrencyRow({
                 {item.flag}
             </Text>
             <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: selected ? '700' : '500' }}>
+                <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: selected ? '700' : '500', fontFamily: fonts.bodySemiBold }}>
                     {item.code}
-                    <Text style={{ color: colors.textMuted, fontWeight: '400' }}>  {item.name}</Text>
+                    <Text style={{ color: colors.textMuted, fontWeight: '400', fontFamily: fonts.body }}>  {item.name}</Text>
                 </Text>
             </View>
-            <Text style={{ color: colors.textMuted, fontSize: 15, marginRight: 10 }}>
+            <Text style={{ color: colors.textMuted, fontSize: 15, marginRight: 10, fontFamily: fonts.body }}>
                 {item.symbol}
             </Text>
             {selected && <Check color="#3b82f6" size={18} />}

@@ -115,7 +115,7 @@ export default function CategoriesQuiz() {
 
     const router = useRouter();
     const navigation = useNavigation();
-    const { colors } = useTheme();
+    const { colors, fonts } = useTheme();
 
     const [step, setStep] = useState(-1); // -1 = intro
     const [answers, setAnswers] = useState<(number | null)[]>(
@@ -253,7 +253,7 @@ export default function CategoriesQuiz() {
                 <SafeAreaView style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
                     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 }}>
                         <Text style={{ fontSize: 48, marginBottom: 24 }}>⚙️</Text>
-                        <Text style={{ color: colors.textPrimary, fontSize: 26, fontWeight: '700', textAlign: 'center', marginBottom: 16 }}>
+                        <Text style={{ color: colors.textPrimary, fontSize: 26, fontWeight: '700', textAlign: 'center', marginBottom: 16, fontFamily: fonts.heading }}>
                             Обновить персонализацию
                         </Text>
 
@@ -268,10 +268,10 @@ export default function CategoriesQuiz() {
                                         borderBottomWidth: 0.5,
                                         borderBottomColor: colors.bgTertiary,
                                     }}>
-                                        <Text style={{ color: colors.textSecondary, fontSize: 14, flex: 1, flexShrink: 1 }}>
+                                        <Text style={{ color: colors.textSecondary, fontSize: 14, flex: 1, flexShrink: 1, fontFamily: fonts.body }}>
                                             {q.icon} {q.category}
                                         </Text>
-                                        <Text style={{ color: '#7C6FFF', fontSize: 14, flexShrink: 1, textAlign: 'right' }}>
+                                        <Text style={{ color: '#7C6FFF', fontSize: 14, flexShrink: 1, textAlign: 'right', fontFamily: fonts.body }}>
                                             {TYPE_LABELS[q.options[answers[i]!].type] ?? q.options[answers[i]!].type}
                                         </Text>
                                     </View>
@@ -291,11 +291,11 @@ export default function CategoriesQuiz() {
                                 marginBottom: 16,
                             }}
                         >
-                            <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700' }}>Изменить настройки</Text>
+                            <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700', fontFamily: fonts.bodyBold }}>Изменить настройки</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
-                            <Text style={{ color: colors.textMuted, fontSize: 15 }}>Назад</Text>
+                            <Text style={{ color: colors.textMuted, fontSize: 15, fontFamily: fonts.body }}>Назад</Text>
                         </TouchableOpacity>
                     </View>
                 </SafeAreaView>
@@ -307,13 +307,13 @@ export default function CategoriesQuiz() {
             <SafeAreaView style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
                 <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 }}>
                     <Text style={{ fontSize: 48, marginBottom: 24 }}>🎯</Text>
-                    <Text style={{ color: colors.textPrimary, fontSize: 26, fontWeight: '700', textAlign: 'center', marginBottom: 16 }}>
+                    <Text style={{ color: colors.textPrimary, fontSize: 26, fontWeight: '700', textAlign: 'center', marginBottom: 16, fontFamily: fonts.heading }}>
                         Персонализация категорий
                     </Text>
-                    <Text style={{ color: colors.textSecondary, fontSize: 16, textAlign: 'center', lineHeight: 24, marginBottom: 48 }}>
+                    <Text style={{ color: colors.textSecondary, fontSize: 16, textAlign: 'center', lineHeight: 24, marginBottom: 48, fontFamily: fonts.body }}>
                         Ответь на 8 коротких вопросов —{'\n'}приложение подстроит категории{'\n'}под твой образ жизни.
                     </Text>
-                    <Text style={{ color: colors.textMuted, fontSize: 14, textAlign: 'center', marginBottom: 40 }}>
+                    <Text style={{ color: colors.textMuted, fontSize: 14, textAlign: 'center', marginBottom: 40, fontFamily: fonts.body }}>
                         Это займёт 2 минуты и сделает{'\n'}аналитику точнее именно для тебя.
                     </Text>
 
@@ -330,11 +330,11 @@ export default function CategoriesQuiz() {
                             marginBottom: 16,
                         }}
                     >
-                        <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700' }}>Начать настройку</Text>
+                        <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700', fontFamily: fonts.bodyBold }}>Начать настройку</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
-                        <Text style={{ color: colors.textMuted, fontSize: 15 }}>Назад</Text>
+                        <Text style={{ color: colors.textMuted, fontSize: 15, fontFamily: fonts.body }}>Назад</Text>
                     </TouchableOpacity>
                 </View>
             </SafeAreaView>
@@ -347,13 +347,13 @@ export default function CategoriesQuiz() {
             <SafeAreaView style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
                 <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 }}>
                     <Text style={{ fontSize: 48, marginBottom: 24 }}>✅</Text>
-                    <Text style={{ color: colors.textPrimary, fontSize: 26, fontWeight: '700', textAlign: 'center', marginBottom: 16 }}>
+                    <Text style={{ color: colors.textPrimary, fontSize: 26, fontWeight: '700', textAlign: 'center', marginBottom: 16, fontFamily: fonts.heading }}>
                         Готово!
                     </Text>
-                    <Text style={{ color: colors.textSecondary, fontSize: 16, textAlign: 'center', lineHeight: 24, marginBottom: 12 }}>
+                    <Text style={{ color: colors.textSecondary, fontSize: 16, textAlign: 'center', lineHeight: 24, marginBottom: 12, fontFamily: fonts.body }}>
                         Категории настроены под тебя.{'\n'}Аналитика и прогноз теперь{'\n'}отражают твой образ жизни.
                     </Text>
-                    <Text style={{ color: colors.textMuted, fontSize: 14, textAlign: 'center', marginBottom: 48 }}>
+                    <Text style={{ color: colors.textMuted, fontSize: 14, textAlign: 'center', marginBottom: 48, fontFamily: fonts.body }}>
                         Ты всегда можешь изменить это{'\n'}в Настройки → Персонализация категорий
                     </Text>
 
@@ -371,7 +371,7 @@ export default function CategoriesQuiz() {
                             opacity: saving ? 0.5 : 1,
                         }}
                     >
-                        <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700' }}>
+                        <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700', fontFamily: fonts.bodyBold }}>
                             {saving ? 'Сохраняю...' : 'Начать пользоваться'}
                         </Text>
                     </TouchableOpacity>
@@ -389,7 +389,7 @@ export default function CategoriesQuiz() {
             <View style={{ flex: 1, paddingHorizontal: 24, paddingTop: 20 }}>
                 {/* Progress */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                    <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '600' }}>
+                    <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>
                         {step + 1} из {QUESTIONS.length}
                     </Text>
                 </View>
@@ -399,12 +399,12 @@ export default function CategoriesQuiz() {
 
                 {/* Icon + Category */}
                 <Text style={{ fontSize: 48, textAlign: 'center', marginBottom: 12 }}>{q.icon}</Text>
-                <Text style={{ color: colors.textPrimary, fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 24 }}>
+                <Text style={{ color: colors.textPrimary, fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 24, fontFamily: fonts.heading }}>
                     {q.category}
                 </Text>
 
                 {/* Question */}
-                <Text style={{ color: colors.textSecondary, fontSize: 16, textAlign: 'center', marginBottom: 32, lineHeight: 24 }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 16, textAlign: 'center', marginBottom: 32, lineHeight: 24, fontFamily: fonts.body }}>
                     {q.question}
                 </Text>
 
@@ -430,7 +430,7 @@ export default function CategoriesQuiz() {
                                     paddingHorizontal: 20,
                                 }}
                             >
-                                <Text style={{ color: selected ? '#c4b5fd' : colors.textSecondary, fontSize: 15, lineHeight: 22 }}>
+                                <Text style={{ color: selected ? '#c4b5fd' : colors.textSecondary, fontSize: 15, lineHeight: 22, fontFamily: fonts.body }}>
                                     {opt.label}
                                 </Text>
                             </TouchableOpacity>
@@ -454,7 +454,7 @@ export default function CategoriesQuiz() {
                             alignItems: 'center',
                         }}
                     >
-                        <Text style={{ color: colors.textSecondary, fontSize: 16, fontWeight: '600' }}>← Назад</Text>
+                        <Text style={{ color: colors.textSecondary, fontSize: 16, fontWeight: '600', fontFamily: fonts.bodySemiBold }}>← Назад</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -473,6 +473,7 @@ export default function CategoriesQuiz() {
                             color: currentAnswer !== null ? colors.textPrimary : colors.textMuted,
                             fontSize: 16,
                             fontWeight: '600',
+                            fontFamily: fonts.bodySemiBold,
                         }}>
                             Далее →
                         </Text>
