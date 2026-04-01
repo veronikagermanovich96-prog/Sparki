@@ -393,8 +393,6 @@ export interface MatchResult {
 
 export function matchCategory(text: string, cats: Category[]): MatchResult {
     const lower = text.toLowerCase();
-    console.log('=== matchCategory input:', text);
-    console.log('=== categories available:', cats.map(c => c.name));
     const lang = detectLanguage(text);
     const words = lower.split(/\s+/);
     const stemmed = words.map(w => stem(w, lang));
@@ -423,12 +421,10 @@ export function matchCategory(text: string, cats: Category[]): MatchResult {
     }
 
     // Debug: log contextual rule checks
-    console.log('=== contextual check for:', lower);
     for (const rule of CONTEXTUAL_KEYWORDS) {
         const hasTrigger2 = rule.triggers.some(t => lower.includes(t));
         const hasContext2 = rule.context.some(ctx => lower.includes(ctx));
         if (hasTrigger2 || hasContext2) {
-            console.log(`rule ${rule.category}: trigger=${hasTrigger2} context=${hasContext2}`);
         }
     }
 
@@ -710,6 +706,28 @@ export function parseVoiceText(
     accounts?: AccountLight[],
 ): ParsedTransaction[] {
     const results: ParsedTransaction[] = [];
+
+    // Pre-scan: check the FULL text for "со счёта X" to set global account for all items
+    let globalAccountId = defaultAccountId;
+    if (accounts && accounts.length > 0) {
+        const fullLower = text.toLowerCase();
+        const fromMarkers = ['со счёта ', 'со счета ', 'с счёта ', 'с счета ', 'from '];
+        const sortedAccs = [...accounts].sort((a, b) => b.name.length - a.name.length);
+        for (const marker of fromMarkers) {
+            const mIdx = fullLower.indexOf(marker);
+            if (mIdx !== -1) {
+                const after = fullLower.substring(mIdx + marker.length).trim();
+                for (const acc of sortedAccs) {
+                    if (after.startsWith(acc.name.toLowerCase()) || after.includes(acc.name.toLowerCase())) {
+                        globalAccountId = acc.id;
+                        break;
+                    }
+                }
+                if (globalAccountId !== defaultAccountId) break;
+            }
+        }
+    }
+
     // Normalize: remove dots after abbreviations so they don't act as sentence separators
     const cleaned = text.replace(/(\b(?:руб|тыс|шт|коп|EUR|USD|RUB|GBP|CHF))\./gi, '$1');
     // Split by: comma, period+space+letter, or keywords
@@ -740,10 +758,10 @@ export function parseVoiceText(
         ));
         const { isRecurring, frequency } = detectRecurring(s);
 
-        let accountId = defaultAccountId;
+        let accountId = globalAccountId;
         let toAccountId: string | undefined;
 
-        // Try to match account names from text (works for both transfers and "со счёта X" expenses)
+        // Try to match account names from this specific sentence (overrides global)
         if (accounts && accounts.length > 0) {
             const sLower = s.toLowerCase();
             // Check for "со счёта X" / "с X" pattern to set source account

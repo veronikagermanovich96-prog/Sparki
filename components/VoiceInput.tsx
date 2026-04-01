@@ -72,6 +72,7 @@ export default function VoiceInput({
     const [showNewCat, setShowNewCat] = useState(false);
     const [creatingCat, setCreatingCat] = useState(false);
     const [showCurrencyDrop, setShowCurrencyDrop] = useState(false);
+    const [currencySearch, setCurrencySearch] = useState('');
     const pulseAnim = useRef(new Animated.Value(1)).current;
     const isListening = useRef(false);
     const transcriptRef = useRef('');
@@ -722,35 +723,56 @@ export default function VoiceInput({
                                                         <Text style={{ color: colors.textMuted, fontSize: 11 }}>›</Text>
                                                     </TouchableOpacity>
                                                 </View>
-                                                {showCurrencyDrop && (
-                                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
-                                                        {[
-                                                            'USD', 'EUR', 'RUB', 'GBP', 'CHF', 'GEL', 'KZT', 'TRY',
-                                                            'BYN', 'UAH', 'AED', 'SAR', 'PLN', 'CZK', 'HUF', 'RON',
-                                                            'SEK', 'NOK', 'DKK', 'ILS', 'JPY', 'CNY', 'KRW', 'INR',
-                                                            'THB', 'VND', 'BRL', 'ARS', 'MXN', 'CAD', 'AUD', 'NZD',
-                                                            'SGD', 'HKD', 'TWD', 'ZAR', 'EGP', 'AMD', 'UZS', 'AZN',
-                                                        ].map(cur => (
-                                                            <TouchableOpacity key={cur}
-                                                                onPress={() => {
-                                                                    setParsed(prev => prev.map((p, i) => i === idx ? { ...p, currency: cur } : p));
-                                                                    setShowCurrencyDrop(false);
-                                                                }}
+                                                {showCurrencyDrop && (() => {
+                                                    const allCurrencies = [
+                                                        'USD', 'EUR', 'RUB', 'GBP', 'CHF', 'GEL', 'KZT', 'TRY',
+                                                        'BYN', 'UAH', 'AED', 'SAR', 'PLN', 'CZK', 'HUF', 'RON',
+                                                        'SEK', 'NOK', 'DKK', 'ILS', 'JPY', 'CNY', 'KRW', 'INR',
+                                                        'THB', 'VND', 'BRL', 'ARS', 'MXN', 'CAD', 'AUD', 'NZD',
+                                                        'SGD', 'HKD', 'TWD', 'ZAR', 'EGP', 'AMD', 'UZS', 'AZN',
+                                                    ];
+                                                    const filtered = currencySearch.trim()
+                                                        ? allCurrencies.filter(c => c.toLowerCase().includes(currencySearch.trim().toLowerCase()))
+                                                        : allCurrencies;
+                                                    return (
+                                                        <View style={{ marginTop: 8 }}>
+                                                            <TextInput
+                                                                value={currencySearch}
+                                                                onChangeText={setCurrencySearch}
+                                                                placeholder={t('transactionForm.searchCurrency')}
+                                                                placeholderTextColor={colors.textDisabled}
+                                                                autoCapitalize="characters"
                                                                 style={{
-                                                                    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10,
-                                                                    backgroundColor: tx.currency === cur ? '#7C6FFF' : colors.bgTertiary,
-                                                                    borderWidth: 1.5,
-                                                                    borderColor: tx.currency === cur ? '#7C6FFF' : 'transparent',
-                                                                }}>
-                                                                <Text style={{
-                                                                    color: tx.currency === cur ? '#fff' : colors.textSecondary,
-                                                                    fontSize: 14, fontWeight: tx.currency === cur ? '700' : '500',
-                                                                    fontFamily: tx.currency === cur ? fonts.bodySemiBold : fonts.body,
-                                                                }}>{cur}</Text>
-                                                            </TouchableOpacity>
-                                                        ))}
-                                                    </View>
-                                                )}
+                                                                    backgroundColor: colors.bgTertiary, color: colors.textPrimary,
+                                                                    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+                                                                    fontSize: 14, fontFamily: fonts.body, marginBottom: 8,
+                                                                }}
+                                                            />
+                                                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                                                                {filtered.map(cur => (
+                                                                    <TouchableOpacity key={cur}
+                                                                        onPress={() => {
+                                                                            setParsed(prev => prev.map((p, i) => i === idx ? { ...p, currency: cur } : p));
+                                                                            setShowCurrencyDrop(false);
+                                                                            setCurrencySearch('');
+                                                                        }}
+                                                                        style={{
+                                                                            paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10,
+                                                                            backgroundColor: tx.currency === cur ? '#7C6FFF' : colors.bgTertiary,
+                                                                            borderWidth: 1.5,
+                                                                            borderColor: tx.currency === cur ? '#7C6FFF' : 'transparent',
+                                                                        }}>
+                                                                        <Text style={{
+                                                                            color: tx.currency === cur ? '#fff' : colors.textSecondary,
+                                                                            fontSize: 14, fontWeight: tx.currency === cur ? '700' : '500',
+                                                                            fontFamily: tx.currency === cur ? fonts.bodySemiBold : fonts.body,
+                                                                        }}>{cur}</Text>
+                                                                    </TouchableOpacity>
+                                                                ))}
+                                                            </View>
+                                                        </View>
+                                                    );
+                                                })()}
                                             </View>
 
                                             {/* Date */}
