@@ -1205,6 +1205,16 @@ export default function AnalyticsScreen() {
     const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
     const [calendarPayments, setCalendarPayments] = useState<Record<string, CalendarPayment[]>>({});
 
+    // ── Budget management ─────────────────────────────────────────────────────
+    const [showBudgetSheet, setShowBudgetSheet] = useState(false);
+    const [showBudgetForm, setShowBudgetForm] = useState(false);
+    const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
+    const [budgetCategoryId, setBudgetCategoryId] = useState('');
+    const [budgetAmountInput, setBudgetAmountInput] = useState('');
+    const [budgetPeriodInput, setBudgetPeriodInput] = useState<'monthly' | 'yearly'>('monthly');
+    const [savingBudget, setSavingBudget] = useState(false);
+    const [budgetRows, setBudgetRows] = useState<{ id: string; category_id: string; amount: number; period: 'monthly' | 'yearly'; category: { name: string; icon: string | null; color: string | null } | null }[]>([]);
+
     // ── Loans ─────────────────────────────────────────────────────────────────
     const [loans, setLoans] = useState<LoanData[]>([]);
     const [showAddLoan, setShowAddLoan] = useState(false);
@@ -1779,6 +1789,81 @@ export default function AnalyticsScreen() {
                 return { multiplier: m, label: `× ${m} ${i18n.t('common.perMonth').replace('/', '')}` };
             }
         }
+    }
+
+    // ── Budget management CRUD ─────────────────────────────────────────────
+    async function fetchBudgets() {
+        if (!householdId) return;
+        const { data } = await supabase
+            .from('budgets')
+            .select('id, category_id, amount, period, category:categories(name, icon, color)')
+            .eq('household_id', householdId)
+            .order('created_at');
+        if (data) setBudgetRows(data as any);
+    }
+
+    function openBudgetForm(row?: typeof budgetRows[0]) {
+        if (row) {
+            setEditingBudgetId(row.id);
+            setBudgetCategoryId(row.category_id);
+            setBudgetAmountInput(String(row.amount));
+            setBudgetPeriodInput(row.period);
+        } else {
+            setEditingBudgetId(null);
+            setBudgetCategoryId('');
+            setBudgetAmountInput('');
+            setBudgetPeriodInput('monthly');
+        }
+        setShowBudgetForm(true);
+    }
+
+    async function saveBudget() {
+        if (!householdId || !budgetCategoryId || !budgetAmountInput) return;
+        const amt = parseFloat(budgetAmountInput.replace(',', '.'));
+        if (isNaN(amt) || amt <= 0) return;
+
+        // Check for duplicates (only for new budgets)
+        if (!editingBudgetId && budgetRows.some(b => b.category_id === budgetCategoryId)) {
+            Alert.alert(t('common.error'), t('analytics.budgetExists'));
+            return;
+        }
+
+        setSavingBudget(true);
+        try {
+            if (editingBudgetId) {
+                await supabase.from('budgets').update({ amount: amt, period: budgetPeriodInput }).eq('id', editingBudgetId);
+            } else {
+                await supabase.from('budgets').insert({
+                    household_id: householdId,
+                    category_id: budgetCategoryId,
+                    amount: amt,
+                    currency,
+                    period: budgetPeriodInput,
+                    period_start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
+                });
+            }
+            setShowBudgetForm(false);
+            await fetchBudgets();
+            if (householdId) fetchForecast(householdId);
+        } catch (e: any) {
+            Alert.alert(t('common.error'), e.message);
+        } finally {
+            setSavingBudget(false);
+        }
+    }
+
+    function confirmDeleteBudget(row: typeof budgetRows[0]) {
+        const name = row.category?.name ?? t('transactions.category');
+        Alert.alert(t('analytics.deleteBudget'), t('analytics.deleteBudgetConfirm', { name }), [
+            { text: t('common.cancel'), style: 'cancel' },
+            { text: t('common.delete'), style: 'destructive', onPress: () => deleteBudget(row.id) },
+        ]);
+    }
+
+    async function deleteBudget(id: string) {
+        await supabase.from('budgets').delete().eq('id', id);
+        await fetchBudgets();
+        if (householdId) fetchForecast(householdId);
     }
 
     async function fetchExtras(hid: string, periodStart: Date, periodEnd: Date) {
@@ -3705,12 +3790,19 @@ export default function AnalyticsScreen() {
                                     )}
 
                                     {/* Budget by category */}
-                                    {forecastData.budgets.length > 0 && (
-                                        <Card>
-                                            <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 4 }}>{t('analytics.budgetByCategory')}</Text>
-                                            {forecastData.budgets.map((item, i) => <BudgetBar key={i} item={item} currency={currency} />)}
-                                        </Card>
-                                    )}
+                                    <Card>
+                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                            <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }}>{t('analytics.budgetByCategory')}</Text>
+                                            <TouchableOpacity onPress={() => { fetchBudgets(); setShowBudgetSheet(true); }}>
+                                                <Text style={{ fontSize: 12, color: '#7C6FFF' }}>{t('analytics.manageBudgets')}</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                        {forecastData.budgets.length > 0 ? (
+                                            forecastData.budgets.map((item, i) => <BudgetBar key={i} item={item} currency={currency} />)
+                                        ) : (
+                                            <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 8, textAlign: 'center', lineHeight: 18 }}>{t('analytics.noBudgetsHint')}</Text>
+                                        )}
+                                    </Card>
 
                                     {/* ── Block 3: Extra Categories ────────────────── */}
                                     <Card>
@@ -6354,6 +6446,132 @@ export default function AnalyticsScreen() {
                         )}
                     </>
                 )}
+            </BaseBottomSheet>
+
+            {/* ── Budget management sheet ─────────────────────────── */}
+            <BaseBottomSheet visible={showBudgetSheet} onClose={() => setShowBudgetSheet(false)} maxHeight="80%">
+                <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700', marginBottom: 16 }}>{t('analytics.budgetByCategory')}</Text>
+
+                {budgetRows.length === 0 ? (
+                    <Text style={{ color: colors.textMuted, fontSize: 13, textAlign: 'center', lineHeight: 20, marginVertical: 24 }}>{t('analytics.noBudgetsHint')}</Text>
+                ) : (
+                    budgetRows.map(row => {
+                        const catName = row.category?.name ?? t('transactions.category');
+                        const catIcon = row.category?.icon ?? 'ShoppingCart';
+                        const catColor = row.category?.color ?? '#888';
+                        return (
+                            <TouchableOpacity
+                                key={row.id}
+                                onPress={() => openBudgetForm(row)}
+                                onLongPress={() => confirmDeleteBudget(row)}
+                                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' }}
+                            >
+                                <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: catColor + '22', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                    <CategoryIcon iconName={catIcon} color={catColor} size={18} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={{ color: colors.textPrimary, fontSize: 15 }}>{catName}</Text>
+                                    <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>
+                                        {formatAmount(row.amount, currency)} {row.period === 'monthly' ? t('common.perMonth') : t('common.perYear')}
+                                    </Text>
+                                </View>
+                                <TouchableOpacity onPress={() => confirmDeleteBudget(row)} hitSlop={8}>
+                                    <X color={colors.textDisabled} size={18} />
+                                </TouchableOpacity>
+                            </TouchableOpacity>
+                        );
+                    })
+                )}
+
+                <TouchableOpacity
+                    onPress={() => openBudgetForm()}
+                    style={{ marginTop: 16, paddingVertical: 14, borderRadius: 14, backgroundColor: 'rgba(124,111,255,0.15)', alignItems: 'center' }}
+                >
+                    <Text style={{ color: '#7C6FFF', fontSize: 15, fontWeight: '700' }}>{t('analytics.addBudget')}</Text>
+                </TouchableOpacity>
+            </BaseBottomSheet>
+
+            {/* ── Budget add/edit form sheet ─────────────────────── */}
+            <BaseBottomSheet visible={showBudgetForm} onClose={() => setShowBudgetForm(false)} maxHeight="85%">
+                <Text style={{ color: colors.textPrimary, fontSize: 17, fontWeight: '700', marginBottom: 20 }}>
+                    {editingBudgetId ? t('analytics.editBudget') : t('analytics.addBudget')}
+                </Text>
+
+                {/* Category picker (only for new budgets) */}
+                {!editingBudgetId && (
+                    <>
+                        <Text style={labelStyle}>{t('analytics.selectCategory')}</Text>
+                        <ScrollView style={{ maxHeight: 200, marginBottom: 16 }} showsVerticalScrollIndicator={false}>
+                            {allCategories
+                                .filter(cat => !budgetRows.some(b => b.category_id === cat.id))
+                                .map(cat => (
+                                    <TouchableOpacity
+                                        key={cat.id}
+                                        onPress={() => setBudgetCategoryId(cat.id)}
+                                        style={{
+                                            flexDirection: 'row', alignItems: 'center', paddingVertical: 12,
+                                            borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)',
+                                            backgroundColor: budgetCategoryId === cat.id ? 'rgba(124,111,255,0.12)' : 'transparent',
+                                            borderRadius: budgetCategoryId === cat.id ? 10 : 0,
+                                            paddingHorizontal: 8,
+                                        }}
+                                    >
+                                        <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: cat.color + '22', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                                            <CategoryIcon iconName={cat.icon} color={cat.color} size={16} />
+                                        </View>
+                                        <Text style={{ flex: 1, color: colors.textPrimary, fontSize: 14 }}>{cat.name}</Text>
+                                        {budgetCategoryId === cat.id && <Check color="#7C6FFF" size={18} />}
+                                    </TouchableOpacity>
+                                ))}
+                        </ScrollView>
+                    </>
+                )}
+
+                {/* Amount input */}
+                <Text style={labelStyle}>{t('analytics.budgetAmount')}</Text>
+                <TextInput
+                    style={inputStyle}
+                    value={budgetAmountInput}
+                    onChangeText={setBudgetAmountInput}
+                    placeholder="0"
+                    placeholderTextColor={colors.textDisabled}
+                    keyboardType="numeric"
+                />
+
+                {/* Period toggle */}
+                <Text style={labelStyle}>{t('analytics.budgetPeriod')}</Text>
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 24 }}>
+                    {(['monthly', 'yearly'] as const).map(p => (
+                        <TouchableOpacity
+                            key={p}
+                            onPress={() => setBudgetPeriodInput(p)}
+                            style={{
+                                flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center',
+                                backgroundColor: budgetPeriodInput === p ? 'rgba(124,111,255,0.25)' : 'rgba(255,255,255,0.06)',
+                                borderWidth: budgetPeriodInput === p ? 1 : 0,
+                                borderColor: '#7C6FFF',
+                            }}
+                        >
+                            <Text style={{ color: budgetPeriodInput === p ? '#7C6FFF' : colors.textMuted, fontSize: 14, fontWeight: '600' }}>
+                                {p === 'monthly' ? t('analytics.budgetMonthly') : t('analytics.budgetYearly')}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+
+                {/* Save button */}
+                <TouchableOpacity
+                    onPress={saveBudget}
+                    disabled={savingBudget || !budgetCategoryId || !budgetAmountInput}
+                    style={{
+                        paddingVertical: 14, borderRadius: 14, alignItems: 'center',
+                        backgroundColor: (!budgetCategoryId || !budgetAmountInput) ? 'rgba(124,111,255,0.3)' : '#7C6FFF',
+                    }}
+                >
+                    <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
+                        {savingBudget ? t('common.saving') : t('common.save')}
+                    </Text>
+                </TouchableOpacity>
             </BaseBottomSheet>
 
         </View>

@@ -128,3 +128,74 @@ CREATE POLICY "currency_rates_insert" ON public.currency_rates_cache
   FOR INSERT WITH CHECK (true);
 CREATE POLICY "currency_rates_update" ON public.currency_rates_cache
   FOR UPDATE USING (true);
+
+-- ── transaction_items ───────────────────────────────────────
+ALTER TABLE public.transaction_items ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "transaction_items_all" ON public.transaction_items;
+CREATE POLICY "transaction_items_all" ON public.transaction_items
+  FOR ALL USING (
+    transaction_id IN (
+      SELECT id FROM public.transactions
+      WHERE household_id = get_my_household_id()
+    )
+  );
+
+-- ── category_tags ───────────────────────────────────────────
+ALTER TABLE public.category_tags ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "category_tags_all" ON public.category_tags;
+CREATE POLICY "category_tags_all" ON public.category_tags
+  FOR ALL USING (
+    category_id IN (
+      SELECT id FROM public.categories
+      WHERE household_id = get_my_household_id() OR household_id IS NULL
+    )
+  );
+
+-- ── category_extras ─────────────────────────────────────────
+ALTER TABLE public.category_extras ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "category_extras_all" ON public.category_extras;
+CREATE POLICY "category_extras_all" ON public.category_extras
+  FOR ALL USING (household_id = get_my_household_id());
+
+-- ── household_category_preferences ──────────────────────────
+ALTER TABLE public.household_category_preferences ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "household_category_preferences_all" ON public.household_category_preferences;
+CREATE POLICY "household_category_preferences_all" ON public.household_category_preferences
+  FOR ALL USING (household_id = get_my_household_id());
+
+-- ── loyalty_cards ───────────────────────────────────────────
+ALTER TABLE public.loyalty_cards ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "loyalty_cards_all" ON public.loyalty_cards;
+CREATE POLICY "loyalty_cards_all" ON public.loyalty_cards
+  FOR ALL USING (household_id = get_my_household_id());
+
+-- ── deposit_accounts ────────────────────────────────────────
+ALTER TABLE public.deposit_accounts ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "deposit_accounts_all" ON public.deposit_accounts;
+CREATE POLICY "deposit_accounts_all" ON public.deposit_accounts
+  FOR ALL USING (household_id = get_my_household_id());
+
+-- ── deposit_transactions ────────────────────────────────────
+ALTER TABLE public.deposit_transactions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "deposit_transactions_all" ON public.deposit_transactions;
+CREATE POLICY "deposit_transactions_all" ON public.deposit_transactions
+  FOR ALL USING (
+    deposit_id IN (
+      SELECT id FROM public.deposit_accounts
+      WHERE household_id = get_my_household_id()
+    )
+  );
+
+-- ── loans ───────────────────────────────────────────────────
+ALTER TABLE public.loans ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "loans_all" ON public.loans;
+CREATE POLICY "loans_all" ON public.loans
+  FOR ALL USING (household_id = get_my_household_id());

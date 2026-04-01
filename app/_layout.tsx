@@ -12,7 +12,7 @@ import '../global.css';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
-import { ThemeProvider } from '@/context/ThemeContext';
+import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -67,15 +67,23 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider>
-      <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayoutReady}>
-        <Slot />
-        {isLoading && (
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center' }}>
-            <ActivityIndicator color="#7C6FFF" size="large" />
-          </View>
-        )}
-        <StatusBar style="auto" />
-      </GestureHandlerRootView>
+      <RootContent isLoading={isLoading} onLayout={onLayoutReady} />
     </ThemeProvider>
+  );
+}
+
+function RootContent({ isLoading, onLayout }: { isLoading: boolean; onLayout: () => void }) {
+  const { isDark, colors } = useTheme();
+
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayout}>
+      <Slot />
+      {isLoading && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.bgPrimary, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color="#7C6FFF" size="large" />
+        </View>
+      )}
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+    </GestureHandlerRootView>
   );
 }

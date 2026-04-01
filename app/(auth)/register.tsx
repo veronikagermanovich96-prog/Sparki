@@ -12,7 +12,7 @@ export default function Register() {
     const [loading, setLoading] = useState(false);
     const router = useRouter();
     const { t } = useTranslation();
-    const { fonts } = useTheme();
+    const { colors, fonts, isDark } = useTheme();
 
     async function signUpWithEmail() {
         setLoading(true);
@@ -59,25 +59,25 @@ export default function Register() {
     }
 
     return (
-        <View className="flex-1 bg-gray-950 justify-center px-8">
-            <Text className="text-3xl font-bold text-white mb-8 text-center" style={{ fontFamily: fonts.heading }}>{t('auth.createAccount')}</Text>
+        <View className="flex-1 justify-center px-8" style={{ backgroundColor: colors.bgPrimary }}>
+            <Text className="text-3xl font-bold mb-8 text-center" style={{ fontFamily: fonts.heading, color: colors.textPrimary }}>{t('auth.createAccount')}</Text>
 
             <View className="gap-y-4 mb-8">
                 <TextInput
-                    className="bg-gray-900 border border-gray-800 rounded-2xl p-4 text-white text-lg"
-                    style={{ fontFamily: fonts.body }}
+                    className="rounded-2xl p-4 text-lg"
+                    style={{ fontFamily: fonts.body, backgroundColor: colors.bgSecondary, borderWidth: 1, borderColor: colors.border, color: colors.textPrimary }}
                     placeholder="Email"
-                    placeholderTextColor="#6b7280"
+                    placeholderTextColor={colors.textMuted}
                     value={email}
                     onChangeText={setEmail}
                     autoCapitalize="none"
                     keyboardType="email-address"
                 />
                 <TextInput
-                    className="bg-gray-900 border border-gray-800 rounded-2xl p-4 text-white text-lg"
-                    style={{ fontFamily: fonts.body }}
+                    className="rounded-2xl p-4 text-lg"
+                    style={{ fontFamily: fonts.body, backgroundColor: colors.bgSecondary, borderWidth: 1, borderColor: colors.border, color: colors.textPrimary }}
                     placeholder={t('auth.password')}
-                    placeholderTextColor="#6b7280"
+                    placeholderTextColor={colors.textMuted}
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry
@@ -85,18 +85,19 @@ export default function Register() {
             </View>
 
             <TouchableOpacity
-                className={`bg-white rounded-2xl p-4 items-center ${loading ? 'opacity-50' : ''}`}
+                className={`rounded-2xl p-4 items-center ${loading ? 'opacity-50' : ''}`}
+                style={{ backgroundColor: isDark ? '#ffffff' : colors.brand }}
                 onPress={signUpWithEmail}
                 disabled={loading}
             >
-                <Text className="font-bold text-gray-950 text-lg" style={{ fontFamily: fonts.bodySemiBold }}>{t('auth.register')}</Text>
+                <Text className="font-bold text-lg" style={{ fontFamily: fonts.bodySemiBold, color: isDark ? '#030712' : '#ffffff' }}>{t('auth.register')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
                 className="mt-6 items-center"
                 onPress={() => router.push('/(auth)/login')}
             >
-                <Text className="text-gray-400" style={{ fontFamily: fonts.body }}>{t('auth.hasAccount')}<Text className="text-white font-bold" style={{ fontFamily: fonts.bodyBold }}>{t('auth.login')}</Text></Text>
+                <Text style={{ fontFamily: fonts.body, color: colors.textSecondary }}>{t('auth.hasAccount')}<Text className="font-bold" style={{ fontFamily: fonts.bodyBold, color: colors.textPrimary }}>{t('auth.login')}</Text></Text>
             </TouchableOpacity>
         </View>
     );

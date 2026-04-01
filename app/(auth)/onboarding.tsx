@@ -8,7 +8,7 @@ export default function Onboarding() {
     const [slide, setSlide] = useState(0);
     const router = useRouter();
     const { t } = useTranslation();
-    const { fonts } = useTheme();
+    const { colors, fonts, isDark } = useTheme();
 
     const slides = [
         {
@@ -55,11 +55,11 @@ export default function Onboarding() {
     };
 
     return (
-        <View className="flex-1 bg-gray-950 justify-center p-6">
+        <View className="flex-1 justify-center p-6" style={{ backgroundColor: colors.bgPrimary }}>
             <View className="flex-1 justify-center">
                 {slides[slide].renderVisual()}
-                <Text className="text-3xl font-bold text-white text-center mb-4" style={{ fontFamily: fonts.heading }}>{t(slides[slide].titleKey)}</Text>
-                <Text className="text-lg text-gray-400 text-center" style={{ fontFamily: fonts.body }}>{t(slides[slide].descKey)}</Text>
+                <Text className="text-3xl font-bold text-center mb-4" style={{ fontFamily: fonts.heading, color: colors.textPrimary }}>{t(slides[slide].titleKey)}</Text>
+                <Text className="text-lg text-center" style={{ fontFamily: fonts.body, color: colors.textSecondary }}>{t(slides[slide].descKey)}</Text>
             </View>
 
             <View className="flex-row justify-between mb-8 items-center">
@@ -67,15 +67,17 @@ export default function Onboarding() {
                     {slides.map((_, i) => (
                         <View
                             key={i}
-                            className={`w-2 h-2 rounded-full mx-1 ${i === slide ? 'bg-white' : 'bg-gray-700'}`}
+                            className="w-2 h-2 rounded-full mx-1"
+                            style={{ backgroundColor: i === slide ? colors.textPrimary : colors.borderLight }}
                         />
                     ))}
                 </View>
                 <TouchableOpacity
-                    className="bg-white px-6 py-3 rounded-full"
+                    className="px-6 py-3 rounded-full"
+                    style={{ backgroundColor: isDark ? '#ffffff' : colors.brand }}
                     onPress={handleNext}
                 >
-                    <Text className="font-bold text-gray-950" style={{ fontFamily: fonts.bodySemiBold }}>{slide === slides.length - 1 ? t('onboarding.start') : t('onboarding.next')}</Text>
+                    <Text className="font-bold" style={{ fontFamily: fonts.bodySemiBold, color: isDark ? '#030712' : '#ffffff' }}>{slide === slides.length - 1 ? t('onboarding.start') : t('onboarding.next')}</Text>
                 </TouchableOpacity>
             </View>
         </View>
